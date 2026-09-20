@@ -1,0 +1,26 @@
+# Normalise line endings in the repository to LF.
+#
+# Without this, a team on mixed Windows/macOS/Linux machines produces diffs where
+# every line of a file appears changed because the endings flipped. Text files are
+# stored as LF and checked out as-is; binaries are marked so Git never rewrites them.
+* text=auto eol=lf
+
+*.py    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.css   text eol=lf
+Makefile text eol=lf
+
+*.joblib  binary
+*.pkl     binary
+*.db      binary
+*.png     binary
+*.jpg     binary
+*.pptx    binary
+*.docx    binary
+*.mp4     binary
+*.zip     binary

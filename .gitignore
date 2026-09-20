@@ -1,0 +1,23 @@
+data/raw/*
+data/processed/*
+data/alerts.db
+models/v1*/
+reports/*
+__pycache__/
+*.pyc
+node_modules/
+.next/
+
+# Keep the directory skeleton: the patterns above would otherwise swallow the
+# .gitkeep placeholders too, and a fresh clone would fail on the missing paths.
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!models/.gitkeep
+!reports/.gitkeep
+
+# Local virtualenvs and editor state
+.venv/
+venv/
+.vscode/
+.idea/
+.DS_Store

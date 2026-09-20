@@ -1,0 +1,27 @@
+# NetWatch configuration. Everything tunable lives here.
+paths:
+  raw_dir: data/raw
+  processed: data/processed/flows.pkl
+  model_dir: models/v1
+  reports_dir: reports
+
+split:
+  block_minutes: 5        # flows are grouped into time blocks before splitting
+  test_size: 0.30         # of which half becomes validation
+  random_state: 42
+
+train:
+  classifier: auto        # auto | lightgbm | hist | rf
+  benign_downsample: 0.20 # keep this fraction of benign rows in TRAIN only (1.0 = keep all)
+  fpr_budget: 0.005       # max false-positive rate allowed when choosing the threshold
+
+anomaly:
+  n_estimators: 200
+  max_samples: 50000
+  benign_flag_rate: 0.01  # fraction of benign validation flows allowed to trip the detector
+
+drift:
+  bins: 10
+  window: 5000            # flows per drift window
+  warn_psi: 0.10
+  drift_psi: 0.25
