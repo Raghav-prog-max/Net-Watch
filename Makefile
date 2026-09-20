@@ -30,6 +30,7 @@ holdout:        ## demo model trained without one family, for the novel-attack m
 test:           ## run the test suite (no pytest needed; each file runs standalone)
 	python tests/test_split_leakage.py
 	python tests/test_novelty.py
+	python tests/test_anomaly.py
 
 clean:
 	rm -rf data/processed/* models/v1/* reports/* data/alerts.db
