@@ -18,6 +18,13 @@ import numpy as np
 import pandas as pd
 import yaml
 
+# Running this file as a script puts replay/ on sys.path, not the repository root,
+# so the ml package below would not resolve and `make demo` would die on import.
+# Make the root importable before touching it.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from ml.data.labels import TRAIN_FAMILIES
 from ml.features.select import feature_columns
 
