@@ -31,6 +31,7 @@ test:           ## run the test suite (no pytest needed; each file runs standalo
 	python tests/test_split_leakage.py
 	python tests/test_novelty.py
 	python tests/test_anomaly.py
+	python tests/test_drift.py
 
 clean:
 	rm -rf data/processed/* models/v1/* reports/* data/alerts.db

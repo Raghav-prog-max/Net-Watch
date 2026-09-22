@@ -29,7 +29,7 @@ from ml.data.labels import TRAIN_FAMILIES
 from ml.features.select import feature_columns
 
 
-def pick(df, scenario):
+def pick(df, scenario, limit=None):
     if scenario == "normal":
         return df[df["family"] == "Benign"]
     if scenario == "known":
@@ -39,12 +39,36 @@ def pick(df, scenario):
     if scenario == "drift":
         # A gradual shift in normal traffic, not an attack: the detector should
         # stay mostly quiet while the drift monitor notices the distribution move.
+        #
+        # Three phases, in stream order, so the status walks stable -> warning ->
+        # drift within one replay: hold the baseline, ramp, then hold the shift.
+        #
+        # The peak is 3x because smaller shifts do not cross the standard PSI
+        # bands this monitor uses. Flow features span orders of magnitude, so a
+        # multiplier is a small move in log space: measured end to end, 1.3x gives
+        # PSI ~0.08 (still "stable"), 1.6x ~0.23 ("warning"), 2x ~0.47 ("drift").
+        # The previous 1.2-1.4x was also one scalar per column -- an instant step,
+        # not the gradual shift this comment always described.
         out = df[df["family"] == "Benign"].sample(frac=0.5, random_state=3).copy()
-        rng = np.random.default_rng(3)
+        # Truncate before building the ramp, not after: the replayer only sends
+        # --limit flows (5000 by default), and a ramp laid across all the sampled
+        # rows would be cut off during the hold phase and never reach drift.
+        if limit:
+            out = out.iloc[:limit]
+        # Phases are weighted toward the shifted level on purpose. The drift window
+        # holds up to 5000 flows and a demo replay is no longer than that, so
+        # nothing ages out: the unshifted opening stays in the window and dilutes
+        # PSI for the whole run. With an even split the status only crossed into
+        # "drift" on the final batch at --limit 5000, and never at --limit 2000.
+        n, peak = len(out), 3.0
+        hold, ramp = n // 5, (3 * n) // 10
+        factor = np.ones(n)
+        factor[hold:hold + ramp] = np.linspace(1.0, peak, ramp)
+        factor[hold + ramp:] = peak
         shift_cols = [c for c in ("Flow Duration", "Flow IAT Mean", "Flow Bytes/s",
                                   "Total Fwd Packets") if c in out.columns]
         for c in shift_cols:
-            out[c] = out[c] * rng.uniform(1.2, 1.4)
+            out[c] = out[c].to_numpy() * factor
         return out
     return df
 
@@ -59,7 +83,7 @@ def post(url, batch):
 def main(a):
     cfg = yaml.safe_load(open(a.config))
     df = pd.read_pickle(cfg["paths"]["processed"]).sample(frac=1.0, random_state=1)
-    rows = pick(df, a.scenario)
+    rows = pick(df, a.scenario, a.limit)
     features = feature_columns(df)
     print(f"{a.scenario}: {len(rows):,} flows at {a.rate}/s -> {a.url}")
 
