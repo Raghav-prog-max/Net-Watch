@@ -1,27 +1,98 @@
-# NetWatch configuration. Everything tunable lives here.
+# =============================================================================
+# NetWatch – central configuration
+# All scripts import this file via ml/utils/config.py
+# =============================================================================
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
 paths:
-  raw_dir: data/raw
-  processed: data/processed/flows.pkl
-  model_dir: models/v1
-  reports_dir: reports
+  raw_data:        data/raw
+  processed_data:  data/processed
+  splits:          data/splits
+  models:          models
+  reports:         reports
+  logs:            logs
 
+# ── Kaggle dataset ────────────────────────────────────────────────────────────
+kaggle:
+  dataset: "cicdataset/cicids2017"      # <owner>/<dataset-slug> on Kaggle
+  expected_files:                        # presence check before download
+    - "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv"
+    - "Monday-WorkingHours.pcap_ISCX.csv"
+    - "Tuesday-WorkingHours.pcap_ISCX.csv"
+    - "Wednesday-workingHours.pcap_ISCX.csv"
+    - "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv"
+    - "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv"
+    - "Friday-WorkingHours-Morning.pcap_ISCX.csv"
+    - "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv"
+
+# ── Label map: raw CSV label → canonical family ───────────────────────────────
+labels:
+  Benign:    [" BENIGN", "BENIGN"]
+  DoS:       ["DoS Hulk", "DoS GoldenEye", "DoS slowloris", "DoS Slowhttptest",
+               "DoS Hulk", "DoS GoldenEye"]
+  DDoS:      ["DDoS", "DDOS attack-HOIC", "DDOS attack-LOIC-UDP"]
+  PortScan:  ["PortScan"]
+  BruteForce: ["FTP-Patator", "SSH-Patator"]
+  WebAttack: ["Web Attack \u2013 Brute Force", "Web Attack \u2013 XSS",
+               "Web Attack \u2013 Sql Injection",
+               "Web Attack  Brute Force", "Web Attack  XSS",
+               "Web Attack  Sql Injection"]
+  Bot:       ["Bot"]
+  # Held-out / novel – removed from train+val, kept in test for anomaly eval
+  _novel:    ["Infiltration", "Heartbleed"]
+
+# Families that participate in LOFO evaluation
+lofo_families: [PortScan, BruteForce, WebAttack, Bot]
+
+# ── Random seeds ─────────────────────────────────────────────────────────────
+seed: 42
+
+# ── Split sizes ───────────────────────────────────────────────────────────────
 split:
-  block_minutes: 5        # flows are grouped into time blocks before splitting
-  test_size: 0.30         # of which half becomes validation
-  random_state: 42
+  test_size:  0.30     # of full data
+  val_size:   0.50     # of rest after test removed
+  time_floor: "5min"   # block granularity
 
-train:
-  classifier: auto        # auto | lightgbm | hist | rf
-  benign_downsample: 0.20 # keep this fraction of benign rows in TRAIN only (1.0 = keep all)
-  fpr_budget: 0.005       # max false-positive rate allowed when choosing the threshold
+# ── Imbalance strategy (baseline | class_weight | undersample | smote) ────────
+imbalance_strategy: class_weight
 
+# ── Classifier ────────────────────────────────────────────────────────────────
+classifier:
+  random_forest:
+    n_estimators: 300
+    class_weight: balanced_subsample
+    n_jobs: -1
+  lightgbm:
+    n_estimators: 500
+    learning_rate: 0.05
+    num_leaves: 63
+    class_weight: balanced
+    n_jobs: -1
+    verbose: -1
+
+# ── Anomaly detector ─────────────────────────────────────────────────────────
 anomaly:
   n_estimators: 200
-  max_samples: 50000
-  benign_flag_rate: 0.01  # fraction of benign validation flows allowed to trip the detector
+  contamination: auto
+  # Threshold set so ~1% of benign val is flagged
+  benign_fpr_target: 0.01
 
+# ── Threshold selection ───────────────────────────────────────────────────────
+fpr_budget: 0.005     # ≤ 50 false alerts per 10,000 benign flows
+
+# ── Drift monitoring ─────────────────────────────────────────────────────────
 drift:
-  bins: 10
-  window: 5000            # flows per drift window
-  warn_psi: 0.10
-  drift_psi: 0.25
+  window_size: 5000   # flows per PSI window
+  n_bins: 10
+  psi_warning: 0.10
+  psi_drift:   0.25
+  alert_rate_warning_multiplier: 1.5
+  alert_rate_drift_multiplier:   2.0
+  top_features_ks: 15
+
+# ── SHAP ──────────────────────────────────────────────────────────────────────
+shap:
+  top_n: 6            # features returned per alert
+
+# ── Model versioning ──────────────────────────────────────────────────────────
+model_version: v1

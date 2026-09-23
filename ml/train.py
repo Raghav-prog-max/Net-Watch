@@ -20,8 +20,76 @@ from ml.models import classifier as clf_mod
 from ml.models.anomaly import AnomalyDetector
 from ml.models.novelty import FamilyNovelty
 
+def _run_imbalance_study(train_df, val_df, features, random_state=42):
+    from sklearn.metrics import f1_score
+    from imblearn.over_sampling import SMOTE
+    from imblearn.under_sampling import RandomUnderSampler
+    import lightgbm as lgb
+    import json
+    
+    print("\n============================================================")
+    print("  Imbalance strategy comparison")
+    print("============================================================\n")
 
-def main(config_path, skip_lofo=False, holdout=None):
+    X_train = matrix(train_df, features)
+    X_val = matrix(val_df, features)
+    
+    # We need string labels for f1_score to handle families properly
+    y_train_str = train_df["family"].values
+    y_val_str = val_df["family"].values
+    
+    strategies = []
+    strategies.append(("no_handling", X_train, y_train_str))
+    strategies.append(("class_weight", X_train, y_train_str))
+    
+    # Benign undersampling
+    try:
+        y_train_counts = train_df["family"].value_counts()
+        sampling_strategy = {}
+        for fam, count in y_train_counts.items():
+            if fam == "Benign":
+                attacks = sum(y_train_counts) - count
+                sampling_strategy[fam] = min(count, int(attacks * 5))
+            else:
+                sampling_strategy[fam] = count
+        
+        rus = RandomUnderSampler(sampling_strategy=sampling_strategy, random_state=random_state)
+        X_us, y_us = rus.fit_resample(X_train, y_train_str)
+        strategies.append(("undersample", X_us, y_us))
+    except Exception as e:
+        print(f"Undersample failed: {e}")
+
+    # SMOTE (requires numeric encoding for SMOTE, but works with strings in latest imblearn usually. If it fails we skip)
+    try:
+        smote = SMOTE(random_state=random_state, k_neighbors=3)
+        X_sm, y_sm = smote.fit_resample(X_train, y_train_str)
+        strategies.append(("smote", X_sm, y_sm))
+    except Exception as e:
+        print(f"SMOTE failed: {e}")
+
+    results = []
+    for name, X_tr, y_tr in strategies:
+        cw = "balanced" if name == "class_weight" else None
+        model = lgb.LGBMClassifier(
+            n_estimators=200, learning_rate=0.05, num_leaves=31,
+            class_weight=cw, n_jobs=-1, verbose=-1, random_state=random_state
+        )
+        model.fit(X_tr, y_tr, eval_set=[(X_val, y_val_str)],
+                  callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
+        
+        y_pred = model.predict(X_val)
+        macro = float(f1_score(y_val_str, y_pred, average="macro", zero_division=0))
+        results.append({"strategy": name, "macro_f1": round(macro, 4)})
+        print(f"  {name:20s}  macro-F1={macro:.4f}")
+
+    out = Path("reports/model_comparison.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w") as fh:
+        json.dump(results, fh, indent=2)
+    print(f"Imbalance study saved to {out}")
+
+
+def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     cfg = yaml.safe_load(open(config_path))
     started = time.time()
 
@@ -46,6 +114,9 @@ def main(config_path, skip_lofo=False, holdout=None):
                               cfg["split"]["random_state"])
 
     print(f"train {len(train):,} | val {len(val):,} | test {len(test):,} | features {len(features)}")
+
+    if imbalance_study:
+        _run_imbalance_study(train, val, features, cfg["split"]["random_state"])
 
     # --- classifier -------------------------------------------------------
     kind, model = clf_mod.build(cfg["train"]["classifier"], cfg["split"]["random_state"])
@@ -165,5 +236,6 @@ if __name__ == "__main__":
     ap.add_argument("--skip-lofo", action="store_true")
     ap.add_argument("--holdout", default=None,
                     help="train without this family, for the novel-attack demo")
+    ap.add_argument("--imbalance-study", action="store_true", help="Run the imbalance handling comparison")
     a = ap.parse_args()
-    main(a.config, a.skip_lofo, a.holdout)
+    main(a.config, a.skip_lofo, a.holdout, a.imbalance_study)
