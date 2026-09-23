@@ -34,38 +34,40 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
     X_train = matrix(train_df, features)
     X_val = matrix(val_df, features)
     
-    # We need string labels for f1_score to handle families properly
-    y_train_str = train_df["family"].values
-    y_val_str = val_df["family"].values
+    # We use LabelEncoder because SMOTE struggles with string labels in many versions.
+    # LightGBM and f1_score handle integers perfectly.
+    from sklearn.preprocessing import LabelEncoder
+    le = LabelEncoder()
+    le.fit(train_df["family"].values)
+    y_train_enc = le.transform(train_df["family"].values)
+    y_val_enc = le.transform(val_df["family"].values)
     
     strategies = []
-    strategies.append(("no_handling", X_train, y_train_str))
-    strategies.append(("class_weight", X_train, y_train_str))
+    strategies.append(("no_handling", X_train, y_train_enc))
+    strategies.append(("class_weight", X_train, y_train_enc))
     
     # Benign undersampling
     try:
         y_train_counts = train_df["family"].value_counts()
         sampling_strategy = {}
         for fam, count in y_train_counts.items():
+            encoded_fam = le.transform([fam])[0]
             if fam == "Benign":
                 attacks = sum(y_train_counts) - count
-                sampling_strategy[fam] = min(count, int(attacks * 5))
+                sampling_strategy[encoded_fam] = min(count, int(attacks * 5))
             else:
-                sampling_strategy[fam] = count
+                sampling_strategy[encoded_fam] = count
         
         rus = RandomUnderSampler(sampling_strategy=sampling_strategy, random_state=random_state)
-        X_us, y_us = rus.fit_resample(X_train, y_train_str)
+        X_us, y_us = rus.fit_resample(X_train, y_train_enc)
         strategies.append(("undersample", X_us, y_us))
     except Exception as e:
         print(f"Undersample failed: {e}")
 
-    # SMOTE (requires numeric encoding for SMOTE, but works with strings in latest imblearn usually. If it fails we skip)
-    try:
-        smote = SMOTE(random_state=random_state, k_neighbors=3)
-        X_sm, y_sm = smote.fit_resample(X_train, y_train_str)
-        strategies.append(("smote", X_sm, y_sm))
-    except Exception as e:
-        print(f"SMOTE failed: {e}")
+    # SMOTE
+    smote = SMOTE(random_state=random_state, k_neighbors=3)
+    X_sm, y_sm = smote.fit_resample(X_train, y_train_enc)
+    strategies.append(("smote", X_sm, y_sm))
 
     results = []
     for name, X_tr, y_tr in strategies:
@@ -74,11 +76,11 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
             n_estimators=200, learning_rate=0.05, num_leaves=31,
             class_weight=cw, n_jobs=-1, verbose=-1, random_state=random_state
         )
-        model.fit(X_tr, y_tr, eval_set=[(X_val, y_val_str)],
+        model.fit(X_tr, y_tr, eval_set=[(X_val, y_val_enc)],
                   callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
         
         y_pred = model.predict(X_val)
-        macro = float(f1_score(y_val_str, y_pred, average="macro", zero_division=0))
+        macro = float(f1_score(y_val_enc, y_pred, average="macro", zero_division=0))
         results.append({"strategy": name, "macro_f1": round(macro, 4)})
         print(f"  {name:20s}  macro-F1={macro:.4f}")
 
