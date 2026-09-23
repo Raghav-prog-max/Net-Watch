@@ -18,7 +18,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 from ml.models.classifier import (  # noqa: E402
     train_rf, train_lgbm, attack_score, predict_family, predict_proba_df,
 )
-from ml.data.labels import FAMILIES  # noqa: E402
+from ml.data.labels import TRAIN_FAMILIES as FAMILIES  # noqa: E402
 
 _N = 200
 _F = 20

@@ -36,47 +36,47 @@ def _make_scores(n: int = 1000, seed: int = 42) -> tuple[np.ndarray, np.ndarray]
 
 
 class TestPickThreshold:
-    def test_returns_tuple_of_three_floats(self):
+    def test_returns_dict(self):
         y, s = _make_scores()
         result = pick_threshold(y, s)
-        assert isinstance(result, tuple)
-        assert len(result) == 3
-        assert all(isinstance(v, float) for v in result)
+        assert isinstance(result, dict)
+        assert "threshold" in result
+        assert "fpr_at_threshold" in result
+        assert "recall_at_threshold" in result
 
     def test_fpr_within_budget(self):
         y, s = _make_scores()
         budget = 0.005
-        thr, tpr, fpr = pick_threshold(y, s, fpr_budget=budget)
-        assert fpr <= budget + 1e-9, f"FPR={fpr:.6f} exceeds budget={budget}"
+        result = pick_threshold(y, s, fpr_budget=budget)
+        assert result["fpr_at_threshold"] <= budget + 1e-9, f"FPR={result['fpr_at_threshold']} exceeds budget={budget}"
 
     def test_tpr_positive(self):
         y, s = _make_scores()
-        _, tpr, _ = pick_threshold(y, s)
-        assert tpr > 0.0, "TPR should be positive for a non-trivial classifier"
+        result = pick_threshold(y, s)
+        assert result["recall_at_threshold"] > 0.0, "TPR should be positive for a non-trivial classifier"
 
     def test_threshold_in_score_range(self):
         y, s = _make_scores()
-        thr, _, _ = pick_threshold(y, s)
-        assert float(s.min()) <= thr <= float(s.max()) + 1e-9
+        result = pick_threshold(y, s)
+        assert float(s.min()) <= result["threshold"] <= float(s.max()) + 1e-9
 
     def test_tight_budget_still_returns(self):
         """Very tight budget (0.0001) should still return without error."""
         y, s = _make_scores()
-        thr, tpr, fpr = pick_threshold(y, s, fpr_budget=0.0001)
-        assert isinstance(thr, float)
+        result = pick_threshold(y, s, fpr_budget=0.0001)
+        assert isinstance(result["threshold"], float)
 
     def test_perfect_classifier(self):
         """With a perfect score, threshold should achieve FPR=0, TPR=1."""
         n = 200
         y = np.array([0] * (n // 2) + [1] * (n // 2))
         s = np.array([0.1] * (n // 2) + [0.9] * (n // 2))
-        thr, tpr, fpr = pick_threshold(y, s, fpr_budget=0.01)
-        assert fpr <= 0.01 + 1e-9
-        assert tpr >= 0.99
+        result = pick_threshold(y, s, fpr_budget=0.01)
+        assert result["fpr_at_threshold"] <= 0.01 + 1e-9
+        assert result["recall_at_threshold"] >= 0.99
 
     def test_budget_zero_still_works(self):
         """FPR budget of 0 should return a threshold that achieves near-zero FPR."""
         y, s = _make_scores()
-        thr, tpr, fpr = pick_threshold(y, s, fpr_budget=0.0)
-        # May use minimum-FPR fallback
-        assert isinstance(thr, float)
+        result = pick_threshold(y, s, fpr_budget=0.0)
+        assert isinstance(result["threshold"], float)
