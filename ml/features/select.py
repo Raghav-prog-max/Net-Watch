@@ -105,7 +105,8 @@ def select_features(
     cols = rank_by_importance(df_train, cols, top_n=top_n)
 
     if save:
-        out_dir = Path("models") / version
+        _REPO_ROOT = Path(__file__).resolve().parents[2]
+        out_dir = _REPO_ROOT / "models" / version
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "feature_list.json"
         with open(out_path, "w") as fh:
