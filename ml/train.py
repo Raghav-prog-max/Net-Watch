@@ -177,19 +177,37 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
         known_test["family"], np.where(base_score >= 0.5, base_fam, "Benign"),
         base_score >= 0.5, base_proba, base.classes_)
 
+    # What the out-of-family label check costs: correct alerts on families the
+    # classifier was trained on that it nonetheless relabels Unknown.
+    known_ood = nov.is_out_of_family(nov.distance(Xt, fam), fam)
+    alerted = attack_score >= thr["threshold"]
+    attacks = (known_test["family"] != "Benign").to_numpy()
+    report["label_check_cost"] = {
+        "alerts_on_known_families": int((alerted & attacks).sum()),
+        "relabelled_unknown": round(float((alerted & attacks & known_ood).sum()
+                                          / max((alerted & attacks).sum(), 1)), 4),
+        "benign_relabelled_unknown": int((alerted & ~attacks & known_ood).sum()),
+    }
+
     # novel families the classifier never saw
     novel = test[~test["family"].isin(TRAIN_FAMILIES)]
     if len(novel):
-        flagged = det.is_anomalous(det.score(matrix(novel, features)))
         Xn = matrix(novel, features)
+        flagged = det.is_anomalous(det.score(Xn))
+        n_attack, _ = clf_mod.attack_score(model, Xn)
         n_fam, _ = clf_mod.predicted_family(model, model.predict_proba(Xn))
         ood = nov.is_out_of_family(nov.distance(Xn, n_fam), n_fam)
+        n_known = n_attack >= thr["threshold"]
+        # Mirror decide() exactly: Unknown when the classifier alerts but its label
+        # is rejected, or when the classifier is quiet but the detector objects.
+        unknown = (n_known & ood) | (~n_known & flagged)
         report["novel_families"] = {
             "families": sorted(novel["family"].unique().tolist()),
             "flows": int(len(novel)),
+            "alerted": round(float((n_known | flagged).mean()), 4),
             "caught_by_anomaly_detector": round(float(flagged.mean()), 4),
             "label_rejected_as_out_of_family": round(float(ood.mean()), 4),
-            "shown_as_unknown": round(float(ood.mean()), 4),
+            "shown_as_unknown": round(float(unknown.mean()), 4),
         }
 
     if not skip_lofo:

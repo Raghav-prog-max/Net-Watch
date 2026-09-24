@@ -1,4 +1,4 @@
-.PHONY: setup synthetic data train evaluate api demo test clean
+.PHONY: setup synthetic data train evaluate card api demo test clean
 
 setup:          ## install dependencies
 	pip install -r requirements.txt
@@ -11,6 +11,9 @@ data:           ## raw CSVs -> cleaned pickle
 
 train:          ## train both models, pick thresholds, write reports/metrics.json
 	python -m ml.train --config ml/config.yaml
+
+card:           ## regenerate docs/model_card.md from reports/metrics.json
+	python -m ml.evaluate.model_card
 
 quick:          ## train without the leave-one-family-out experiments
 	python -m ml.train --config ml/config.yaml --skip-lofo
