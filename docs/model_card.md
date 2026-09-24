@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-24T15:56:02Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-09-24T16:10:20Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 > **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
 
@@ -46,19 +46,19 @@ Surfacing suspicious traffic to a SOC analyst, who decides what happens next. Ea
 
 ## Performance
 
-Macro-F1 **0.916** across benign and 6 attack families. The alert threshold (0.9869) was chosen on validation to stay within a false-positive budget of 0.5%; on the test set it produced **51.8 false alerts per 10,000 benign flows** (0.52%), slightly over budget.
+Macro-F1 **0.917** across benign and 6 attack families. The alert threshold (0.9865) was chosen on validation to stay within a false-positive budget of 0.5%; on the test set it produced **42.9 false alerts per 10,000 benign flows** (0.43%), within budget.
 
 No accuracy figure is reported: about 80% of traffic is benign, so a model that never alerts would score about 80%.
 
 | Class | Precision | Recall | F1 | PR-AUC | Test flows |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Benign | 0.996 | 0.995 | 0.995 | 1.000 | 5,598 |
+| Benign | 0.996 | 0.996 | 0.996 | 1.000 | 5,598 |
 | PortScan | 1.000 | 1.000 | 1.000 | 1.000 | 897 |
-| BruteForce | 0.931 | 0.975 | 0.953 | 0.989 | 360 |
-| DoS | 0.883 | 0.905 | 0.894 | 0.963 | 1,121 |
-| WebAttack | 0.929 | 0.867 | 0.897 | 0.956 | 211 |
-| DDoS | 0.877 | 0.851 | 0.864 | 0.950 | 848 |
-| Bot | 0.815 | 0.806 | 0.811 | 0.846 | 186 |
+| BruteForce | 0.931 | 0.975 | 0.953 | 0.990 | 360 |
+| DoS | 0.883 | 0.898 | 0.891 | 0.963 | 1,121 |
+| WebAttack | 0.934 | 0.867 | 0.899 | 0.956 | 211 |
+| DDoS | 0.869 | 0.854 | 0.861 | 0.951 | 848 |
+| Bot | 0.832 | 0.801 | 0.816 | 0.852 | 186 |
 
 ### Attacks it was never trained on
 
@@ -66,10 +66,10 @@ Leave-one-family-out: each family is removed from training entirely, a fresh mod
 
 | Held-out family | Flows | Classifier alone | Detector alone | Full system | Benign FPR |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| PortScan | 897 | 0.0% | 99.7% | 99.7% | 1.32% |
-| BruteForce | 360 | 100.0% | 3.1% | 100.0% | 1.23% |
-| WebAttack | 211 | 100.0% | 92.9% | 100.0% | 1.29% |
-| Bot | 186 | 14.5% | 3.8% | 17.2% | 0.88% |
+| PortScan | 897 | 0.0% | 99.7% | 99.7% | 1.30% |
+| BruteForce | 360 | 100.0% | 3.1% | 100.0% | 1.27% |
+| WebAttack | 211 | 100.0% | 92.9% | 100.0% | 1.32% |
+| Bot | 186 | 15.6% | 3.8% | 17.7% | 0.88% |
 
 Families withheld from training altogether (Heartbleed, Infiltration, 103 test flows): 100.0% raised an alert, and **93.2% were shown to the analyst as Unknown** rather than under a known family's name.
 
@@ -77,12 +77,12 @@ Families withheld from training altogether (Heartbleed, Infiltration, 103 test f
 
 Observed on the test set, most severe first.
 
-- **Novel attacks that look like normal traffic are missed.** Held out of training, Bot is caught only 17.2% of the time: it sits close enough to benign traffic that neither model separates it.
-- **Bot is also the weakest known family**, at 0.806 recall.
-- **DDoS and DoS are confused with each other.** 126 DDoS flows were labelled DoS, and 101 the other way.
-- **Every false alert on benign traffic was labelled Bot** (all 29).
+- **Novel attacks that look like normal traffic are missed.** Held out of training, Bot is caught only 17.7% of the time: it sits close enough to benign traffic that neither model separates it.
+- **Bot is also the weakest known family**, at 0.801 recall.
+- **DDoS and DoS are confused with each other.** 124 DDoS flows were labelled DoS, and 109 the other way.
+- **Every false alert on benign traffic was labelled Bot** (all 24).
 - **Some novel attacks keep a confident wrong name.** 6.8% of never-trained-on flows are still reported under a known family's label.
-- **The out-of-family check has a cost.** It relabels 0.8% of correct alerts on known families as Unknown (3,598 alerts measured); no benign flow was relabelled.
+- **The out-of-family check has a cost.** It relabels 0.9% of correct alerts on known families as Unknown (3,598 alerts measured); no benign flow was relabelled.
 - **Drift raises the false-alert rate.** As normal traffic changes shape it moves away from what the detector learned, so more of it alerts, and some reads as Unknown.
 
 ## Known limitations
