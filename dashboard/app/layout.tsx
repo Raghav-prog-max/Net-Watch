@@ -1,26 +1,22 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
+import AppLayout from "@/components/AppLayout";
 
 export const metadata: Metadata = {
-  title: "NetWatch",
-  description: "ML intrusion detection alerts for the SOC",
+  title: "NetWatch // SOC Intrusion Detection Console",
+  description:
+    "Real-time ML-based network intrusion detection with explainable alerts for security operations teams. Zero automated blocking.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body>
-        <header className="top">
-          <strong>NetWatch</strong>
-          <nav>
-            <Link href="/">Live alerts</Link>
-            <Link href="/evaluation">Evaluation</Link>
-            <Link href="/drift">Drift</Link>
-            <Link href="/models">Models</Link>
-          </nav>
-        </header>
-        <main>{children}</main>
+        <AppLayout>{children}</AppLayout>
       </body>
     </html>
   );
