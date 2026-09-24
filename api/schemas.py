@@ -1,43 +1,55 @@
-"""The contract. Frozen on day 2: frontend and backend both build against this."""
-from typing import Dict, List, Optional
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Any
+from datetime import datetime
 
-from pydantic import BaseModel, Field
+class FlowData(BaseModel):
+    dst_port: int
+    protocol: str
+    duration_ms: int
+    fwd_packets: int
+    bwd_packets: int
+    # Allow extra fields for arbitrary flow data during scoring
+    model_config = ConfigDict(extra="allow")
 
+class Prediction(BaseModel):
+    family: str
+    confidence: float
 
-class Flow(BaseModel):
-    """One network flow. Keys must match the trained feature names."""
-    features: Dict[str, float]
-    meta: Dict[str, str] = Field(default_factory=dict)  # dst_port, protocol, source host label
+class Severity(BaseModel):
+    score: int
+    level: str
 
-
-class ScoreRequest(BaseModel):
-    flows: List[Flow]
-
-
-class Explanation(BaseModel):
+class ExplanationItem(BaseModel):
     feature: str
     value: float
     impact: float
 
+class Mitre(BaseModel):
+    tactic: str
+    technique: str
 
-class Alert(BaseModel):
-    id: str
-    timestamp: str
-    flow: Dict[str, str]
-    prediction: Dict[str, float | str]
+class AlertBase(BaseModel):
+    timestamp: datetime
+    flow: FlowData
+    prediction: Prediction
     anomaly_score: float
     is_novel: bool
-    severity: Dict[str, int | str]
-    explanation: List[Explanation]
-    mitre: Dict[str, str]
+    severity: Severity
+    explanation: List[ExplanationItem]
+    mitre: Mitre
     recommended_action: str
     status: str = "open"
     analyst_label: Optional[str] = None
     analyst_note: Optional[str] = None
-    model_version: str = "v1"
+    model_version: str
 
+class Alert(AlertBase):
+    id: str
 
-class Triage(BaseModel):
-    status: str                      # acknowledged | escalated | false_positive | resolved
+class AlertCreate(AlertBase):
+    pass
+
+class Feedback(BaseModel):
+    status: Optional[str] = None
     analyst_label: Optional[str] = None
     analyst_note: Optional[str] = None

@@ -42,7 +42,7 @@ class TestRandomForest:
     def test_attack_score_range(self):
         X, y = _make_data()
         clf  = train_rf(X, y)
-        s    = attack_score(clf, X, benign_class_index=0)
+        s, _ = attack_score(clf, X)
         assert s.shape == (len(X),)
         assert float(s.min()) >= 0.0
         assert float(s.max()) <= 1.0
@@ -75,7 +75,7 @@ class TestLightGBM:
         pytest.importorskip("lightgbm")
         X, y = _make_data()
         clf  = train_lgbm(X, y, n_estimators=10)
-        s    = attack_score(clf, X, benign_class_index=0)
+        s, _ = attack_score(clf, X)
         assert s.shape == (len(X),)
 
     def test_proba_df_columns(self):

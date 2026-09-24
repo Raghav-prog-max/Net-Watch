@@ -16,3 +16,7 @@ kaggle>=1.6.0          # required for scripts/download_data.py
 pytest>=8.1.0          # for unit tests
 pytest-cov>=5.0.0
 httpx>=0.27.0          # for FastAPI test client
+
+sqlalchemy
+requests
+websockets
