@@ -1,26 +1,143 @@
 from fastapi.testclient import TestClient
+import pandas as pd
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from api.main import app
+from api.db.session import Base, get_db
+from api.routes.score import scorer_dependency
+from api.services.scorer import ModelsNotFound
 import uuid
 
+# The tests get their own in-memory database. Writing to ./netwatch.db mixed test
+# alerts into the demo's alert queue.
+_engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                        poolclass=StaticPool)
+Base.metadata.create_all(bind=_engine)
+_TestSession = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+
+
+def _test_db():
+    db = _TestSession()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+app.dependency_overrides[get_db] = _test_db
 client = TestClient(app)
+
+
+class StubScorer:
+    """Stands in for the trained models so the route contract is tested on any
+    machine. Alerts on flows whose meta names a family; `features` are ignored."""
+
+    def score(self, flows, metas=None):
+        alerts = []
+        for meta in metas or []:
+            family = meta.get("stub_family")
+            if not family:
+                continue
+            alerts.append({
+                "id": f"alt_{uuid.uuid4().hex[:10]}",
+                "timestamp": "2026-09-28T10:00:00Z",
+                "flow": {k: str(v) for k, v in meta.items()},
+                "prediction": {"family": family, "confidence": 0.9, "also_abnormal": False},
+                "anomaly_score": 0.7,
+                "is_novel": family == "Unknown",
+                "severity": {"score": 80, "level": "High"},
+                "explanation": [{"feature": "Flow Duration", "value": 1.0, "impact": 0.5}],
+                "mitre": {"tactic": "Impact", "technique": "T1499"},
+                "recommended_action": "Investigate",
+                "status": "open",
+                "analyst_label": None,
+                "analyst_note": None,
+                "model_version": "stub",
+            })
+        return alerts
+
+
+@pytest.fixture(autouse=True)
+def stub_scorer():
+    app.dependency_overrides[scorer_dependency] = lambda: StubScorer()
+    yield
+    app.dependency_overrides.pop(scorer_dependency, None)
+
+
+def flow(family=None, **meta):
+    if family:
+        meta["stub_family"] = family
+    return {"features": {"Flow Duration": 12.0, "Total Fwd Packets": 3.0}, "meta": meta}
+
 
 @pytest.fixture(scope="module")
 def setup_alerts():
-    # Insert a few alerts for GET tests
-    flows = [
-        {"dst_port": 80, "protocol": "TCP", "duration_ms": 12, "fwd_packets": 3, "bwd_packets": 0},
-        {"dst_port": 22, "protocol": "TCP", "duration_ms": 1200, "fwd_packets": 10, "bwd_packets": 10},
-        {"dst_port": 443, "protocol": "TCP", "duration_ms": 50, "fwd_packets": 5, "bwd_packets": 5} # Benign, might be dropped
-    ]
-    client.post("/score", json=flows)
+    app.dependency_overrides[scorer_dependency] = lambda: StubScorer()
+    client.post("/score", json={"flows": [flow("DoS", dst_port=80), flow("BruteForce", dst_port=22),
+                                          flow(None, dst_port=443)]})
 
 @pytest.mark.parametrize("i", range(30))
 def test_score_flow_load(i):
     # Simulate multiple rapid scoring requests
-    flow = {"dst_port": 80, "protocol": "TCP", "duration_ms": i, "fwd_packets": i*2, "bwd_packets": i}
-    response = client.post("/score", json=[flow])
+    response = client.post("/score", json={"flows": [flow("DoS", dst_port=80, n=i)]})
     assert response.status_code == 200
+
+def test_score_response_shape():
+    res = client.post("/score", json={"flows": [flow("DoS", dst_port="80"), flow(None)]})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["scored"] == 2
+    assert len(body["alerts"]) == 1
+    assert body["alerts"][0]["flow"]["dst_port"] == "80"
+
+def test_scored_alert_is_stored():
+    res = client.post("/score", json={"flows": [flow("Bot", dst_port=6667)]})
+    alert_id = res.json()["alerts"][0]["id"]
+    assert client.get(f"/alerts/{alert_id}").json()["prediction"]["family"] == "Bot"
+
+def test_rejected_label_survives_the_round_trip():
+    class Rejecting(StubScorer):
+        def score(self, flows, metas=None):
+            out = super().score(flows, metas)
+            for a in out:
+                a["prediction"]["rejected_label"] = {"family": "DoS", "confidence": 0.99}
+            return out
+    app.dependency_overrides[scorer_dependency] = lambda: Rejecting()
+    res = client.post("/score", json={"flows": [flow("Unknown")]})
+    alert_id = res.json()["alerts"][0]["id"]
+    stored = client.get(f"/alerts/{alert_id}").json()
+    assert stored["is_novel"] is True
+    assert stored["prediction"]["rejected_label"] == {"family": "DoS", "confidence": 0.99}
+
+@pytest.mark.parametrize("body", [
+    [{"dst_port": 80, "protocol": "TCP", "duration_ms": 1, "fwd_packets": 1, "bwd_packets": 1}],
+    {"flows": [{"meta": {}}]},                              # no features
+    {"flows": [{"features": {"Flow Duration": "fast"}}]},   # not a number
+])
+def test_score_rejects_malformed_requests(body):
+    assert client.post("/score", json=body).status_code == 422
+
+def test_score_without_trained_models_is_503():
+    def missing():
+        from api.routes.score import HTTPException
+        raise HTTPException(status_code=503, detail=str(ModelsNotFound("run `make train` first")))
+    app.dependency_overrides[scorer_dependency] = missing
+    res = client.post("/score", json={"flows": [flow("DoS")]})
+    assert res.status_code == 503
+    assert "make train" in res.json()["detail"]
+
+def test_replayer_payload_is_accepted():
+    # the replayer and the API used to disagree on the request shape: every
+    # replayed batch was a 422 and `make demo` could not run
+    from replay.replayer import build_batch
+    rows = pd.DataFrame({"Flow Duration": [10.0, 20.0], "Destination Port": [80, 22],
+                         "family": ["DoS", "Benign"]})
+    batch = build_batch(rows, ["Flow Duration"])
+    res = client.post("/score", json={"flows": batch})
+    assert res.status_code == 200
+    assert res.json()["scored"] == 2
 
 @pytest.mark.parametrize("page,size,expected_status", [
     (1, 10, 200),
@@ -71,17 +188,17 @@ def test_patch_alert(setup_alerts, new_status, new_label, new_note):
     items = res.json()["items"]
     if not items:
         pytest.skip("No alerts available to patch")
-    
+
     alert_id = items[0]["id"]
     payload = {}
     if new_status: payload["status"] = new_status
     if new_label: payload["analyst_label"] = new_label
     if new_note: payload["analyst_note"] = new_note
-    
+
     patch_res = client.patch(f"/alerts/{alert_id}", json=payload)
     assert patch_res.status_code == 200
     patched_data = patch_res.json()
-    
+
     if new_status: assert patched_data["status"] == new_status
     if new_label: assert patched_data["analyst_label"] == new_label
     if new_note: assert patched_data["analyst_note"] == new_note

@@ -71,8 +71,9 @@ evaluates on test, runs LOFO, then writes `models/v1/` and `reports/metrics.json
 `--holdout WebAttack` trains a demo model without that family so "Unknown / novel"
 appears on stage; `--skip-lofo` is for fast iteration.
 
-## api/scorer.py
-Loads the artefacts once, scores batches, attaches explanations, and keeps a rolling
+## api/services/scorer.py
+Loads the artefacts on first use, scores batches, attaches explanations (one SHAP call
+per batch), and keeps a rolling
 window for drift. The window holds only flows that produced no alert, so an attack burst
 does not masquerade as distribution drift.
 

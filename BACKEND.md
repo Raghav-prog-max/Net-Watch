@@ -23,7 +23,7 @@ api/
 ├── services/
 │   ├── drift_service.py        # Mock drift monitor
 │   ├── mitre.py                # Integrated with existing ML mitre mapper
-│   └── scorer.py               # Severity math and ML prediction proxy
+│   └── scorer.py               # Loads models/v1 and scores flows with the trained models
 └── schemas.py                  # Frozen Pydantic contracts for Flow, Alert, Feedback
 ```
 
@@ -33,7 +33,14 @@ The API strictly fulfills the frozen Day 2 API contract:
 ### Scoring & Flow Ingestion
 - `POST /score`
   - Purpose: Score one flow or a batch; returns alerts created.
-  - Integration: Triggers mock ML logic, evaluates severity thresholds, persists alerts to DB, and broadcasts over WebSocket.
+  - Request: `{"flows": [{"features": {"Flow Duration": 1234.0, ...}, "meta": {"dst_port": "80"}}]}`.
+    `features` are CIC-IDS2017 columns fed to the models (missing ones score as 0.0);
+    `meta` is display-only and comes back as the alert's `flow`. This is what `replay/replayer.py` sends.
+  - Response: `{"scored": <flows received>, "alerts": [Alert, ...]}`; benign flows produce no alert.
+  - Integration: Runs the trained models from `models/v1` (override with `NETWATCH_MODEL_DIR`):
+    LightGBM classifier, Isolation Forest, and the family novelty check, combined by
+    `ml/models/combine.py`; SHAP explanations; persists alerts and broadcasts over WebSocket.
+    Returns 503 until `make train` has produced the models.
 
 ### Alerts
 - `GET /alerts`
