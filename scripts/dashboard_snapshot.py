@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "metrics.json"
 TARGET = ROOT / "dashboard" / "lib" / "mockData.ts"
 KEYS = ("generated", "classifier", "rows", "threshold", "main",
-        "random_forest_baseline", "lofo", "novel_families")
+        "random_forest_baseline", "naive_comparison", "lofo", "novel_families")
 START = "export const MOCK_EVALUATION_REPORT"
 END = "export const MOCK_DRIFT_STATUS"
 

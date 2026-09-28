@@ -250,7 +250,43 @@ def render():
     w("- Thresholds are set once, on validation. A production system would re-tune them "
       "against analyst feedback.")
     w("")
-    w("**Not yet measured** — the handbook requires both: the same model scored on a random "
+
+    # ------------------------------------------------------------------ naive vs honest
+    nc = m.get("naive_comparison")
+    if nc:
+        s = nc["macro_f1_over_seeds"]
+        shared = nc["test_flows_from_blocks_seen_in_training"]
+        w("## Naive random split vs honest time split")
+        w("")
+        w("The same classifier, settings, benign downsampling and threshold rule, with only "
+          "the split changed: random rows instead of whole 5-minute blocks.")
+        w("")
+        w("| Split | Macro-F1 | False alerts / 10k benign | Test flows from a block also in training |")
+        w("| --- | --- | --- | --- |")
+        w(f"| Time blocks (honest) | {nc['honest_macro_f1']} | {nc['honest_false_alerts_per_10k']} | 0% |")
+        w(f"| Random rows (naive) | {nc['macro_f1']} ({s['min']}–{s['max']} over {s['seeds']} "
+          f"seeds) | {nc['false_alerts_per_10k']} | {pct(shared, 0) if shared is not None else '—'} |")
+        w("")
+        if nc["inflated"]:
+            w(f"The random split scores higher on every seed, by {nc['macro_f1_gap']:+.3f} macro-F1 "
+              "on the main one. That gap is what a leaky evaluation would have let us claim.")
+        else:
+            w(f"**No inflation was measured.** Every random split scored "
+              f"{'at or below' if s['max'] <= nc['honest_macro_f1'] else 'about the same as'} "
+              f"the honest one, although {pct(shared, 0) if shared is not None else 'most'} of its "
+              "test flows came from time blocks also used in training.")
+            if synthetic:
+                w(" The synthetic generator's bursts carry independent noise per flow, so they are "
+                  "not near-duplicates and there is little to memorise. This has to be re-measured "
+                  "on CICIDS2017, where flows inside one attack burst are expected to be near-identical; "
+                  "a test with "
+                  "deliberately leaky data (`tests/test_naive_split.py`) shows the comparison does "
+                  "detect inflation when it exists.")
+        w("")
+
+    w("**Not yet measured** — the handbook also requires a cross-dataset test on UNSW-NB15."
+      if nc else
+      "**Not yet measured** — the handbook requires both: the same model scored on a random "
       "split beside the honest one, so the inflation gap is visible; and a cross-dataset test "
       "on UNSW-NB15.")
     w("")
