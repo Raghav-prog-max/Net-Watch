@@ -202,3 +202,57 @@ def test_patch_alert(setup_alerts, new_status, new_label, new_note):
     if new_status: assert patched_data["status"] == new_status
     if new_label: assert patched_data["analyst_label"] == new_label
     if new_note: assert patched_data["analyst_note"] == new_note
+
+
+# ── /metrics/model, /metrics/drift, /models ──────────────────────────────────
+# These used to return hardcoded numbers (macro-F1 0.92, drift always "Stable").
+
+import json
+from pathlib import Path
+from api.routes import metrics as metrics_route
+
+
+def test_model_metrics_is_the_training_report(tmp_path, monkeypatch):
+    report = {"classifier": "lightgbm", "main": {"macro_f1": 0.8123}, "lofo": []}
+    path = tmp_path / "metrics.json"
+    path.write_text(json.dumps(report))
+    monkeypatch.setattr(metrics_route, "REPORT_PATH", path)
+    body = client.get("/metrics/model").json()
+    assert body["main"]["macro_f1"] == 0.8123
+    assert isinstance(body["synthetic_data"], bool)
+
+def test_model_metrics_before_training_is_503(tmp_path, monkeypatch):
+    monkeypatch.setattr(metrics_route, "REPORT_PATH", tmp_path / "missing.json")
+    res = client.get("/metrics/model")
+    assert res.status_code == 503
+    assert "make train" in res.json()["detail"]
+
+def test_drift_comes_from_the_scorer():
+    class Drifting(StubScorer):
+        def drift(self):
+            return {"status": "warning", "flows_seen": 1234,
+                    "top_features": [{"feature": "Flow Duration", "psi": 0.17}]}
+    app.dependency_overrides[scorer_dependency] = lambda: Drifting()
+    body = client.get("/metrics/drift").json()
+    assert body["status"] == "warning"
+    assert body["flows_seen"] == 1234
+    assert body["bands"] == {"warning": 0.10, "drift": 0.25}
+
+def test_drift_without_models_is_503():
+    def missing():
+        from api.routes.score import HTTPException
+        raise HTTPException(status_code=503, detail="run `make train` first")
+    app.dependency_overrides[scorer_dependency] = missing
+    assert client.get("/metrics/drift").status_code == 503
+
+@pytest.mark.skipif(not Path("models/v1/thresholds.json").exists(), reason="needs `make train`")
+def test_models_reports_thresholds_and_triage_counts():
+    before = client.get("/models").json()["feedback"]["escalated"]
+    alert_id = client.post("/score", json={"flows": [flow("DoS")]}).json()["alerts"][0]["id"]
+    client.patch(f"/alerts/{alert_id}", json={"status": "escalated"})
+    body = client.get("/models").json()
+    assert body["active"] == "v1"
+    assert body["feedback"]["escalated"] == before + 1
+    thresholds = json.load(open("models/v1/thresholds.json"))
+    assert body["thresholds"]["fpr_budget"] == thresholds["fpr_budget"]
+    assert set(body) >= {"active", "versions", "classifier", "thresholds", "feedback", "model_card"}

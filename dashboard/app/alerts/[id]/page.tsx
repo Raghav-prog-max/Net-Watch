@@ -131,8 +131,10 @@ export default function AlertDetailPage() {
           </div>
           <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
             {alert.is_novel
-              ? "No known attack matches this traffic, and it does not resemble normal benign baseline traffic."
-              : `Classifier confidence ${(alert.prediction.confidence * 100).toFixed(1)}%. Anomaly percentile: ${alert.anomaly_score}.`}
+              ? alert.prediction.rejected_label
+                ? `The classifier called this ${alert.prediction.rejected_label.family} (${(alert.prediction.rejected_label.confidence * 100).toFixed(1)}%), but the flow looks nothing like that family, so it is shown as Unknown.`
+                : "No known attack matches this traffic, and it does not resemble normal benign baseline traffic."
+              : `Classifier confidence ${(alert.prediction.confidence * 100).toFixed(1)}%. Anomaly score: ${alert.anomaly_score}.`}
           </div>
         </div>
 

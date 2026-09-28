@@ -108,16 +108,16 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
         >
           <div>
             <span style={{ color: "var(--nw-text-muted)" }}>SRC: </span>
-            <span style={{ color: "#FFFFFF" }}>{alert.flow.src_ip ?? "192.168.10.50"}</span>
+            <span style={{ color: "#FFFFFF" }}>{alert.flow.src_ip ?? "—"}</span>
           </div>
           <span style={{ color: "var(--nw-card-2)" }}>→</span>
           <div>
             <span style={{ color: "var(--nw-text-muted)" }}>DST: </span>
-            <span style={{ color: "#FFFFFF" }}>{alert.flow.dst_ip ?? "172.16.0.1"}:{alert.flow.dst_port ?? "80"}</span>
+            <span style={{ color: "#FFFFFF" }}>{alert.flow.dst_ip ?? "—"}:{alert.flow.dst_port ?? "—"}</span>
           </div>
           <div>
             <span style={{ color: "var(--nw-text-muted)" }}>PROTO: </span>
-            <span style={{ color: "var(--nw-card-3)" }}>{alert.flow.protocol ?? "TCP"}</span>
+            <span style={{ color: "var(--nw-card-3)" }}>{alert.flow.protocol ?? "—"}</span>
           </div>
         </div>
 

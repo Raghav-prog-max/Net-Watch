@@ -17,37 +17,46 @@ export interface SummaryMetrics {
   accuracy_for_reference_only: number;
 }
 
+// Mirrors reports/metrics.json as written by `make train` and served, unchanged,
+// by GET /metrics/model. Nothing in it is estimated by the dashboard.
 export interface EvaluationReport {
+  generated?: string;
   classifier: string;
+  rows?: { train: number; val: number; test: number };
   threshold: {
     threshold: number;
     fpr_at_threshold: number;
     recall_at_threshold: number;
-    budget_target: number;
+    fpr_budget: number;
   };
   main: SummaryMetrics;
-  naive_comparison: {
-    split_method: string;
+  random_forest_baseline?: SummaryMetrics;
+  // Naive random split vs time-block split. Not measured yet: stays absent until
+  // the training pipeline writes it, and the page says so.
+  naive_comparison?: {
     macro_f1: number;
-    pr_auc_mean: number;
     false_alerts_per_10k: number;
-    leakage_explanation: string;
-    honest_macro_f1: number;
-    honest_false_alerts_per_10k: number;
   };
   lofo: {
     family: string;
     test_flows: number;
+    attack_threshold?: number;
     caught_by_classifier_alone: number;
+    caught_by_anomaly_detector_alone?: number;
     caught_by_full_system: number;
     benign_fpr: number;
-    delta_gain: number;
   }[];
   novel_families: {
     families: string[];
     flows: number;
+    alerted?: number;
     caught_by_anomaly_detector: number;
+    label_rejected_as_out_of_family?: number;
+    shown_as_unknown?: number;
   };
+  synthetic_data?: boolean;
+  // added by lib/api.ts: "live" from the API, "snapshot" when it is unreachable
+  source?: "live" | "snapshot";
 }
 
 export const INITIAL_MOCK_ALERTS: Alert[] = [
@@ -358,99 +367,384 @@ export const INITIAL_MOCK_ALERTS: Alert[] = [
   },
 ];
 
+// Offline fallback: a copy of reports/metrics.json from the run below (synthetic data).
+// Refresh it after retraining with `make dashboard-snapshot`.
 export const MOCK_EVALUATION_REPORT: EvaluationReport = {
-  classifier: "LightGBM (HistGradientBoosting fallback)",
-  threshold: {
-    threshold: 0.812,
-    fpr_at_threshold: 0.0048,
-    recall_at_threshold: 0.941,
-    budget_target: 0.005,
+  "generated": "2026-09-25T15:06:06Z",
+  "classifier": "lightgbm",
+  "rows": {
+    "train": 21381,
+    "val": 8664,
+    "test": 9324
   },
-  main: {
-    per_class: {
-      Benign: { precision: 0.998, recall: 0.995, "f1-score": 0.996, support: 420850 },
-      DoS: { precision: 0.974, recall: 0.962, "f1-score": 0.968, support: 18420 },
-      DDoS: { precision: 0.988, recall: 0.979, "f1-score": 0.983, support: 24150 },
-      PortScan: { precision: 0.952, recall: 0.924, "f1-score": 0.938, support: 15890 },
-      BruteForce: { precision: 0.941, recall: 0.915, "f1-score": 0.928, support: 3420 },
-      WebAttack: { precision: 0.892, recall: 0.854, "f1-score": 0.873, support: 2180 },
-      Bot: { precision: 0.915, recall: 0.887, "f1-score": 0.901, support: 1960 },
+  "threshold": {
+    "threshold": 0.9865424689764415,
+    "recall_at_threshold": 0.9933,
+    "fpr_at_threshold": 0.00497,
+    "fpr_budget": 0.005
+  },
+  "main": {
+    "per_class": {
+      "Benign": {
+        "precision": 0.9955,
+        "recall": 0.9957,
+        "f1-score": 0.9956,
+        "support": 5598.0
+      },
+      "Bot": {
+        "precision": 0.8324,
+        "recall": 0.8011,
+        "f1-score": 0.8164,
+        "support": 186.0
+      },
+      "BruteForce": {
+        "precision": 0.931,
+        "recall": 0.975,
+        "f1-score": 0.9525,
+        "support": 360.0
+      },
+      "DDoS": {
+        "precision": 0.8691,
+        "recall": 0.8538,
+        "f1-score": 0.8614,
+        "support": 848.0
+      },
+      "DoS": {
+        "precision": 0.8833,
+        "recall": 0.8983,
+        "f1-score": 0.8908,
+        "support": 1121.0
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 897.0
+      },
+      "WebAttack": {
+        "precision": 0.9337,
+        "recall": 0.8673,
+        "f1-score": 0.8993,
+        "support": 211.0
+      }
     },
-    macro_f1: 0.941,
-    false_positive_rate: 0.0048,
-    false_alerts_per_10k_benign_flows: 48.0,
-    auc: {
-      Benign: { pr_auc: 0.999, roc_auc: 0.998 },
-      DoS: { pr_auc: 0.982, roc_auc: 0.991 },
-      DDoS: { pr_auc: 0.994, roc_auc: 0.997 },
-      PortScan: { pr_auc: 0.965, roc_auc: 0.984 },
-      BruteForce: { pr_auc: 0.948, roc_auc: 0.979 },
-      WebAttack: { pr_auc: 0.891, roc_auc: 0.962 },
-      Bot: { pr_auc: 0.922, roc_auc: 0.975 },
+    "macro_f1": 0.9166,
+    "false_positive_rate": 0.00429,
+    "false_alerts_per_10k_benign_flows": 42.9,
+    "auc": {
+      "Benign": {
+        "pr_auc": 0.9999,
+        "roc_auc": 0.9998
+      },
+      "Bot": {
+        "pr_auc": 0.8522,
+        "roc_auc": 0.9904
+      },
+      "BruteForce": {
+        "pr_auc": 0.9896,
+        "roc_auc": 0.9996
+      },
+      "DDoS": {
+        "pr_auc": 0.9514,
+        "roc_auc": 0.9946
+      },
+      "DoS": {
+        "pr_auc": 0.9631,
+        "roc_auc": 0.9948
+      },
+      "PortScan": {
+        "pr_auc": 1.0,
+        "roc_auc": 1.0
+      },
+      "WebAttack": {
+        "pr_auc": 0.9557,
+        "roc_auc": 0.9989
+      }
     },
-    confusion_matrix: {
-      labels: ["Benign", "DoS", "DDoS", "PortScan", "BruteForce", "WebAttack", "Bot"],
-      rows: [
-        [418745, 412, 185, 920, 245, 198, 145],
-        [320, 17720, 210, 85, 42, 33, 10],
-        [140, 180, 23642, 110, 38, 25, 15],
-        [680, 120, 95, 14682, 185, 88, 40],
-        [110, 35, 15, 95, 3129, 24, 12],
-        [145, 40, 20, 75, 28, 1862, 10],
-        [98, 12, 15, 62, 18, 17, 1738],
+    "confusion_matrix": {
+      "labels": [
+        "Benign",
+        "Bot",
+        "BruteForce",
+        "DDoS",
+        "DoS",
+        "PortScan",
+        "WebAttack"
       ],
+      "rows": [
+        [
+          5574,
+          24,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          25,
+          149,
+          10,
+          0,
+          0,
+          0,
+          2
+        ],
+        [
+          0,
+          3,
+          351,
+          0,
+          0,
+          0,
+          6
+        ],
+        [
+          0,
+          0,
+          0,
+          724,
+          124,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          109,
+          1007,
+          0,
+          5
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          897,
+          0
+        ],
+        [
+          0,
+          3,
+          16,
+          0,
+          9,
+          0,
+          183
+        ]
+      ]
     },
-    accuracy_for_reference_only: 0.9938,
+    "accuracy_for_reference_only": 0.9636
   },
-  naive_comparison: {
-    split_method: "Naive Random Split (Scikit-Learn train_test_split)",
-    macro_f1: 0.9984,
-    pr_auc_mean: 0.9991,
-    false_alerts_per_10k: 1.2,
-    leakage_explanation:
-      "Packets inside one attack burst are near-identical copies arriving in sub-second clusters. A random split distributes duplicates of the same burst into both train and test. The model memorizes exact flow shapes, creating artificially pristine test numbers that fail in production on day 2.",
-    honest_macro_f1: 0.941,
-    honest_false_alerts_per_10k: 48.0,
+  "random_forest_baseline": {
+    "per_class": {
+      "Benign": {
+        "precision": 0.9959,
+        "recall": 0.9962,
+        "f1-score": 0.9961,
+        "support": 5598.0
+      },
+      "Bot": {
+        "precision": 0.8538,
+        "recall": 0.7849,
+        "f1-score": 0.8179,
+        "support": 186.0
+      },
+      "BruteForce": {
+        "precision": 0.8866,
+        "recall": 0.9778,
+        "f1-score": 0.93,
+        "support": 360.0
+      },
+      "DDoS": {
+        "precision": 0.8852,
+        "recall": 0.855,
+        "f1-score": 0.8698,
+        "support": 848.0
+      },
+      "DoS": {
+        "precision": 0.8686,
+        "recall": 0.9144,
+        "f1-score": 0.8909,
+        "support": 1121.0
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 897.0
+      },
+      "WebAttack": {
+        "precision": 0.9554,
+        "recall": 0.7109,
+        "f1-score": 0.8152,
+        "support": 211.0
+      }
+    },
+    "macro_f1": 0.9028,
+    "false_positive_rate": 0.00375,
+    "false_alerts_per_10k_benign_flows": 37.5,
+    "auc": {
+      "Benign": {
+        "pr_auc": 0.9999,
+        "roc_auc": 0.9998
+      },
+      "Bot": {
+        "pr_auc": 0.8298,
+        "roc_auc": 0.9928
+      },
+      "BruteForce": {
+        "pr_auc": 0.9889,
+        "roc_auc": 0.9996
+      },
+      "DDoS": {
+        "pr_auc": 0.9451,
+        "roc_auc": 0.9944
+      },
+      "DoS": {
+        "pr_auc": 0.9617,
+        "roc_auc": 0.9946
+      },
+      "PortScan": {
+        "pr_auc": 1.0,
+        "roc_auc": 1.0
+      },
+      "WebAttack": {
+        "pr_auc": 0.9424,
+        "roc_auc": 0.9989
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "Benign",
+        "Bot",
+        "BruteForce",
+        "DDoS",
+        "DoS",
+        "PortScan",
+        "WebAttack"
+      ],
+      "rows": [
+        [
+          5577,
+          21,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          23,
+          146,
+          16,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          4,
+          352,
+          0,
+          0,
+          0,
+          4
+        ],
+        [
+          0,
+          0,
+          0,
+          725,
+          123,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          94,
+          1025,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          897,
+          0
+        ],
+        [
+          0,
+          0,
+          29,
+          0,
+          32,
+          0,
+          150
+        ]
+      ]
+    },
+    "accuracy_for_reference_only": 0.9622
   },
-  lofo: [
+  "lofo": [
     {
-      family: "PortScan",
-      test_flows: 15890,
-      caught_by_classifier_alone: 0.245,
-      caught_by_full_system: 0.884,
-      benign_fpr: 0.0098,
-      delta_gain: 0.639,
+      "family": "PortScan",
+      "test_flows": 897,
+      "attack_threshold": 0.9999,
+      "caught_by_classifier_alone": 0.0,
+      "caught_by_anomaly_detector_alone": 0.9967,
+      "caught_by_full_system": 0.9967,
+      "benign_fpr": 0.01304
     },
     {
-      family: "BruteForce",
-      test_flows: 3420,
-      caught_by_classifier_alone: 0.312,
-      caught_by_full_system: 0.912,
-      benign_fpr: 0.0102,
-      delta_gain: 0.600,
+      "family": "BruteForce",
+      "test_flows": 360,
+      "attack_threshold": 1.0,
+      "caught_by_classifier_alone": 1.0,
+      "caught_by_anomaly_detector_alone": 0.0306,
+      "caught_by_full_system": 1.0,
+      "benign_fpr": 0.01268
     },
     {
-      family: "WebAttack",
-      test_flows: 2180,
-      caught_by_classifier_alone: 0.185,
-      caught_by_full_system: 0.865,
-      benign_fpr: 0.0101,
-      delta_gain: 0.680,
+      "family": "WebAttack",
+      "test_flows": 211,
+      "attack_threshold": 1.0,
+      "caught_by_classifier_alone": 1.0,
+      "caught_by_anomaly_detector_alone": 0.9289,
+      "caught_by_full_system": 1.0,
+      "benign_fpr": 0.01322
     },
     {
-      family: "Bot",
-      test_flows: 1960,
-      caught_by_classifier_alone: 0.218,
-      caught_by_full_system: 0.842,
-      benign_fpr: 0.0095,
-      delta_gain: 0.624,
-    },
+      "family": "Bot",
+      "test_flows": 186,
+      "attack_threshold": 0.9997,
+      "caught_by_classifier_alone": 0.1559,
+      "caught_by_anomaly_detector_alone": 0.0376,
+      "caught_by_full_system": 0.1774,
+      "benign_fpr": 0.00875
+    }
   ],
-  novel_families: {
-    families: ["Infiltration (36 flows)", "Heartbleed (11 flows)"],
-    flows: 47,
-    caught_by_anomaly_detector: 0.936,
+  "novel_families": {
+    "families": [
+      "Heartbleed",
+      "Infiltration"
+    ],
+    "flows": 103,
+    "alerted": 1.0,
+    "caught_by_anomaly_detector": 1.0,
+    "label_rejected_as_out_of_family": 0.932,
+    "shown_as_unknown": 0.932
   },
+  "synthetic_data": true
 };
 
 export const MOCK_DRIFT_STATUS: DriftStatus = {

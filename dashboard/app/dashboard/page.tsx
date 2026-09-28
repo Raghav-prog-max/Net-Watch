@@ -7,16 +7,21 @@ import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
 import SocTopBar from "@/components/SocTopBar";
-import { listAlerts, triage } from "@/lib/api";
+import { getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts, broadcastSimulatedAlert } from "@/lib/socket";
-import type { Alert } from "@/lib/types";
+import type { Alert, DriftStatus } from "@/lib/types";
+import type { EvaluationReport } from "@/lib/mockData";
 
 export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [report, setReport] = useState<EvaluationReport | null>(null);
+  const [drift, setDrift] = useState<DriftStatus | null>(null);
 
   useEffect(() => {
-    listAlerts({ limit: "50" }).then(setAlerts);
+    listAlerts({ limit: "100" }).then(setAlerts).catch(() => setAlerts([]));
+    getModelMetrics().then(setReport).catch(() => setReport(null));
+    getDrift().then(setDrift).catch(() => setDrift(null));
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
       setAlerts((prev) => [incomingAlert, ...prev.filter((a) => a.id !== incomingAlert.id)].slice(0, 100));
     });
@@ -95,6 +100,8 @@ export default function DashboardPage() {
   }
 
   const criticalCount = alerts.filter((a) => a.severity.level === "Critical").length;
+  const openCount = alerts.filter((a) => a.status === "open").length;
+  const novelCount = alerts.filter((a) => a.is_novel).length;
 
   return (
     <div style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 28px 60px" }}>
@@ -125,8 +132,8 @@ export default function DashboardPage() {
             {/* Card 1: Amber (#F4A93E) - Critical Alerts */}
             <StatCard
               label="Critical Threats Active"
-              value={criticalCount > 0 ? criticalCount : 24}
-              subtext="+3 in past hour · Sev ≥ 85"
+              value={criticalCount}
+              subtext={`of ${alerts.length} alerts loaded · Sev ≥ 85`}
               bgColor="var(--nw-card-1)"
               onClick={() => {
                 const crit = alerts.find((a) => a.severity.level === "Critical");
@@ -134,19 +141,19 @@ export default function DashboardPage() {
               }}
             />
 
-            {/* Card 2: Soft Purple (#A78BFA) - Flows Analyzed */}
+            {/* Card 2: Soft Purple (#A78BFA) - Awaiting triage */}
             <StatCard
-              label="Network Flows (24H)"
-              value="482.5K"
-              subtext="40 flows/sec · Zero packet drop"
+              label="Awaiting Triage"
+              value={openCount}
+              subtext="open alerts · nothing is auto-blocked"
               bgColor="var(--nw-card-2)"
             />
 
-            {/* Card 3: Lime Green (#C7DB6E) - Model Confidence / Integrity */}
+            {/* Card 3: Lime Green (#C7DB6E) - Never-seen traffic */}
             <StatCard
-              label="Model Integrity"
-              value="98.4%"
-              subtext="≤50/10k FPR · PSI 0.048 stable"
+              label="Unknown (Never Seen)"
+              value={novelCount}
+              subtext="alerts matching no known attack family"
               bgColor="var(--nw-card-3)"
             />
           </div>
@@ -155,7 +162,7 @@ export default function DashboardPage() {
           <MainThreatChart />
 
           {/* Two lower detail breakdown cards */}
-          <LowerDetailCards />
+          <LowerDetailCards alerts={alerts} report={report} drift={drift} />
         </div>
 
         {/* ── RIGHT COLUMN: SCROLLABLE ALERT CARDS STACK ─────── */}

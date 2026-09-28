@@ -21,7 +21,6 @@ api/
 │   ├── score.py                # POST route for traffic ingestion and scoring
 │   └── ws.py                   # WebSocket connection manager
 ├── services/
-│   ├── drift_service.py        # Mock drift monitor
 │   ├── mitre.py                # Integrated with existing ML mitre mapper
 │   └── scorer.py               # Loads models/v1 and scores flows with the trained models
 └── schemas.py                  # Frozen Pydantic contracts for Flow, Alert, Feedback
@@ -53,11 +52,18 @@ The API strictly fulfills the frozen Day 2 API contract:
 
 ### Metrics & ML Metadata
 - `GET /metrics/model`
-  - Purpose: Evaluation report JSON (returns mock macro-F1, FPR, ROC data).
+  - Purpose: Evaluation report JSON: `reports/metrics.json` from `make train`, unchanged,
+    plus `synthetic_data` (true when `data/raw/` holds `scripts/make_synthetic.py` output). 503 before training.
 - `GET /metrics/drift`
-  - Purpose: Current drift status and history (returns PSI and KS test mocks).
+  - Purpose: Live drift status from the scorer's window of benign-looking flows:
+    `status` (`warming_up` under 500 flows, then `stable` / `warning` / `drift`), `top_features` (PSI),
+    `recommendation`, `alert_rate`, `flows_seen`, and the PSI `bands` from `ml/config.yaml`.
 - `GET /models`
-  - Purpose: Return active model versions and model card text.
+  - Purpose: `{active, versions, classifier, thresholds, feedback, model_card}`: the thresholds in
+    `models/v1/thresholds.json` and the PSI bands, triage counts per status from the alert store,
+    and `docs/model_card.md`.
+
+The service loads the models at startup, so the first `/score` is as fast as the rest.
 
 ### Real-Time Streaming
 - `WS /ws/alerts`

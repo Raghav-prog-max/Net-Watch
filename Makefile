@@ -1,4 +1,4 @@
-.PHONY: setup synthetic data train evaluate card api demo test clean
+.PHONY: setup synthetic data train evaluate card dashboard-snapshot api demo test clean
 
 setup:          ## install dependencies
 	pip install -r requirements.txt
@@ -14,6 +14,9 @@ train:          ## train both models, pick thresholds, write reports/metrics.jso
 
 card:           ## regenerate docs/model_card.md from reports/metrics.json
 	python -m ml.evaluate.model_card
+
+dashboard-snapshot: ## copy reports/metrics.json into the dashboard's offline fallback
+	python scripts/dashboard_snapshot.py
 
 quick:          ## train without the leave-one-family-out experiments
 	python -m ml.train --config ml/config.yaml --skip-lofo

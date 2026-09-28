@@ -63,7 +63,7 @@ export default function MainThreatChart() {
             Threat Traffic &amp; Ingestion Volume
           </div>
           <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
-            Real-time dual-engine packet flow monitoring · 40 flows/sec
+            Illustrative traffic pattern for the design, not live data
           </div>
         </div>
 

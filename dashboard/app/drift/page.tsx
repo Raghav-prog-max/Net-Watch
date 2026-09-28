@@ -15,7 +15,6 @@ export default function DriftMonitorPage() {
     0.04, 0.05, 0.04, 0.06, 0.05, 0.07, 0.05, 0.06, 0.08, 0.09, 0.08, 0.07,
   ]);
   const [activeScenario, setActiveScenario] = useState<"stable" | "warning" | "drift">("stable");
-  const [retrainSubmitted, setRetrainSubmitted] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -23,10 +22,11 @@ export default function DriftMonitorPage() {
       getDrift()
         .then((d) => {
           if (!mounted) return;
-          if (activeScenario === "stable" && d.status !== "warming_up") {
+          if (activeScenario === "stable") {
+            // show warming_up as it is: under 500 benign flows there is no PSI yet
             setDrift(d);
-            const top = d.top_features?.[0]?.psi ?? 0.05;
-            setHistory((prev) => [...prev, top].slice(-30));
+            const top = d.top_features?.[0]?.psi;
+            if (top !== undefined) setHistory((prev) => [...prev, top].slice(-30));
           }
         })
         .catch(() => {});
@@ -42,7 +42,6 @@ export default function DriftMonitorPage() {
 
   function handleScenarioSwitch(mode: "stable" | "warning" | "drift") {
     setActiveScenario(mode);
-    setRetrainSubmitted(false);
     if (mode === "stable") {
       setDrift(MOCK_DRIFT_STATUS);
       setHistory([0.04, 0.05, 0.04, 0.06, 0.05, 0.07, 0.06, 0.05, 0.04]);
@@ -71,28 +70,37 @@ export default function DriftMonitorPage() {
             Population Stability Index (PSI) computed exclusively over traffic the system considers benign.
             An attack burst does not read as distribution drift.
           </p>
+          <div style={{ marginTop: "10px" }}>
+            <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>
+              {activeScenario !== "stable"
+                ? "SIMULATED SCENARIO · not live data"
+                : drift.source === "live"
+                ? "LIVE · GET /metrics/drift"
+                : "API OFFLINE · SAMPLE DATA"}
+            </span>
+          </div>
         </div>
 
         {/* Scenario Switcher */}
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", color: "var(--nw-text-muted)", fontWeight: 600 }}>DEMO SCENARIOS:</span>
+          <span style={{ fontSize: "11px", color: "var(--nw-text-muted)", fontWeight: 600 }}>VIEW:</span>
           <button
             onClick={() => handleScenarioSwitch("stable")}
             className={`nw-btn-pill ${activeScenario === "stable" ? "nw-btn-lime" : "nw-btn-dark"}`}
           >
-            Stable
+            Live
           </button>
           <button
             onClick={() => handleScenarioSwitch("warning")}
             className={`nw-btn-pill ${activeScenario === "warning" ? "nw-btn-soft-purple" : "nw-btn-dark"}`}
           >
-            Warning
+            Simulate warning
           </button>
           <button
             onClick={() => handleScenarioSwitch("drift")}
             className={`nw-btn-pill ${activeScenario === "drift" ? "nw-btn-amber" : "nw-btn-dark"}`}
           >
-            Drift (Retrain)
+            Simulate drift
           </button>
         </div>
       </div>
@@ -119,17 +127,10 @@ export default function DriftMonitorPage() {
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-primary)", maxWidth: "800px" }}>
               Monitored features exceed critical threshold (PSI &ge; 0.25). The underlying network distribution
-              has statistically drifted from training baselines. Human analyst approval required to queue candidate v2.
+              has statistically drifted from training baselines. Retraining is a human decision and runs offline:
+              <code style={{ margin: "0 4px" }}>make train</code>, then restart the API. It is not triggered from this page.
             </div>
           </div>
-
-          <button
-            onClick={() => setRetrainSubmitted(true)}
-            disabled={retrainSubmitted}
-            className="nw-btn-pill nw-btn-amber"
-          >
-            {retrainSubmitted ? "✓ Retraining Queued" : "Approve Retraining →"}
-          </button>
         </div>
       )}
 
@@ -166,7 +167,7 @@ export default function DriftMonitorPage() {
             Benign Window Flows
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {drift.flows_seen.toLocaleString()}
+            {(drift.flows_seen ?? 0).toLocaleString()}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-card-2)" }}>Unflagged flows evaluated</div>
         </div>
@@ -176,7 +177,7 @@ export default function DriftMonitorPage() {
             Window Alert Rate
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {drift.alert_rate !== undefined ? `${(drift.alert_rate * 100).toFixed(1)}%` : "1.4%"}
+            {drift.alert_rate !== undefined ? `${(drift.alert_rate * 100).toFixed(1)}%` : "—"}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Fraction of flows alerted</div>
         </div>

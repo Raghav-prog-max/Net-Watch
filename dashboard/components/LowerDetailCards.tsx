@@ -1,15 +1,37 @@
 "use client";
 
 import Link from "next/link";
+import type { Alert, DriftStatus } from "@/lib/types";
+import type { EvaluationReport } from "@/lib/mockData";
 
-export default function LowerDetailCards() {
-  const families = [
-    { name: "DDoS Volumetric", count: "24,150", pct: 48, sev: "Critical", color: "var(--nw-card-1)" },
-    { name: "PortScan Probing", count: "15,890", pct: 31, sev: "Medium", color: "var(--nw-card-2)" },
-    { name: "DoS Endpoint Flood", count: "18,420", pct: 14, sev: "High", color: "var(--nw-card-1)" },
-    { name: "Botnet C2 Beaconing", count: "1,960", pct: 4, sev: "High", color: "var(--nw-card-2)" },
-    { name: "Novel Anomaly (Zero-Day)", count: "47", pct: 3, sev: "Critical", color: "var(--nw-card-3)" },
-  ];
+interface Props {
+  alerts: Alert[];
+  report: EvaluationReport | null;
+  drift: DriftStatus | null;
+}
+
+const COLORS = ["var(--nw-card-1)", "var(--nw-card-2)", "var(--nw-card-3)"];
+
+export default function LowerDetailCards({ alerts, report, drift }: Props) {
+  // families among the alerts on screen, largest first
+  const counts = new Map<string, number>();
+  alerts.forEach((a) => counts.set(a.prediction.family, (counts.get(a.prediction.family) ?? 0) + 1));
+  const families = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, n], i) => ({
+      name: name === "Unknown" ? "Unknown (never seen)" : name,
+      count: n.toLocaleString(),
+      pct: Math.round((100 * n) / Math.max(alerts.length, 1)),
+      color: name === "Unknown" ? "var(--nw-card-3)" : COLORS[i % 2],
+    }));
+  const falsePositives = alerts.filter((a) => a.status === "false_positive").length;
+  const topPsi = drift?.top_features?.[0]?.psi;
+  const driftLabel = !drift
+    ? "DRIFT: —"
+    : drift.status === "warming_up"
+    ? "WARMING UP"
+    : `${drift.status.toUpperCase()}${topPsi !== undefined ? ` (PSI ${topPsi.toFixed(3)})` : ""}`;
 
   return (
     <div
@@ -37,14 +59,17 @@ export default function LowerDetailCards() {
                 Top Attack Families
               </div>
               <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
-                Classified over 24-hour observation window
+                Among the {alerts.length.toLocaleString()} alerts loaded
               </div>
             </div>
-            <span className="nw-pill nw-pill-amber">6 FAMILIES</span>
+            <span className="nw-pill nw-pill-amber">{counts.size} {counts.size === 1 ? "FAMILY" : "FAMILIES"}</span>
           </div>
 
           {/* Rows of data */}
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {families.length === 0 && (
+              <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>No alerts yet.</div>
+            )}
             {families.map((fam) => (
               <div key={fam.name}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
@@ -62,7 +87,7 @@ export default function LowerDetailCards() {
                     </span>
                   </div>
                   <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-                    <strong style={{ color: "var(--nw-text-primary)" }}>{fam.count}</strong> flows
+                    <strong style={{ color: "var(--nw-text-primary)" }}>{fam.count}</strong> alerts
                   </div>
                 </div>
 
@@ -123,7 +148,7 @@ export default function LowerDetailCards() {
                 Production pipeline governance · v1-prod
               </div>
             </div>
-            <span className="nw-pill nw-pill-lime">STABLE (PSI 0.048)</span>
+            <span className="nw-pill nw-pill-lime">{driftLabel}</span>
           </div>
 
           {/* Rows of data */}
@@ -154,7 +179,9 @@ export default function LowerDetailCards() {
             >
               <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Operating Threshold</span>
               <span style={{ fontSize: "13px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--nw-card-1)" }}>
-                0.812 (FPR ≤ 50/10k)
+                {report
+                  ? `${report.threshold.threshold.toFixed(3)} (FPR ≤ ${Math.round(report.threshold.fpr_budget * 10000)}/10k)`
+                  : "—"}
               </span>
             </div>
 
@@ -169,7 +196,7 @@ export default function LowerDetailCards() {
             >
               <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Leakage-Free Validation</span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--nw-card-3)" }}>
-                5-Min Temporal Block (CI Verified)
+                5-Min Temporal Block (tests/test_split_leakage.py)
               </span>
             </div>
 
@@ -182,9 +209,11 @@ export default function LowerDetailCards() {
                 borderRadius: "14px",
               }}
             >
-              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Novel Zero-Day Recall</span>
+              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Never-Seen Shown as Unknown</span>
               <span style={{ fontSize: "13px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--nw-card-2)" }}>
-                93.6% (Held-Out Test)
+                {report
+                  ? `${((report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100).toFixed(1)}% (held-out test)`
+                  : "—"}
               </span>
             </div>
 
@@ -199,7 +228,7 @@ export default function LowerDetailCards() {
             >
               <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Analyst Retraining Queue</span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--nw-text-primary)" }}>
-                12 False Positives Logged
+                {falsePositives} False Positive{falsePositives === 1 ? "" : "s"} Logged
               </span>
             </div>
           </div>

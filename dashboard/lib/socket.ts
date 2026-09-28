@@ -1,7 +1,7 @@
 import type { Alert } from "./types";
-import { addLocalAlert } from "./api";
+import { addLocalAlert, normalizeAlert } from "./api";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";   // see lib/api.ts
 
 type AlertListener = (alert: Alert) => void;
 const internalListeners: Set<AlertListener> = new Set();
@@ -33,7 +33,7 @@ export function subscribeToAlerts(onAlert: AlertListener): () => void {
       socket = new WebSocket(url);
       socket.onmessage = (event) => {
         try {
-          const parsed = JSON.parse(event.data) as Alert;
+          const parsed = normalizeAlert(JSON.parse(event.data) as Alert);
           addLocalAlert(parsed);
           onAlert(parsed);
         } catch {

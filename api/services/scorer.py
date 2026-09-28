@@ -20,7 +20,10 @@ from ml.models import classifier as clf_mod
 from ml.models.combine import decide
 from .mitre import get_mitre_dict
 
-MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", "models/v1")
+# Resolved from the repository root, so the API finds its models whatever
+# directory uvicorn is started from.
+ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", str(ROOT / "models" / "v1"))
 
 FAMILY_WEIGHT = {
     "DDoS": 1.0, "Bot": 1.0, "WebAttack": 0.9, "DoS": 0.85,
