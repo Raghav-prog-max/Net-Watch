@@ -117,7 +117,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", default="mixed",
                     choices=["normal", "known", "novel", "drift", "mixed"])
-    ap.add_argument("--url", default="http://localhost:8000/score")
+    # 127.0.0.1, not localhost: on Windows "localhost" tries IPv6 first and every
+    # request waited ~2 s for the fallback, a tenth of the replay rate
+    ap.add_argument("--url", default="http://127.0.0.1:8000/score")
     ap.add_argument("--config", default="ml/config.yaml")
     ap.add_argument("--rate", type=int, default=40)
     ap.add_argument("--batch", type=int, default=20)
