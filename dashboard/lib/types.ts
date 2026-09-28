@@ -12,9 +12,17 @@ export interface Alert {
   id: string;
   timestamp: string;
   flow: Record<string, string>;
-  prediction: { family: string; confidence: number };
+  prediction: {
+    family: string;
+    confidence: number;
+    // set when the flow is shown as Unknown because it looks nothing like the
+    // family the classifier named: what the classifier wanted to call it
+    rejected_label?: { family: string; confidence: number } | null;
+    also_abnormal?: boolean | null;
+  };
   anomaly_score: number;
   is_novel: boolean;
+  // the API sends this inside `prediction`; lib/api.ts copies it up here
   also_abnormal: boolean;
   severity: { score: number; level: Level };
   explanation: Explanation[];
@@ -32,4 +40,7 @@ export interface DriftStatus {
   recommendation?: string;
   alert_rate?: number;
   flows_seen: number;
+  bands?: { warning: number; drift: number };
+  // added by lib/api.ts: "sample" when the API is unreachable
+  source?: "live" | "sample";
 }

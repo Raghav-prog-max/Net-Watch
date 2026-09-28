@@ -31,6 +31,9 @@ export default function EvaluationPage() {
 
   const m = report.main;
   const naive = report.naive_comparison;
+  const budgetPer10k = Math.round(report.threshold.fpr_budget * 10000);
+  const novel = report.novel_families;
+  const novelShown = novel.shown_as_unknown ?? novel.caught_by_anomaly_detector;
 
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
@@ -41,8 +44,21 @@ export default function EvaluationPage() {
         </h1>
         <p style={{ margin: 0, color: "var(--nw-text-muted)", fontSize: "13px", maxWidth: "900px" }}>
           Evaluated strictly on non-overlapping 5-minute time blocks. The alert threshold is derived
-          from an explicit false-positive budget (≤ 50 alerts per 10k benign flows), never left at an arbitrary 0.5.
+          from an explicit false-positive budget (≤ {budgetPer10k} alerts per 10k benign flows), never left at an arbitrary 0.5.
         </p>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+          <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>
+            {report.source === "live"
+              ? "LIVE · GET /metrics/model"
+              : "API OFFLINE · SNAPSHOT OF LAST TRAINING RUN"}
+            {report.generated ? ` · ${report.generated.slice(0, 10)}` : ""}
+          </span>
+          {report.synthetic_data && (
+            <span className="nw-pill nw-pill-lime" style={{ fontSize: "10px" }}>
+              SYNTHETIC DATA · real CIC-IDS2017 results pending
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── STAT HIGHLIGHT CARDS ──────────────────────────────── */}
@@ -71,7 +87,7 @@ export default function EvaluationPage() {
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-1)", margin: "4px 0" }}>
             {m.false_alerts_per_10k_benign_flows}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Budget: &le; 50/10k flows</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Budget: &le; {budgetPer10k}/10k flows</div>
         </div>
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
@@ -86,12 +102,15 @@ export default function EvaluationPage() {
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--nw-card-3)", textTransform: "uppercase" }}>
-            Novel Zero-Days Caught
+            Never-Seen Attacks Shown as Unknown
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-3)", margin: "4px 0" }}>
-            {pct(report.novel_families.caught_by_anomaly_detector)}
+            {pct(novelShown)}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Infiltration &amp; Heartbleed</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+            {novel.families.join(" & ")} · {novel.flows.toLocaleString()} flows
+            {novel.alerted !== undefined ? ` · ${pct(novel.alerted)} alerted` : ""}
+          </div>
         </div>
       </div>
 
@@ -108,13 +127,13 @@ export default function EvaluationPage() {
           <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
             Honest Validation Architecture // Naive Random Split vs 5-Min Time-Block Split
           </div>
-          <span className="nw-pill nw-pill-lime">CI ENFORCED: tests/test_split_leakage.py</span>
+          <span className="nw-pill nw-pill-lime">TESTED: tests/test_split_leakage.py</span>
         </div>
 
         <p style={{ color: "var(--nw-text-muted)", fontSize: "13px", lineHeight: 1.6, margin: "0 0 20px" }}>
-          Security papers frequently cite 99.8% F1 by running naive random train_test_split. We refuse this shortcut.
-          Packets inside an attack burst arrive in rapid clusters; random splitting leaks exact duplicates into both train and test.
-          When evaluated honestly with non-overlapping 5-minute blocks, real-world generalisation is revealed.
+          Flows inside one attack burst are near-identical. A random train_test_split puts copies of the same
+          burst in both train and test, so the model is graded on flows it has effectively already seen.
+          We split by non-overlapping 5-minute blocks instead, so every test flow comes from a time the model never trained on.
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "18px" }}>
@@ -130,12 +149,25 @@ export default function EvaluationPage() {
             <div style={{ fontSize: "11px", color: "var(--nw-text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: "6px" }}>
               Academic Paper Shortcut (Naive Random Split)
             </div>
-            <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--nw-text-muted)", marginBottom: "8px" }}>
-              {naive.macro_f1} Macro-F1 <span style={{ fontSize: "12px", opacity: 0.7 }}>(INFLATED)</span>
-            </div>
-            <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
-              False Alerts: <strong style={{ color: "var(--nw-text-primary)" }}>1.2 / 10k flows</strong>. Falsely low because the model memorizes exact packet geometries from the same burst. Collapses in production.
-            </div>
+            {naive ? (
+              <>
+                <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--nw-text-muted)", marginBottom: "8px" }}>
+                  {naive.macro_f1} Macro-F1 <span style={{ fontSize: "12px", opacity: 0.7 }}>(INFLATED)</span>
+                </div>
+                <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
+                  False Alerts: <strong style={{ color: "var(--nw-text-primary)" }}>{naive.false_alerts_per_10k} / 10k flows</strong>. Falsely low because the model is tested on near-copies of its training flows.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--nw-text-muted)", marginBottom: "8px" }}>
+                  Not measured yet
+                </div>
+                <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
+                  The training run has not produced a naive-split comparison, so there is no number to show here.
+                </div>
+              </>
+            )}
           </div>
 
           {/* Card B: Honest 5-Minute Time Split */}
@@ -151,10 +183,10 @@ export default function EvaluationPage() {
               NetWatch Production Standard (5-Minute Time-Block Split)
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#FFFFFF", marginBottom: "8px" }}>
-              {naive.honest_macro_f1} Macro-F1 <span style={{ fontSize: "12px", color: "var(--nw-card-2)" }}>(HONEST)</span>
+              {m.macro_f1} Macro-F1 <span style={{ fontSize: "12px", color: "var(--nw-card-2)" }}>(HONEST)</span>
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
-              False Alerts: <strong style={{ color: "var(--nw-card-1)" }}>{naive.honest_false_alerts_per_10k} / 10k flows</strong>. Calibrated to genuine analyst capacity. The CI build fails if any block appears in two splits.
+              False Alerts: <strong style={{ color: "var(--nw-card-1)" }}>{m.false_alerts_per_10k_benign_flows} / 10k flows</strong>. Calibrated to genuine analyst capacity. The test suite fails if any block appears in two splits.
             </div>
           </div>
         </div>
@@ -173,7 +205,9 @@ export default function EvaluationPage() {
           Per-Class Recall &amp; PR-AUC Breakdown
         </div>
         <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginBottom: "18px" }}>
-          Evaluated over 484,870 held-out flows across canonical traffic families
+          {report.rows
+            ? `Evaluated over ${report.rows.test.toLocaleString()} held-out flows from time blocks the model never trained on`
+            : "Evaluated over held-out time blocks the model never trained on"}
         </div>
 
         <div style={{ overflowX: "auto" }}>
@@ -266,7 +300,7 @@ export default function EvaluationPage() {
                       {pct(r.caught_by_full_system)}
                     </td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)", fontWeight: 700 }}>
-                      +{pct(r.delta_gain)}
+                      +{pct(r.caught_by_full_system - r.caught_by_classifier_alone)}
                     </td>
                     <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{pct(r.benign_fpr)}</td>
                   </tr>
@@ -336,7 +370,7 @@ export default function EvaluationPage() {
         </div>
 
         <div style={{ marginTop: "16px", fontSize: "12px", color: "var(--nw-text-muted)", borderTop: "1px solid #26262C", paddingTop: "12px" }}>
-          Note: Accuracy is {m.accuracy_for_reference_only} and is intentionally listed last for reference only: because benign traffic represents 86%+ of all network flows, a useless model that never fired would still score 86%+ accuracy.
+          Note: Accuracy is {m.accuracy_for_reference_only} and is intentionally listed last for reference only: because most network flows are benign, a useless model that never fired would still score a high accuracy.
         </div>
       </div>
     </div>

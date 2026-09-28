@@ -30,7 +30,7 @@ export default function SocTopBar() {
           Hello, Sarah Analyst 👋
         </h1>
         <p style={{ margin: 0, color: "var(--nw-text-muted)", fontSize: "13px" }}>
-          Real-time network intrusion monitoring is active. 40 flows/s streaming.
+          Real-time network intrusion monitoring. Nothing is blocked automatically.
         </p>
       </div>
 

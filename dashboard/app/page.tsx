@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { getModelMetrics } from "@/lib/api";
+import type { EvaluationReport } from "@/lib/mockData";
 
 // Count-up animated number hook
 function useCountUp(end: number, duration: number = 1400, trigger: boolean = false) {
@@ -66,8 +68,24 @@ export default function LandingPage() {
     };
   }, []);
 
-  const alertsCaught = useCountUp(142850, 1600, statsInView);
-  const flowsAnalyzed = useCountUp(4800, 1600, statsInView);
+  // Every number on this page comes from the evaluation report (live API, or the
+  // snapshot of our last training run when it is offline). None is typed in here.
+  const [report, setReport] = useState<EvaluationReport | null>(null);
+  useEffect(() => {
+    getModelMetrics().then(setReport).catch(() => setReport(null));
+  }, []);
+  const testFlows = report?.rows?.test ?? 0;
+  const unknownPct = report
+    ? (report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100
+    : 0;
+  const falsePer10k = report?.main.false_alerts_per_10k_benign_flows ?? 0;
+  const budgetPer10k = report ? Math.round(report.threshold.fpr_budget * 10000) : 0;
+  const dataLabel = !report
+    ? "evaluation report unavailable"
+    : `${report.source === "live" ? "live report" : "last training run"}${report.synthetic_data ? " · synthetic data" : ""}`;
+
+  const flowsCounted = useCountUp(testFlows, 1600, statsInView && testFlows > 0);
+  const unknownCounted = useCountUp(Math.round(unknownPct * 10), 1600, statsInView && unknownPct > 0);
 
   return (
     <div
@@ -201,7 +219,7 @@ export default function LandingPage() {
         >
           Pairing LightGBM attack classification with an unsupervised benign Isolation Forest.
           Surfaces instant TreeSHAP attribution and MITRE ATT&amp;CK context for human SOC triage —
-          with a 100% guarantee of zero automated blocking.
+          and it never blocks traffic on its own: every alert goes to a human analyst.
         </p>
 
         {/* Hero CTA buttons */}
@@ -252,9 +270,9 @@ export default function LandingPage() {
               <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#27C93F" }} />
             </div>
             <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-              SOC TELEMETRY // 40 FLOWS/S
+              HONEST EVALUATION // 5-MIN TIME-BLOCK SPLIT
             </div>
-            <span className="nw-pill nw-pill-lime">LIVE FEED</span>
+            <span className="nw-pill nw-pill-lime">{dataLabel.toUpperCase()}</span>
           </div>
 
           {/* Mini 3-stat row */}
@@ -273,9 +291,9 @@ export default function LandingPage() {
                 color: "#111114",
               }}
             >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>CRITICAL ALERTS</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>24</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>+3 in past hour</div>
+              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>MACRO-F1</div>
+              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? report.main.macro_f1.toFixed(3) : "—"}</div>
+              <div style={{ fontSize: "11px", opacity: 0.8 }}>every attack family weighted equally</div>
             </div>
 
             <div
@@ -286,9 +304,9 @@ export default function LandingPage() {
                 color: "#111114",
               }}
             >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>FLOWS ANALYZED</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>482.5K</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>0 drop rate</div>
+              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>FALSE ALERTS / 10K</div>
+              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? falsePer10k : "—"}</div>
+              <div style={{ fontSize: "11px", opacity: 0.8 }}>budget: {report ? `≤ ${budgetPer10k}` : "—"} per 10k normal flows</div>
             </div>
 
             <div
@@ -299,9 +317,9 @@ export default function LandingPage() {
                 color: "#111114",
               }}
             >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>MODEL INTEGRITY</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>98.4%</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>PSI 0.048 stable</div>
+              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>NEVER-SEEN → UNKNOWN</div>
+              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? `${unknownPct.toFixed(1)}%` : "—"}</div>
+              <div style={{ fontSize: "11px", opacity: 0.8 }}>{report ? report.novel_families.families.join(" & ") : "—"}</div>
             </div>
           </div>
         </div>
@@ -336,13 +354,13 @@ export default function LandingPage() {
             }}
           >
             <div style={{ fontSize: "12px", color: "var(--nw-card-1)", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px" }}>
-              Alerts Caught &amp; Triage-Ready
+              Held-Out Flows Scored
             </div>
             <div style={{ fontSize: "40px", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.03em", marginBottom: "6px" }}>
-              {alertsCaught.toLocaleString()}+
+              {testFlows ? flowsCounted.toLocaleString() : "—"}
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
-              High-confidence threat detections surfaced across CICIDS2017 benchmarks.
+              From 5-minute time blocks the model never trained on ({dataLabel}).
             </div>
           </div>
 
@@ -357,13 +375,13 @@ export default function LandingPage() {
             }}
           >
             <div style={{ fontSize: "12px", color: "var(--nw-card-2)", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px" }}>
-              Network Flows Analyzed
+              Never-Seen Attacks Shown as Unknown
             </div>
             <div style={{ fontSize: "40px", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.03em", marginBottom: "6px" }}>
-              {(flowsAnalyzed / 1000).toFixed(1)}M+
+              {unknownPct ? `${(unknownCounted / 10).toFixed(1)}%` : "—"}
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
-              Evaluated with zero packet payload decryption, preserving network privacy.
+              Families held out of training entirely, flagged instead of mislabelled as a known attack.
             </div>
           </div>
 
@@ -378,13 +396,13 @@ export default function LandingPage() {
             }}
           >
             <div style={{ fontSize: "12px", color: "var(--nw-card-3)", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px" }}>
-              Avg. Detection Latency
+              False Alerts per 10k Normal Flows
             </div>
             <div style={{ fontSize: "40px", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.03em", marginBottom: "6px" }}>
-              &lt; 12ms
+              {report ? falsePer10k : "—"}
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
-              Sub-second dual-engine inference for immediate SOC analyst response.
+              The alert threshold is set from a budget of {report ? budgetPer10k : "—"} per 10k, not left at 0.5.
             </div>
           </div>
 

@@ -28,7 +28,7 @@ export default function AlertFeed() {
       if (loadedAlerts.length > 0 && !expandedId) {
         setExpandedId(loadedAlerts[0].id);
       }
-    });
+    }).catch(() => setAlerts([]));
 
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
       setAlerts((prev) => {
@@ -290,9 +290,9 @@ export default function AlertFeed() {
             ? "nw-pill-purple"
             : "nw-pill-lime";
 
-          const srcIp = alert.flow.src_ip ?? "192.168.10.50";
-          const dstIp = alert.flow.dst_ip ?? "172.16.0.1";
-          const dstPort = alert.flow.dst_port ?? "80";
+          const srcIp = alert.flow.src_ip ?? "—";
+          const dstIp = alert.flow.dst_ip ?? "—";
+          const dstPort = alert.flow.dst_port ?? "—";
 
           return (
             <div

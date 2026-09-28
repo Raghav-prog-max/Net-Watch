@@ -6,7 +6,11 @@ import {
   type EvaluationReport,
 } from "./mockData";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// 127.0.0.1, not localhost: on Windows "localhost" can stall ~2 s on IPv6 first,
+// which is past the 2 s timeout below and reads as "API offline"
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// GET /alerts pages at most 100 alerts (api/routes/alerts.py)
+const MAX_PAGE_SIZE = 100;
 
 // In-memory alert store for offline / demo mode
 let localAlerts: Alert[] = [...INITIAL_MOCK_ALERTS];
@@ -24,48 +28,70 @@ export function addLocalAlert(alert: Alert) {
   localAlerts = [alert, ...localAlerts.filter((a) => a.id !== alert.id)].slice(0, 500);
 }
 
-export async function listAlerts(params: Record<string, string> = {}): Promise<Alert[]> {
+/** The API keeps `also_abnormal` inside `prediction`; the UI reads it at the top level. */
+export function normalizeAlert(raw: Alert): Alert {
+  return {
+    ...raw,
+    also_abnormal: Boolean(raw.also_abnormal ?? raw.prediction?.also_abnormal ?? false),
+  };
+}
+
+class ApiUnreachable extends Error {}
+
+/** GET with a 2 s timeout. Throws ApiUnreachable when nothing answers; otherwise
+ *  returns the response, so a 503 ("run make train") is not mistaken for offline. */
+async function get(path: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${BASE}/alerts?${new URLSearchParams(params)}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`${res.status}`);
-    const data = await res.json();
+    const res = await fetch(`${BASE}${path}`, { cache: "no-store", signal: controller.signal });
     isLiveApiConnected = true;
-    return data.alerts;
+    return res;
   } catch {
     isLiveApiConnected = false;
-    let list = [...localAlerts];
-    if (params.severity && params.severity !== "All") {
-      list = list.filter((a) => a.severity.level === params.severity);
-    }
-    if (params.family) {
-      list = list.filter((a) => a.prediction.family === params.family);
-    }
-    if (params.status) {
-      list = list.filter((a) => a.status === params.status);
-    }
-    return list;
+    throw new ApiUnreachable(path);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function filterLocal(params: Record<string, string>): Alert[] {
+  let list = [...localAlerts];
+  if (params.severity && params.severity !== "All") {
+    list = list.filter((a) => a.severity.level === params.severity);
+  }
+  if (params.family) {
+    list = list.filter((a) => a.prediction.family === params.family);
+  }
+  if (params.status) {
+    list = list.filter((a) => a.status === params.status);
+  }
+  return list;
+}
+
+export async function listAlerts(params: Record<string, string> = {}): Promise<Alert[]> {
+  // callers pass `limit`; the API pages with `page` and `size`
+  const { limit, ...rest } = params;
+  const query = new URLSearchParams(rest);
+  query.set("size", String(Math.min(Number(limit) || 50, MAX_PAGE_SIZE)));
+  try {
+    const res = await get(`/alerts?${query}`);
+    if (!res.ok) throw new Error(`GET /alerts ${res.status}`);
+    const data: { items: Alert[] } = await res.json();
+    return data.items.map(normalizeAlert);
+  } catch (e) {
+    if (e instanceof ApiUnreachable) return filterLocal(params);
+    throw e;
   }
 }
 
 export async function getAlert(id: string): Promise<Alert> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${BASE}/alerts/${id}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`${res.status}`);
-    isLiveApiConnected = true;
-    return res.json();
-  } catch {
+    const res = await get(`/alerts/${id}`);
+    if (!res.ok) throw new Error(`GET /alerts/${id} ${res.status}`);
+    return normalizeAlert(await res.json());
+  } catch (e) {
+    if (!(e instanceof ApiUnreachable)) throw e;
     const found = localAlerts.find((a) => a.id === id);
     if (!found) throw new Error("Alert not found");
     return found;
@@ -74,63 +100,48 @@ export async function getAlert(id: string): Promise<Alert> {
 
 export async function getDrift(): Promise<DriftStatus> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${BASE}/metrics/drift`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`${res.status}`);
-    isLiveApiConnected = true;
-    return res.json();
-  } catch {
-    return MOCK_DRIFT_STATUS;
+    const res = await get("/metrics/drift");
+    if (res.status === 503) {
+      // the API is up but has no trained models: nothing is being monitored
+      return { status: "warming_up", flows_seen: 0, source: "live",
+               recommendation: "No trained models loaded. Run `make train`, then restart the API." };
+    }
+    if (!res.ok) throw new Error(`GET /metrics/drift ${res.status}`);
+    return { ...(await res.json()), source: "live" };
+  } catch (e) {
+    if (e instanceof ApiUnreachable) return { ...MOCK_DRIFT_STATUS, source: "sample" };
+    throw e;
   }
 }
 
+/** The live evaluation report, or our last training run when the API is offline.
+ *  Never a mix of the two. */
 export async function getModelMetrics(): Promise<EvaluationReport> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${BASE}/metrics/model`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`${res.status}`);
-    const liveReport = await res.json();
-    isLiveApiConnected = true;
-    // Enrich with naive comparison if not present in raw backend report
-    return {
-      ...MOCK_EVALUATION_REPORT,
-      ...liveReport,
-      naive_comparison: liveReport.naive_comparison ?? MOCK_EVALUATION_REPORT.naive_comparison,
-      lofo: liveReport.lofo ?? MOCK_EVALUATION_REPORT.lofo,
-    };
-  } catch {
-    return MOCK_EVALUATION_REPORT;
+    const res = await get("/metrics/model");
+    if (!res.ok) throw new Error(`GET /metrics/model ${res.status}`);
+    return { ...(await res.json()), source: "live" };
+  } catch (e) {
+    if (e instanceof ApiUnreachable) return { ...MOCK_EVALUATION_REPORT, source: "snapshot" };
+    throw e;
   }
 }
 
-export async function getModelRegistryInfo(): Promise<{
+export interface ModelRegistryInfo {
   active: string;
   classifier: string;
   thresholds: Record<string, number>;
   feedback: Record<string, number>;
-}> {
+  source?: "live" | "snapshot";
+}
+
+export async function getModelRegistryInfo(): Promise<ModelRegistryInfo> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${BASE}/models`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`${res.status}`);
-    isLiveApiConnected = true;
-    return res.json();
-  } catch {
+    const res = await get("/models");
+    if (!res.ok) throw new Error(`GET /models ${res.status}`);
+    return { ...(await res.json()), source: "live" };
+  } catch (e) {
+    if (!(e instanceof ApiUnreachable)) throw e;
     const feedbackCounts: Record<string, number> = {
       false_positive: localAlerts.filter((a) => a.status === "false_positive").length,
       acknowledged: localAlerts.filter((a) => a.status === "acknowledged").length,
@@ -138,17 +149,18 @@ export async function getModelRegistryInfo(): Promise<{
       resolved: localAlerts.filter((a) => a.status === "resolved").length,
       open: localAlerts.filter((a) => a.status === "open").length,
     };
+    const t = MOCK_EVALUATION_REPORT.threshold;
     return {
-      active: "v1-production",
-      classifier: "LightGBM + IsolationForest",
+      active: "v1",
+      classifier: `${MOCK_EVALUATION_REPORT.classifier} + Isolation Forest + family novelty check`,
       thresholds: {
-        attack_threshold: 0.812,
-        benign_flag_rate: 0.01,
-        fpr_budget: 0.005,
-        drift_psi_warning: 0.10,
+        attack_threshold: Number(t.threshold.toFixed(4)),
+        fpr_budget: t.fpr_budget,
+        drift_psi_warning: 0.1,
         drift_psi_drift: 0.25,
       },
       feedback: feedbackCounts,
+      source: "snapshot",
     };
   }
 }
@@ -174,16 +186,20 @@ export async function triage(
     return a;
   });
 
+  let res: Response;
   try {
-    const res = await fetch(`${BASE}/alerts/${id}`, {
+    res = await fetch(`${BASE}/alerts/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status, analyst_label, analyst_note }),
     });
-    if (!res.ok) throw new Error(`triage failed: ${res.status}`);
-    return res.json();
   } catch {
+    // offline demo mode: the local copy is the only copy
     if (updatedAlert) return updatedAlert;
     throw new Error("Alert not found");
   }
+  // The API answered but refused: say so. Pretending it saved would lose the
+  // analyst's label, which is the training data for the next model.
+  if (!res.ok) throw new Error(`triage failed: ${res.status}`);
+  return normalizeAlert(await res.json());
 }

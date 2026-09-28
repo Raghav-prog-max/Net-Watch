@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getModelRegistryInfo } from "@/lib/api";
+import { getModelRegistryInfo, type ModelRegistryInfo } from "@/lib/api";
 
-interface ModelInfo {
-  active: string;
-  classifier: string;
-  thresholds: Record<string, number>;
-  feedback: Record<string, number>;
-}
+// where each threshold comes from (api/routes/metrics.py, models/v1/thresholds.json)
+const ORIGIN: Record<string, string> = {
+  attack_threshold: "False-positive budget",
+  anomaly_threshold: "1% of benign validation flows",
+  fpr_budget: "ml/config.yaml",
+  drift_psi_warning: "Standard PSI band",
+  drift_psi_drift: "Standard PSI band",
+};
 
 export default function ModelsPage() {
-  const [info, setInfo] = useState<ModelInfo | null>(null);
-  const [retrainingState, setRetrainingState] = useState<string | null>(null);
+  const [info, setInfo] = useState<ModelRegistryInfo | null>(null);
 
   useEffect(() => {
     getModelRegistryInfo().then(setInfo);
@@ -26,11 +27,6 @@ export default function ModelsPage() {
     );
   }
 
-  function handleTriggerCandidate() {
-    setRetrainingState("Retraining candidate v2 queued for offline cross-validation.");
-    setTimeout(() => setRetrainingState(null), 4000);
-  }
-
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
       {/* ── HEADER ─────────────────────────────────────────────── */}
@@ -42,25 +38,11 @@ export default function ModelsPage() {
           Production model versioning and analyst supervision loop. A candidate model is promoted
           only after beating the incumbent on the identical 5-minute time-block test split.
         </p>
+        <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px", display: "inline-block", marginTop: "10px" }}>
+          {info.source === "live" ? "LIVE · GET /models" : "API OFFLINE · LAST TRAINING RUN"}
+        </span>
       </div>
 
-      {retrainingState && (
-        <div
-          style={{
-            padding: "12px 18px",
-            backgroundColor: "rgba(167, 139, 250, 0.15)",
-            borderRadius: "14px",
-            color: "var(--nw-card-2)",
-            fontSize: "13px",
-            marginBottom: "20px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-        >
-          <span>✓</span> {retrainingState}
-        </div>
-      )}
 
       {/* ── STATS HIGHLIGHTS ─────────────────────────────────── */}
       <div
@@ -98,7 +80,7 @@ export default function ModelsPage() {
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-1)", margin: "4px 0" }}>
             {info.feedback?.false_positive ?? 0}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Queued for v2 supervision</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Kept as labels for the next training run</div>
         </div>
       </div>
 
@@ -133,11 +115,7 @@ export default function ModelsPage() {
                     {val}
                   </td>
                   <td style={{ padding: "10px 0", textAlign: "right", color: "var(--nw-text-muted)" }}>
-                    {param === "attack_threshold"
-                      ? "FPR Budget Curve"
-                      : param === "benign_flag_rate"
-                      ? "Validation 1%"
-                      : "Standard PSI Band"}
+                    {ORIGIN[param] ?? "—"}
                   </td>
                 </tr>
               ))}
@@ -195,18 +173,15 @@ export default function ModelsPage() {
       >
         <div>
           <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--nw-card-2)", marginBottom: "4px" }}>
-            Governance Protocol // Model Candidate v2 Promotion
+            Governance Protocol // Model Candidate v2 Promotion (planned)
           </div>
           <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", maxWidth: "800px" }}>
-            When analysts mark false positives in the live feed, records accumulate in SQLite.
-            Candidate v2 models are trained on this feedback and promoted to production ONLY if they achieve
-            a higher macro-F1 than v1 on the identical 5-minute time-block test split without exceeding the FPR budget.
+            Analyst dispositions are stored with each alert in SQLite. The plan: train a candidate v2 on
+            that feedback and promote it ONLY if it achieves a higher macro-F1 than v1 on the identical
+            5-minute time-block test split without exceeding the FPR budget. Not built yet: today
+            retraining is <code>make train</code>, run by hand.
           </div>
         </div>
-
-        <button onClick={handleTriggerCandidate} className="nw-btn-pill nw-btn-purple">
-          Queue v2 Retraining Run →
-        </button>
       </div>
     </div>
   );
