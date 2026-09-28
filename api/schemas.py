@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Any
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 class FlowData(BaseModel):
@@ -11,9 +11,31 @@ class FlowData(BaseModel):
     # Allow extra fields for arbitrary flow data during scoring
     model_config = ConfigDict(extra="allow")
 
+class ScoredFlow(BaseModel):
+    """One flow sent to POST /score: model features plus display-only metadata."""
+    # CIC-IDS2017 column name -> value. A feature the model expects but the caller
+    # leaves out is scored as 0.0, so send them all (replay/replayer.py does).
+    features: Dict[str, float]
+    # Shown to the analyst as the alert's `flow` (ports, IPs, ground truth in demos).
+    # Never used for scoring.
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+class ScoreRequest(BaseModel):
+    flows: List[ScoredFlow]
+
+class RejectedLabel(BaseModel):
+    family: str
+    confidence: float
+
 class Prediction(BaseModel):
     family: str
     confidence: float
+    # Set when the classifier named a family but the flow looks nothing like it,
+    # so the alert is shown as Unknown: what the classifier wanted to call it.
+    rejected_label: Optional[RejectedLabel] = None
+    # Named by the classifier and also abnormal to the anomaly detector: often a
+    # variant of a known family.
+    also_abnormal: Optional[bool] = None
 
 class Severity(BaseModel):
     score: int
@@ -30,7 +52,8 @@ class Mitre(BaseModel):
 
 class AlertBase(BaseModel):
     timestamp: datetime
-    flow: FlowData
+    # the request's `meta`, as strings (see ScoredFlow)
+    flow: Dict[str, Any]
     prediction: Prediction
     anomaly_score: float
     is_novel: bool
@@ -45,6 +68,10 @@ class AlertBase(BaseModel):
 
 class Alert(AlertBase):
     id: str
+
+class ScoreResponse(BaseModel):
+    scored: int
+    alerts: List[Alert]
 
 class AlertCreate(AlertBase):
     pass

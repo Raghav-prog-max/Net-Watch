@@ -12,6 +12,7 @@ Scenarios:
 import argparse
 import json
 import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -80,6 +81,14 @@ def post(url, batch):
         return json.loads(r.read())
 
 
+def build_batch(chunk, features):
+    """Rows -> the POST /score payload items (api/schemas.py ScoredFlow)."""
+    return [{"features": {f: float(r[f]) for f in features},
+             "meta": {"dst_port": str(int(r.get("Destination Port", 0))),
+                      "truth": str(r["family"])}}
+            for _, r in chunk.iterrows()]
+
+
 def main(a):
     cfg = yaml.safe_load(open(a.config))
     df = pd.read_pickle(cfg["paths"]["processed"]).sample(frac=1.0, random_state=1)
@@ -90,11 +99,12 @@ def main(a):
     sent = alerts = 0
     for start in range(0, min(len(rows), a.limit), a.batch):
         chunk = rows.iloc[start:start + a.batch]
-        batch = [{"features": {f: float(r[f]) for f in features},
-                  "meta": {"dst_port": str(int(r.get("Destination Port", 0))),
-                           "truth": str(r["family"])}}
-                 for _, r in chunk.iterrows()]
-        res = post(a.url, batch)
+        batch = build_batch(chunk, features)
+        try:
+            res = post(a.url, batch)
+        except urllib.error.HTTPError as e:
+            # say why, instead of a bare "HTTP Error 422" traceback
+            raise SystemExit(f"{a.url} returned {e.code}: {e.read().decode(errors='replace')[:500]}")
         sent += len(batch); alerts += len(res["alerts"])
         for al in res["alerts"][:2]:
             print(f"  {al['severity']['level']:<8} {al['prediction']['family']:<10} "
