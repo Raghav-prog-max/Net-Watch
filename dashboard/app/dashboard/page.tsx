@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [drift, setDrift] = useState<DriftStatus | null>(null);
+  const [triageError, setTriageError] = useState<string | null>(null);
 
   useEffect(() => {
     listAlerts({ limit: "100" }).then(setAlerts).catch(() => setAlerts([]));
@@ -29,18 +30,18 @@ export default function DashboardPage() {
   }, []);
 
   async function handleTriage(id: string, status: Alert["status"]) {
+    setTriageError(null);
     try {
       const updated = await triage(id, status, status === "false_positive" ? "Analyst FP" : undefined);
       setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
       if (selectedAlert?.id === id) {
         setSelectedAlert(updated);
       }
-    } catch {
-      // offline fallback
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.id === id ? { ...a, status, analyst_label: status === "false_positive" ? "Analyst FP" : a.analyst_label } : a
-        )
+    } catch (e) {
+      // Offline triage never lands here (lib/api.ts keeps a local copy). This is
+      // the API refusing, so leave the alert as it was and say nothing was saved.
+      setTriageError(
+        `Could not update ${id}: ${e instanceof Error ? e.message : "unknown error"}. Nothing was saved.`
       );
     }
   }
@@ -107,6 +108,23 @@ export default function DashboardPage() {
     <div style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 28px 60px" }}>
       {/* Top greeting bar */}
       <SocTopBar />
+
+      {triageError && (
+        <div role="alert" style={{
+            padding: "10px 18px",
+            backgroundColor: "rgba(244, 169, 62, 0.12)",
+            border: "1px solid rgba(244, 169, 62, 0.35)",
+            borderRadius: "14px",
+            color: "var(--nw-card-1)",
+            fontSize: "13px",
+            marginBottom: "16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+          <span>▲</span> {triageError}
+        </div>
+      )}
 
       {/* Main 2-column layout (center wide column + right rail) */}
       <div

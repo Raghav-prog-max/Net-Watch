@@ -20,6 +20,7 @@ export default function AlertFeed() {
   const [isPaused, setIsPaused] = useState(false);
   const [triagePendingId, setTriagePendingId] = useState<string | null>(null);
   const [triageSuccessMsg, setTriageSuccessMsg] = useState<string | null>(null);
+  const [triageErrorMsg, setTriageErrorMsg] = useState<string | null>(null);
 
   // Initial load & real-time WebSocket subscription
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function AlertFeed() {
     note?: string
   ) {
     setTriagePendingId(alertId);
+    setTriageErrorMsg(null);
     try {
       const updated = await triage(
         alertId,
@@ -58,17 +60,11 @@ export default function AlertFeed() {
       setAlerts((prev) => prev.map((a) => (a.id === alertId ? updated : a)));
       setTriageSuccessMsg(`Alert ${alertId} updated to ${status.replace("_", " ")}`);
       setTimeout(() => setTriageSuccessMsg(null), 3000);
-    } catch {
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.id === alertId
-            ? {
-                ...a,
-                status,
-                analyst_label: status === "false_positive" ? "Analyst FP" : a.analyst_label,
-              }
-            : a
-        )
+    } catch (e) {
+      // The API answered and refused. Keep the alert as it was: showing the new
+      // status would tell the analyst a label was saved when it was not.
+      setTriageErrorMsg(
+        `Could not update ${alertId}: ${e instanceof Error ? e.message : "unknown error"}. Nothing was saved.`
       );
     } finally {
       setTriagePendingId(null);
@@ -200,6 +196,23 @@ export default function AlertFeed() {
           }}
         >
           <span>✓</span> {triageSuccessMsg}
+        </div>
+      )}
+
+      {triageErrorMsg && (
+        <div role="alert" style={{
+            padding: "10px 18px",
+            backgroundColor: "rgba(244, 169, 62, 0.12)",
+            border: "1px solid rgba(244, 169, 62, 0.35)",
+            borderRadius: "14px",
+            color: "var(--nw-card-1)",
+            fontSize: "13px",
+            marginBottom: "16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+          <span>▲</span> {triageErrorMsg}
         </div>
       )}
 
