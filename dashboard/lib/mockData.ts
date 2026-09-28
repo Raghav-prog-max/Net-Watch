@@ -31,11 +31,22 @@ export interface EvaluationReport {
   };
   main: SummaryMetrics;
   random_forest_baseline?: SummaryMetrics;
-  // Naive random split vs time-block split. Not measured yet: stays absent until
-  // the training pipeline writes it, and the page says so.
+  // The same model on a random row split (ml/evaluate/naive.py). Absent in
+  // reports from before it was added; the page then says "Not measured yet".
   naive_comparison?: {
+    split?: string;
+    classifier?: string;
+    rows?: { train: number; val: number; test: number };
+    threshold?: number;
+    per_class_f1?: Record<string, number>;
+    honest_false_alerts_per_10k?: number;
     macro_f1: number;
     false_alerts_per_10k: number;
+    macro_f1_over_seeds?: { seeds: number; min: number; max: number; mean: number };
+    test_flows_from_blocks_seen_in_training?: number | null;
+    honest_macro_f1?: number;
+    macro_f1_gap?: number;
+    inflated?: boolean;
   };
   lofo: {
     family: string;
@@ -370,7 +381,7 @@ export const INITIAL_MOCK_ALERTS: Alert[] = [
 // Offline fallback: a copy of reports/metrics.json from the run below (synthetic data).
 // Refresh it after retraining with `make dashboard-snapshot`.
 export const MOCK_EVALUATION_REPORT: EvaluationReport = {
-  "generated": "2026-09-25T15:06:06Z",
+  "generated": "2026-09-28T21:45:21Z",
   "classifier": "lightgbm",
   "rows": {
     "train": 21381,
@@ -694,6 +705,38 @@ export const MOCK_EVALUATION_REPORT: EvaluationReport = {
       ]
     },
     "accuracy_for_reference_only": 0.9622
+  },
+  "naive_comparison": {
+    "split": "random rows (train_test_split, shuffled, stratified by family)",
+    "classifier": "lightgbm",
+    "rows": {
+      "train": 21420,
+      "val": 8910,
+      "test": 8910
+    },
+    "threshold": 0.9825,
+    "macro_f1": 0.9045,
+    "false_alerts_per_10k": 55.6,
+    "per_class_f1": {
+      "Benign": 0.9945,
+      "Bot": 0.7536,
+      "BruteForce": 0.9508,
+      "DDoS": 0.8622,
+      "DoS": 0.8906,
+      "PortScan": 1.0,
+      "WebAttack": 0.8798
+    },
+    "test_flows_from_blocks_seen_in_training": 1.0,
+    "macro_f1_over_seeds": {
+      "seeds": 5,
+      "min": 0.9025,
+      "max": 0.9111,
+      "mean": 0.9066
+    },
+    "honest_macro_f1": 0.9166,
+    "honest_false_alerts_per_10k": 42.9,
+    "macro_f1_gap": -0.0121,
+    "inflated": false
   },
   "lofo": [
     {

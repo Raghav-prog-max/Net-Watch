@@ -131,8 +131,8 @@ export default function EvaluationPage() {
         </div>
 
         <p style={{ color: "var(--nw-text-muted)", fontSize: "13px", lineHeight: 1.6, margin: "0 0 20px" }}>
-          Flows inside one attack burst are near-identical. A random train_test_split puts copies of the same
-          burst in both train and test, so the model is graded on flows it has effectively already seen.
+          Flows inside one attack burst tend to be near-identical. A random train_test_split can put copies of the
+          same burst in both train and test, so the model is graded on flows it has effectively already seen.
           We split by non-overlapping 5-minute blocks instead, so every test flow comes from a time the model never trained on.
         </p>
 
@@ -147,15 +147,27 @@ export default function EvaluationPage() {
             }}
           >
             <div style={{ fontSize: "11px", color: "var(--nw-text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: "6px" }}>
-              Academic Paper Shortcut (Naive Random Split)
+              Same Model, Naive Random Split
             </div>
             {naive ? (
               <>
                 <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--nw-text-muted)", marginBottom: "8px" }}>
-                  {naive.macro_f1} Macro-F1 <span style={{ fontSize: "12px", opacity: 0.7 }}>(INFLATED)</span>
+                  {naive.macro_f1} Macro-F1{" "}
+                  <span style={{ fontSize: "12px", opacity: 0.7 }}>
+                    {naive.inflated ? "(INFLATED)" : "(NO INFLATION MEASURED)"}
+                  </span>
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
-                  False Alerts: <strong style={{ color: "var(--nw-text-primary)" }}>{naive.false_alerts_per_10k} / 10k flows</strong>. Falsely low because the model is tested on near-copies of its training flows.
+                  False Alerts: <strong style={{ color: "var(--nw-text-primary)" }}>{naive.false_alerts_per_10k} / 10k flows</strong>.
+                  {naive.macro_f1_over_seeds &&
+                    ` Range over ${naive.macro_f1_over_seeds.seeds} random splits: ${naive.macro_f1_over_seeds.min}–${naive.macro_f1_over_seeds.max}.`}
+                  {naive.test_flows_from_blocks_seen_in_training != null &&
+                    ` ${Math.round(naive.test_flows_from_blocks_seen_in_training * 100)}% of its test flows come from time blocks also used in training.`}
+                  {naive.inflated
+                    ? " Every random split scores higher: that gap is what a leaky evaluation would have claimed."
+                    : report.synthetic_data
+                    ? " On this synthetic data the leak did not raise the score: its bursts are not near-duplicates. To be re-measured on CIC-IDS2017."
+                    : " On this data the leak did not raise the score."}
                 </div>
               </>
             ) : (

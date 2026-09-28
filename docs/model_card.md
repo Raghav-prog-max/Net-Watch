@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-24T16:10:20Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-09-28T21:45:21Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 > **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
 
@@ -93,7 +93,19 @@ Observed on the test set, most severe first.
 - Destination port is a feature. On real traffic that lets the model partly learn which ports an attack uses rather than how it behaves.
 - Thresholds are set once, on validation. A production system would re-tune them against analyst feedback.
 
-**Not yet measured** — the handbook requires both: the same model scored on a random split beside the honest one, so the inflation gap is visible; and a cross-dataset test on UNSW-NB15.
+## Naive random split vs honest time split
+
+The same classifier, settings, benign downsampling and threshold rule, with only the split changed: random rows instead of whole 5-minute blocks.
+
+| Split | Macro-F1 | False alerts / 10k benign | Test flows from a block also in training |
+| --- | --- | --- | --- |
+| Time blocks (honest) | 0.9166 | 42.9 | 0% |
+| Random rows (naive) | 0.9045 (0.9025–0.9111 over 5 seeds) | 55.6 | 100% |
+
+**No inflation was measured.** Every random split scored at or below the honest one, although 100% of its test flows came from time blocks also used in training.
+ The synthetic generator's bursts carry independent noise per flow, so they are not near-duplicates and there is little to memorise. This has to be re-measured on CICIDS2017, where flows inside one attack burst are expected to be near-identical; a test with deliberately leaky data (`tests/test_naive_split.py`) shows the comparison does detect inflation when it exists.
+
+**Not yet measured** — the handbook also requires a cross-dataset test on UNSW-NB15.
 
 ## Monitoring
 

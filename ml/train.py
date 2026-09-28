@@ -13,7 +13,7 @@ from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
 from ml.data.load import load_processed
 from ml.data.split import add_blocks, make_splits, downsample_benign
 from ml.drift.monitor import reference_stats
-from ml.evaluate import lofo, metrics
+from ml.evaluate import lofo, metrics, naive
 from ml.evaluate.thresholds import pick_threshold
 from ml.features.select import feature_columns, matrix
 from ml.models import classifier as clf_mod
@@ -209,6 +209,20 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
             "label_rejected_as_out_of_family": round(float(ood.mean()), 4),
             "shown_as_unknown": round(float(unknown.mean()), 4),
         }
+
+    if not holdout:
+        # Same model, same settings, random rows instead of time blocks: the gap is
+        # what a leaky split would have let us claim. Comparison only.
+        print("scoring the same model on a naive random split...")
+        report["naive_comparison"] = naive.run(df[df["family"].isin(TRAIN_FAMILIES)],
+                                               features, cfg, report["main"])
+        nc = report["naive_comparison"]
+        seeds = nc["macro_f1_over_seeds"]
+        print(f"naive split macro-F1 {nc['macro_f1']} (range {seeds['min']}-{seeds['max']} over "
+              f"{seeds['seeds']} seeds) vs honest {nc['honest_macro_f1']}; "
+              f"{nc['test_flows_from_blocks_seen_in_training']:.0%} of naive test flows share a "
+              f"time block with training"
+              + ("" if nc["inflated"] else "; no inflation measured"))
 
     if not skip_lofo:
         print("running leave-one-family-out experiments...")
