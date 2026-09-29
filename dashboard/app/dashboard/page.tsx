@@ -7,7 +7,7 @@ import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
 import SocTopBar from "@/components/SocTopBar";
-import { getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, getDrift, getModelMetrics, getModelRegistryInfo, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
 
@@ -17,9 +17,14 @@ export default function DashboardPage() {
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [drift, setDrift] = useState<DriftStatus | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
+  const [apiDown, setApiDown] = useState(false);
+  const [fpTotal, setFpTotal] = useState<number | null>(null);
 
   useEffect(() => {
-    listAlerts({ limit: "100" }).then(setAlerts).catch(() => setAlerts([]));
+    listAlerts({ limit: "100" })
+      .then((a) => { setAlerts(a); setApiDown(false); })
+      .catch((e) => { setAlerts([]); setApiDown(e instanceof ApiUnreachable); });
+    getModelRegistryInfo().then((m) => setFpTotal(m.feedback?.false_positive ?? null)).catch(() => setFpTotal(null));
     getModelMetrics().then(setReport).catch(() => setReport(null));
     getDrift().then(setDrift).catch(() => setDrift(null));
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
@@ -51,6 +56,16 @@ export default function DashboardPage() {
     <div style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 28px 60px" }}>
       {/* Top greeting bar */}
       <SocTopBar />
+
+      {apiDown && (
+        <div role="alert" style={{
+          padding: "10px 18px", backgroundColor: "rgba(244, 169, 62, 0.12)",
+          border: "1px solid rgba(244, 169, 62, 0.35)", borderRadius: "14px",
+          color: "var(--nw-card-1)", fontSize: "13px", marginBottom: "16px",
+        }}>
+          ▲ The API is not reachable on :8000, so nothing below is live. Start it with <code>make api</code>.
+        </div>
+      )}
 
       {triageError && (
         <div role="alert" style={{
@@ -123,7 +138,7 @@ export default function DashboardPage() {
           <MainThreatChart alerts={alerts} />
 
           {/* Two lower detail breakdown cards */}
-          <LowerDetailCards alerts={alerts} report={report} drift={drift} />
+          <LowerDetailCards alerts={alerts} report={report} drift={drift} falsePositivesTotal={fpTotal} />
         </div>
 
         {/* ── RIGHT COLUMN: SCROLLABLE ALERT CARDS STACK ─────── */}
