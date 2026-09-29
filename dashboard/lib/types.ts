@@ -41,6 +41,97 @@ export interface DriftStatus {
   alert_rate?: number;
   flows_seen: number;
   bands?: { warning: number; drift: number };
-  // added by lib/api.ts: "sample" when the API is unreachable
-  source?: "live" | "sample";
 }
+
+export interface ClassMetrics {
+  precision: number;
+  recall: number;
+  "f1-score": number;
+  support: number;
+}
+
+export interface SummaryMetrics {
+  per_class: Record<string, ClassMetrics>;
+  macro_f1: number;
+  false_positive_rate: number;
+  false_alerts_per_10k_benign_flows: number;
+  auc: Record<string, { pr_auc: number; roc_auc: number }>;
+  confusion_matrix: { labels: string[]; rows: number[][] };
+  accuracy_for_reference_only: number;
+}
+
+// Mirrors reports/metrics.json as written by `make train` and served by GET /metrics/model.
+export interface EvaluationReport {
+  generated?: string;
+  classifier: string;
+  rows?: { train: number; val: number; test: number };
+  threshold: {
+    threshold: number;
+    fpr_at_threshold: number;
+    recall_at_threshold: number;
+    fpr_budget: number;
+  };
+  main: SummaryMetrics;
+  random_forest_baseline?: SummaryMetrics;
+  naive_comparison?: {
+    split?: string;
+    classifier?: string;
+    rows?: { train: number; val: number; test: number };
+    threshold?: number;
+    per_class_f1?: Record<string, number>;
+    honest_false_alerts_per_10k?: number;
+    macro_f1: number;
+    false_alerts_per_10k: number;
+    macro_f1_over_seeds?: { seeds: number; min: number; max: number; mean: number };
+    test_flows_from_blocks_seen_in_training?: number | null;
+    honest_macro_f1?: number;
+    macro_f1_gap?: number;
+    inflated?: boolean;
+  };
+  lofo: {
+    family: string;
+    test_flows: number;
+    attack_threshold?: number;
+    caught_by_classifier_alone: number;
+    caught_by_anomaly_detector_alone?: number;
+    caught_by_full_system: number;
+    benign_fpr: number;
+  }[];
+  novel_families: {
+    families: string[];
+    flows: number;
+    alerted?: number;
+    caught_by_anomaly_detector: number;
+    label_rejected_as_out_of_family?: number;
+    shown_as_unknown?: number;
+  };
+  synthetic_data?: boolean;
+}
+
+export interface ChangelogItem {
+  type: "added" | "fixed" | "changed" | "verified" | "tradeoff";
+  module: string;
+  text: string;
+}
+
+export interface ModelVersionEntry {
+  version: string;
+  title: string;
+  date: string;
+  status: "active" | "superseded" | "baseline" | "planned";
+  commit?: string;
+  summary: string;
+  highlights: { label: string; before?: string; after: string }[];
+  changelog: ChangelogItem[];
+}
+
+export interface ModelRegistryInfo {
+  active: string;
+  versions?: string[];
+  classifier: string;
+  thresholds: Record<string, number>;
+  feedback: Record<string, number>;
+  model_card?: string | null;
+  version_history?: ModelVersionEntry[];
+}
+

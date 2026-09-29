@@ -1,5 +1,9 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+try:
+    from sqlalchemy.orm import Session
+except ImportError:
+    Session = Any  # type: ignore[misc,assignment]
 from datetime import datetime
 
 from ..schemas import ScoreRequest, ScoreResponse

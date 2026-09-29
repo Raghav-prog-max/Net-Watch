@@ -98,7 +98,10 @@ export default function SocSidebar() {
         flexDirection: "column",
         justifyContent: "space-between",
         flexShrink: 0,
-        minHeight: "100vh",
+        height: "100vh",
+        position: "sticky",
+        top: 0,
+        overflowY: "auto",
         padding: "24px 0",
         borderRight: "1px solid rgba(255, 255, 255, 0.04)",
       }}
@@ -146,8 +149,8 @@ export default function SocSidebar() {
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
           {navItems.map((item) => {
             const isActive =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard" || pathname === "/alerts"
+              item.href === "/alerts"
+                ? pathname === "/alerts" || pathname.startsWith("/alerts/")
                 : pathname === item.href;
 
             return (

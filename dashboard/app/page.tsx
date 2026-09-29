@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getModelMetrics } from "@/lib/api";
-import type { EvaluationReport } from "@/lib/mockData";
+import type { EvaluationReport } from "@/lib/types";
 
 // Count-up animated number hook
 function useCountUp(end: number, duration: number = 1400, trigger: boolean = false) {
@@ -82,7 +82,7 @@ export default function LandingPage() {
   const budgetPer10k = report ? Math.round(report.threshold.fpr_budget * 10000) : 0;
   const dataLabel = !report
     ? "evaluation report unavailable"
-    : `${report.source === "live" ? "live report" : "last training run"}${report.synthetic_data ? " · synthetic data" : ""}`;
+    : `live report${report.synthetic_data ? " · synthetic data" : ""}`;
 
   const flowsCounted = useCountUp(testFlows, 1600, statsInView && testFlows > 0);
   const unknownCounted = useCountUp(Math.round(unknownPct * 10), 1600, statsInView && unknownPct > 0);

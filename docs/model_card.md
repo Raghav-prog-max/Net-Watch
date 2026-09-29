@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-28T21:45:21Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-09-29T04:26:49Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 > **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
 

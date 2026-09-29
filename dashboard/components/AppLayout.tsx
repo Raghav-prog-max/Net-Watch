@@ -24,7 +24,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       {/* ── DESKTOP & MOBILE SIDEBAR ─────────────────────────── */}
-      <div className={`soc-sidebar-container ${mobileDrawerOpen ? "open" : ""}`}>
+      <div
+        className={`soc-sidebar-container ${mobileDrawerOpen ? "open" : ""}`}
+        style={{
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          alignSelf: "flex-start",
+          flexShrink: 0,
+          zIndex: 40,
+        }}
+      >
         <SocSidebar />
       </div>
 
@@ -74,6 +84,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             position: fixed !important;
             top: 0 !important;
             bottom: 0 !important;
+            height: 100vh !important;
             left: -220px !important;
             z-index: 100 !important;
             transition: left 0.25s ease !important;
@@ -84,7 +95,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           .soc-mobile-header {
             display: flex !important;
             align-items: center;
-            justifyContent: space-between;
+            justify-content: space-between;
             padding: 14px 20px;
             background-color: var(--nw-bg-panel);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
 import { listAlerts, triage } from "@/lib/api";
-import { subscribeToAlerts, broadcastSimulatedAlert } from "@/lib/socket";
+import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, Level } from "@/lib/types";
 
 const LEVELS: (Level | "All")[] = ["All", "Critical", "High", "Medium", "Low"];
@@ -71,66 +71,6 @@ export default function AlertFeed() {
     }
   }
 
-  // Quick simulation burst
-  function handleInjectFlow() {
-    const families = ["DDoS", "WebAttack", "Infiltration", "PortScan", "BruteForce"];
-    const chosenFamily = families[Math.floor(Math.random() * families.length)];
-    const isNovel = chosenFamily === "Infiltration";
-    const srcIp = `192.168.10.${Math.floor(Math.random() * 200) + 10}`;
-    const dstIp = `172.16.0.${Math.floor(Math.random() * 10) + 1}`;
-    const dstPort = isNovel ? "443" : chosenFamily === "WebAttack" ? "8080" : "80";
-
-    const newAlert: Alert = {
-      id: `alt_${Math.random().toString(16).slice(2, 10)}`,
-      timestamp: new Date().toISOString(),
-      flow: {
-        src_ip: srcIp,
-        dst_ip: dstIp,
-        dst_port: dstPort,
-        protocol: "TCP",
-        truth: chosenFamily,
-        duration: "0.85s",
-        flow_bytes_s: "184000",
-        fwd_packets: "1920",
-      },
-      prediction: {
-        family: isNovel ? "Unknown" : chosenFamily,
-        confidence: isNovel ? 0.892 : 0.954,
-      },
-      anomaly_score: isNovel ? -0.375 : -0.264,
-      is_novel: isNovel,
-      also_abnormal: true,
-      severity: {
-        score: isNovel ? 91 : 88,
-        level: "Critical",
-      },
-      explanation: [
-        { feature: "Flow Bytes/s", value: 184000, impact: 0.42 },
-        { feature: "Total Fwd Packets", value: 1920, impact: 0.31 },
-        { feature: "Flow IAT Mean", value: 18400, impact: -0.19 },
-      ],
-      mitre: isNovel
-        ? { tactic: "Unmapped", technique: "Zero-Day Anomaly (Analyst to classify)" }
-        : chosenFamily === "DDoS"
-        ? { tactic: "Impact", technique: "T1498 Network Denial of Service" }
-        : chosenFamily === "WebAttack"
-        ? { tactic: "Initial Access", technique: "T1190 Exploit Public-Facing Application" }
-        : chosenFamily === "BruteForce"
-        ? { tactic: "Credential Access", technique: "T1110 Brute Force" }
-        : { tactic: "Discovery", technique: "T1046 Network Service Discovery" },
-      recommended_action: isNovel
-        ? "Zero-day deviation pattern. Review payload and isolate endpoint."
-        : "Investigate target service and verify firewall telemetry.",
-      status: "open",
-      analyst_label: null,
-      analyst_note: null,
-      model_version: "v1",
-    };
-
-    broadcastSimulatedAlert(newAlert);
-    setExpandedId(newAlert.id);
-  }
-
   // Filtered alert list
   const filteredAlerts = useMemo(() => {
     return alerts.filter((a) => {
@@ -171,12 +111,6 @@ export default function AlertFeed() {
             className={`nw-btn-pill ${isPaused ? "nw-btn-amber" : "nw-btn-dark"}`}
           >
             {isPaused ? "▶ Resume Stream" : "⏸ Pause Stream"}
-          </button>
-          <button
-            onClick={handleInjectFlow}
-            className="nw-btn-pill nw-btn-purple"
-          >
-            + Inject Test Alert
           </button>
         </div>
       </div>
@@ -292,6 +226,23 @@ export default function AlertFeed() {
 
       {/* ── ALERTS LIST ────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {filteredAlerts.length === 0 && (
+          <div
+            style={{
+              backgroundColor: "var(--nw-bg-panel)",
+              borderRadius: "20px",
+              padding: "32px 24px",
+              textAlign: "center",
+              color: "var(--nw-text-muted)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "13px",
+            }}
+          >
+            {alerts.length === 0
+              ? "No alerts recorded yet. Start the backend API (`make api`) and stream traffic (`make demo`) to receive live alerts."
+              : "No alerts match the active filters."}
+          </div>
+        )}
         {filteredAlerts.map((alert) => {
           const isExpanded = expandedId === alert.id;
           const isCritical = alert.severity.level === "Critical";

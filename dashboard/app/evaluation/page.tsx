@@ -1,14 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { getModelMetrics } from "@/lib/api";
-import type { EvaluationReport } from "@/lib/mockData";
+import type { EvaluationReport } from "@/lib/types";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
 export default function EvaluationPage() {
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getModelMetrics()
@@ -16,15 +27,40 @@ export default function EvaluationPage() {
         setReport(data);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Could not load evaluation report from GET /metrics/model");
         setLoading(false);
       });
   }, []);
 
-  if (loading || !report) {
+  if (loading) {
     return (
       <div style={{ padding: "40px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
         Loading evaluation telemetry...
+      </div>
+    );
+  }
+
+  if (!report) {
+    return (
+      <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
+        <h1 style={{ fontSize: "24px", fontWeight: 800, margin: "0 0 6px", color: "var(--nw-text-primary)" }}>
+          Model Evaluation &amp; Honest Validation Proof
+        </h1>
+        <div
+          style={{
+            marginTop: "20px",
+            backgroundColor: "var(--nw-bg-panel)",
+            borderRadius: "20px",
+            padding: "24px",
+            border: "1px solid rgba(244, 169, 62, 0.3)",
+            color: "var(--nw-card-1)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "13px",
+          }}
+        >
+          ▲ {error ?? "Evaluation report unavailable."} — Ensure the backend API is running (`make api`) and `reports/metrics.json` has been generated (`make train`).
+        </div>
       </div>
     );
   }
@@ -34,6 +70,19 @@ export default function EvaluationPage() {
   const budgetPer10k = Math.round(report.threshold.fpr_budget * 10000);
   const novel = report.novel_families;
   const novelShown = novel.shown_as_unknown ?? novel.caught_by_anomaly_detector;
+
+  const perClassChartData = Object.entries(m.per_class).map(([family, c]) => ({
+    family,
+    Precision: Number((c.precision * 100).toFixed(1)),
+    Recall: Number((c.recall * 100).toFixed(1)),
+    F1: Number((c["f1-score"] * 100).toFixed(1)),
+  }));
+
+  const lofoChartData = (report.lofo ?? []).map((r) => ({
+    family: r.family,
+    "Classifier Alone": Number((r.caught_by_classifier_alone * 100).toFixed(1)),
+    "Hybrid Ensemble": Number((r.caught_by_full_system * 100).toFixed(1)),
+  }));
 
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
@@ -48,9 +97,7 @@ export default function EvaluationPage() {
         </p>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
           <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>
-            {report.source === "live"
-              ? "LIVE · GET /metrics/model"
-              : "API OFFLINE · SNAPSHOT OF LAST TRAINING RUN"}
+            LIVE · GET /metrics/model
             {report.generated ? ` · ${report.generated.slice(0, 10)}` : ""}
           </span>
           {report.synthetic_data && (
@@ -204,7 +251,7 @@ export default function EvaluationPage() {
         </div>
       </div>
 
-      {/* ── PER CLASS RECALL TABLE ────────────────────────────── */}
+      {/* ── PER CLASS RECALL CHART + TABLE (RECHARTS) ─────────── */}
       <div
         style={{
           backgroundColor: "var(--nw-bg-panel)",
@@ -220,6 +267,53 @@ export default function EvaluationPage() {
           {report.rows
             ? `Evaluated over ${report.rows.test.toLocaleString()} held-out flows from time blocks the model never trained on`
             : "Evaluated over held-out time blocks the model never trained on"}
+        </div>
+
+        {/* Recharts Grouped BarChart */}
+        <div
+          style={{
+            width: "100%",
+            height: "240px",
+            backgroundColor: "#111114",
+            borderRadius: "16px",
+            padding: "16px 16px 8px 4px",
+            marginBottom: "20px",
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={perClassChartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+              <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="family"
+                stroke="#8A8A93"
+                tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
+                axisLine={{ stroke: "#26262C" }}
+                tickLine={false}
+              />
+              <YAxis
+                domain={[0, 100]}
+                unit="%"
+                stroke="#8A8A93"
+                tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
+                contentStyle={{
+                  backgroundColor: "#17171B",
+                  border: "1px solid #2E2E38",
+                  borderRadius: "12px",
+                  fontSize: "12px",
+                  color: "#FFFFFF",
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
+              <Bar dataKey="Precision" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={22} />
+              <Bar dataKey="Recall" fill="#F4A93E" radius={[4, 4, 0, 0]} maxBarSize={22} />
+              <Bar dataKey="F1" fill="#C7DB6E" radius={[4, 4, 0, 0]} maxBarSize={22} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
         <div style={{ overflowX: "auto" }}>
@@ -271,7 +365,7 @@ export default function EvaluationPage() {
         </div>
       </div>
 
-      {/* ── LEAVE-ONE-FAMILY-OUT (LOFO) PROOF ─────────────────── */}
+      {/* ── LEAVE-ONE-FAMILY-OUT (LOFO) PROOF (RECHARTS) ──────── */}
       {report.lofo && (
         <div
           style={{
@@ -287,6 +381,53 @@ export default function EvaluationPage() {
           <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginBottom: "18px" }}>
             Each family was completely excised from classifier training, then tested against the combined dual-engine system.
           </div>
+
+          {lofoChartData.length > 0 && (
+            <div
+              style={{
+                width: "100%",
+                height: "220px",
+                backgroundColor: "#111114",
+                borderRadius: "16px",
+                padding: "16px 16px 8px 4px",
+                marginBottom: "20px",
+              }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={lofoChartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+                  <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="family"
+                    stroke="#8A8A93"
+                    tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
+                    axisLine={{ stroke: "#26262C" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    unit="%"
+                    stroke="#8A8A93"
+                    tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
+                    contentStyle={{
+                      backgroundColor: "#17171B",
+                      border: "1px solid #2E2E38",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                      color: "#FFFFFF",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
+                  <Bar dataKey="Classifier Alone" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="Hybrid Ensemble" fill="#F4A93E" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
