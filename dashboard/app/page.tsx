@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
-import { SplineHero } from "@/components/SplineHero";
+import { SplineSceneBasic } from "@/components/ui/demo";
 
 
 // Count-up animated number hook
@@ -184,76 +184,9 @@ export default function LandingPage() {
           zIndex: 10,
         }}
       >
-        {/* Soft pill badge */}
-        <div
-          className="reveal-init stagger-1 nw-pill nw-pill-purple"
-          style={{ marginBottom: "22px", padding: "6px 16px", fontSize: "12px" }}
-        >
-          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "var(--nw-card-2)" }} />
-          DUAL-ENGINE NETWORK INTRUSION DETECTION
-        </div>
-
-        {/* Hero Headline */}
-        <h1
-          className="reveal-init stagger-2"
-          style={{
-            fontSize: "clamp(34px, 5.5vw, 62px)",
-            fontWeight: 800,
-            lineHeight: 1.12,
-            letterSpacing: "-0.03em",
-            maxWidth: "920px",
-            margin: "0 0 20px",
-          }}
-        >
-          Real-time AI network intrusion detection with explainable alerts.
-        </h1>
-
-        {/* Hero Subhead */}
-        <p
-          className="reveal-init stagger-3"
-          style={{
-            fontSize: "clamp(16px, 2vw, 19px)",
-            color: "var(--nw-text-muted)",
-            maxWidth: "720px",
-            lineHeight: 1.6,
-            margin: "0 0 36px",
-          }}
-        >
-          Pairing LightGBM attack classification with an unsupervised benign Isolation Forest.
-          Surfaces instant TreeSHAP attribution and MITRE ATT&amp;CK context for human SOC triage —
-          and it never blocks traffic on its own: every alert goes to a human analyst.
-        </p>
-
-        {/* Hero CTA buttons */}
-        <div
-          className="reveal-init stagger-4"
-          style={{
-            display: "flex",
-            gap: "14px",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            marginBottom: "60px",
-          }}
-        >
-          <Link
-            href="/dashboard"
-            className="nw-btn-pill nw-btn-purple"
-            style={{ padding: "14px 32px", fontSize: "14px", fontWeight: 700 }}
-          >
-            View Dashboard →
-          </Link>
-          <Link
-            href="/evaluation"
-            className="nw-btn-pill nw-btn-dark"
-            style={{ padding: "14px 26px", fontSize: "14px" }}
-          >
-            Inspect Honest Time-Split Proof
-          </Link>
-        </div>
-
         {/* ── SPLINE 3D INTERACTIVE HERO ─────────────────────── */}
-        <div className="reveal-init stagger-4" style={{ width: "100%", maxWidth: "1000px" }}>
-          <SplineHero />
+        <div className="reveal-init stagger-2 w-full mt-4">
+          <SplineSceneBasic />
         </div>
       </section>
 

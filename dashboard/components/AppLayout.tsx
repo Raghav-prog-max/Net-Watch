@@ -3,37 +3,22 @@
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import SocSidebar from "./SocSidebar";
+import SocTopBar from "./SocTopBar";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  // If on Landing Page "/", render full width marketing/onboarding experience
   if (pathname === "/") {
     return <div className="landing-root">{children}</div>;
   }
 
-  // Dashboard views: render with dark sidebar and ambient purple glow
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        backgroundColor: "var(--nw-bg-page)",
-        position: "relative",
-      }}
-    >
-      {/* ── DESKTOP & MOBILE SIDEBAR ─────────────────────────── */}
+    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "var(--nw-bg-page)" }}>
+      {/* ── SIDEBAR ────────────────────────────────────────── */}
       <div
         className={`soc-sidebar-container ${mobileDrawerOpen ? "open" : ""}`}
-        style={{
-          position: "sticky",
-          top: 0,
-          height: "100vh",
-          alignSelf: "flex-start",
-          flexShrink: 0,
-          zIndex: 40,
-        }}
+        style={{ zIndex: 40 }}
       >
         <SocSidebar />
       </div>
@@ -49,13 +34,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             right: 0,
             bottom: 0,
             backgroundColor: "rgba(0, 0, 0, 0.7)",
-            zIndex: 90,
+            zIndex: 35,
           }}
         />
       )}
 
-      {/* ── MAIN CONTENT WORKSPACE ────────────────────────────── */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      {/* ── MAIN CONTENT ─────────────────────────────────────── */}
+      <div className="soc-main-content" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {/* Mobile top trigger bar below 1024px */}
         <div className="soc-mobile-header" style={{ display: "none" }}>
           <button
@@ -64,33 +49,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               background: "transparent",
               border: "none",
               color: "#FFFFFF",
-              fontSize: "18px",
+              fontSize: "24px",
               cursor: "pointer",
               padding: "4px 8px",
             }}
           >
-            ☰
+            <span className="material-symbols-outlined">menu</span>
           </button>
           <span style={{ fontSize: "14px", fontWeight: 800, color: "#FFFFFF" }}>NetWatch</span>
-          <div style={{ width: "24px" }} />
+          <div style={{ width: "40px" }} />
         </div>
 
-        <main style={{ flex: 1 }}>{children}</main>
+        <SocTopBar />
+        
+        <main style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {children}
+        </main>
       </div>
 
       <style jsx global>{`
+        .soc-sidebar-container {
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          flex-shrink: 0;
+        }
         @media (max-width: 1024px) {
           .soc-sidebar-container {
             position: fixed !important;
             top: 0 !important;
             bottom: 0 !important;
             height: 100vh !important;
-            left: -220px !important;
+            left: -240px !important;
             z-index: 100 !important;
             transition: left 0.25s ease !important;
           }
           .soc-sidebar-container.open {
             left: 0 !important;
+          }
+          .soc-main-content header {
+            display: none !important;
           }
           .soc-mobile-header {
             display: flex !important;

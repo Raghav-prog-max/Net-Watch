@@ -72,10 +72,13 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
   return (
     <div
       style={{
-        backgroundColor: "var(--nw-bg-panel)",
-        borderRadius: "22px",
-        padding: "24px 28px",
-        position: "relative",
+        backgroundColor: "#0E0E12",
+        borderRadius: "16px",
+        padding: "24px",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
       }}
     >
       {/* ── CHART HEADER ───────────────────────────────────────── */}
@@ -85,50 +88,43 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "14px",
-          marginBottom: "16px",
+          gap: "16px",
         }}
       >
         <div>
-          <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
-            Threat Traffic &amp; Alert Volume
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.02em", margin: 0 }}>
+            Network Alert Volume &amp; Severity Distribution
+          </h2>
+          <p style={{ fontSize: "12px", color: "#8E909B", margin: "2px 0 0" }}>
             {alerts.length > 0
-              ? `Computed from ${alerts.length.toLocaleString()} live alerts in the active feed`
+              ? `Real-time aggregate ingress packets scrutinized across edge gateways`
               : "Awaiting live alerts from GET /alerts and WS /ws/alerts"}
-          </div>
+          </p>
         </div>
 
-        {/* Legend */}
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "12px", fontWeight: 600 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span
-              style={{
-                width: "9px",
-                height: "9px",
-                borderRadius: "50%",
-                backgroundColor: "var(--nw-card-2)",
-              }}
-            />
-            <span style={{ color: "var(--nw-text-primary)" }}>All Flagged Alerts</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          {/* Range Selector Pills */}
+          <div style={{ display: "flex", backgroundColor: "#050508", padding: "4px", borderRadius: "9999px", border: "1px solid rgba(255, 255, 255, 0.1)", fontSize: "12px" }}>
+            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>1H</button>
+            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>6H</button>
+            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "#FFFFFF", color: "#000000", fontWeight: 600, border: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", cursor: "pointer" }}>24H</button>
+            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>7D</button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span
-              style={{
-                width: "9px",
-                height: "9px",
-                borderRadius: "50%",
-                backgroundColor: "var(--nw-card-1)",
-              }}
-            />
-            <span style={{ color: "var(--nw-text-muted)" }}>Critical &amp; High Severity</span>
+
+          {/* Legend */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "12px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#FFFFFF" }} /> Critical/High
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#8E909B" }} /> All Flagged
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── RECHARTS AREA CHART ────────────────────────────────── */}
-      <div style={{ width: "100%", height: "240px", position: "relative" }}>
+      <div style={{ width: "100%", height: "256px", position: "relative", marginTop: "4px" }}>
         {buckets.length === 0 ? (
           <div
             style={{
@@ -136,42 +132,42 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: "rgba(0, 0, 0, 0.22)",
-              borderRadius: "16px",
-              color: "var(--nw-text-muted)",
-              fontSize: "13px",
+              backgroundColor: "rgba(255, 255, 255, 0.02)",
+              borderRadius: "12px",
+              color: "#656773",
+              fontSize: "12px",
               fontFamily: "var(--font-mono)",
               padding: "20px",
               textAlign: "center",
             }}
           >
-            No live alerts recorded yet. Run the API and traffic replayer to populate real-time telemetry.
+            No live alerts recorded yet. Run the API and traffic replayer.
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={buckets} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
+            <AreaChart data={buckets} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
               <defs>
-                <linearGradient id="nwPurpleAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#A78BFA" stopOpacity={0.35} />
-                  <stop offset="90%" stopColor="#A78BFA" stopOpacity={0.02} />
+                <linearGradient id="whiteGlow" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
                 </linearGradient>
-                <linearGradient id="nwAmberAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#F4A93E" stopOpacity={0.25} />
-                  <stop offset="90%" stopColor="#F4A93E" stopOpacity={0.0} />
+                <linearGradient id="slateGlow" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#8E909B" stopOpacity="0.18" />
+                  <stop offset="100%" stopColor="#8E909B" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid stroke="rgba(255, 255, 255, 0.06)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="timeLabel"
-                stroke="#8A8A93"
-                tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                axisLine={{ stroke: "#26262C" }}
+                stroke="rgba(255, 255, 255, 0.12)"
+                tick={{ fill: "#656773", fontSize: 11, fontFamily: "var(--font-mono)" }}
+                axisLine={{ stroke: "rgba(255, 255, 255, 0.12)" }}
                 tickLine={false}
               />
               <YAxis
                 allowDecimals={false}
-                stroke="#8A8A93"
-                tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                stroke="rgba(255, 255, 255, 0.12)"
+                tick={{ fill: "#656773", fontSize: 11, fontFamily: "var(--font-mono)" }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -182,30 +178,30 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
                   return (
                     <div
                       style={{
-                        backgroundColor: "#111114",
-                        border: "1px solid #2E2E38",
-                        borderRadius: "14px",
-                        padding: "10px 14px",
-                        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+                        backgroundColor: "#141418",
+                        border: "1px solid rgba(255, 255, 255, 0.1)",
+                        borderRadius: "12px",
+                        padding: "12px",
+                        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
                       }}
                     >
                       <div
                         style={{
                           fontSize: "10px",
                           fontFamily: "var(--font-mono)",
-                          color: "var(--nw-text-muted)",
+                          color: "#8E909B",
                           marginBottom: "4px",
                         }}
                       >
                         {pt.timeLabel}
                       </div>
-                      <div style={{ fontSize: "13px", fontWeight: 800, color: "#FFFFFF" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>
                         {pt.count} Flagged Alert{pt.count === 1 ? "" : "s"}
                       </div>
-                      <div style={{ fontSize: "11px", fontWeight: 600, color: "#F4A93E", marginTop: "2px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#FFFFFF", marginTop: "2px" }}>
                         {pt.highCritCount} Critical / High Severity
                       </div>
-                      <div style={{ fontSize: "11px", fontWeight: 600, color: "#A78BFA", marginTop: "2px" }}>
+                      <div style={{ fontSize: "11px", fontFamily: "var(--font-mono)", color: "#E1E4EA", marginTop: "6px" }}>
                         Top Family: {pt.topFamily}
                       </div>
                     </div>
@@ -216,19 +212,19 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
                 type="monotone"
                 dataKey="count"
                 name="All Flagged Alerts"
-                stroke="#A78BFA"
-                strokeWidth={3}
-                fill="url(#nwPurpleAreaGrad)"
-                activeDot={{ r: 6, fill: "#FFFFFF", stroke: "#A78BFA", strokeWidth: 3 }}
+                stroke="#8E909B"
+                strokeWidth={2}
+                fill="url(#slateGlow)"
+                activeDot={{ r: 4, fill: "#8E909B", stroke: "#0E0E12", strokeWidth: 2 }}
               />
               <Area
                 type="monotone"
                 dataKey="highCritCount"
                 name="Critical & High Severity"
-                stroke="#F4A93E"
-                strokeWidth={2.5}
-                fill="url(#nwAmberAreaGrad)"
-                activeDot={{ r: 5, fill: "#111114", stroke: "#F4A93E", strokeWidth: 2.5 }}
+                stroke="#FFFFFF"
+                strokeWidth={2}
+                fill="url(#whiteGlow)"
+                activeDot={{ r: 5, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1.5, strokeOpacity: 0.4, strokeDasharray: "0" }}
               />
             </AreaChart>
           </ResponsiveContainer>

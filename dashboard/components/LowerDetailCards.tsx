@@ -17,14 +17,12 @@ interface Props {
   alerts: Alert[];
   report: EvaluationReport | null;
   drift: DriftStatus | null;
-  // all false positives in the alert store (GET /models); the loaded alerts are only a page
   falsePositivesTotal?: number | null;
 }
 
-const HEX_COLORS = ["#F4A93E", "#A78BFA", "#C7DB6E"];
+const MONO_COLORS = ["#FFFFFF", "#C4C6CB", "#8E909B", "#656773", "#35353F"];
 
 export default function LowerDetailCards({ alerts, report, drift, falsePositivesTotal }: Props) {
-  // families among the alerts on screen, largest first
   const counts = new Map<string, number>();
   alerts.forEach((a) => counts.set(a.prediction.family, (counts.get(a.prediction.family) ?? 0) + 1));
   const families = Array.from(counts.entries())
@@ -36,11 +34,12 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
       rawCount: n,
       count: n.toLocaleString(),
       pct: Math.round((100 * n) / Math.max(alerts.length, 1)),
-      color: name === "Unknown" ? "#C7DB6E" : HEX_COLORS[i % 2],
+      color: name === "Unknown" ? "#FFFFFF" : MONO_COLORS[i % MONO_COLORS.length],
     }));
-  const falsePositives =
-    falsePositivesTotal ?? alerts.filter((a) => a.status === "false_positive").length;
+
+  const falsePositives = falsePositivesTotal ?? alerts.filter((a) => a.status === "false_positive").length;
   const topPsi = drift?.top_features?.[0]?.psi;
+  
   const driftLabel = !drift
     ? "DRIFT: —"
     : drift.status === "warming_up"
@@ -52,87 +51,98 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-        gap: "20px",
+        gap: "16px",
       }}
     >
-      {/* ── CARD 1: TOP ATTACK FAMILIES (RECHARTS) ─────────────── */}
+      {/* ── CARD A: TOP ATTACK FAMILIES ──────────────────────── */}
       <div
         style={{
-          backgroundColor: "var(--nw-bg-panel)",
-          borderRadius: "22px",
-          padding: "24px",
+          padding: "20px",
+          borderRadius: "16px",
+          backgroundColor: "#0E0E12",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
         }}
       >
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
             <div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
-                Top Attack Families
-              </div>
-              <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
-                Among the {alerts.length.toLocaleString()} alerts loaded
+              <span style={{ fontSize: "12px", fontWeight: 500, color: "#8E909B" }}>Top Attack Families</span>
+              <div style={{ fontSize: "11px", color: "#656773", marginTop: "2px" }}>
+                Among {alerts.length.toLocaleString()} alerts loaded
               </div>
             </div>
-            <span className="nw-pill nw-pill-amber">{counts.size} {counts.size === 1 ? "FAMILY" : "FAMILIES"}</span>
+            <span style={{
+              padding: "2px 8px",
+              borderRadius: "4px",
+              backgroundColor: "#1A1A20",
+              color: "#FFFFFF",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              fontWeight: 700,
+            }}>
+              {counts.size} {counts.size === 1 ? "FAMILY" : "FAMILIES"}
+            </span>
           </div>
 
           {families.length === 0 ? (
-            <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", padding: "24px 0" }}>
+            <div style={{ fontSize: "12px", color: "#656773", padding: "24px 0", textAlign: "center" }}>
               No alerts yet.
             </div>
           ) : (
-            <div style={{ width: "100%", height: "210px" }}>
+            <div style={{ width: "100%", height: "180px", marginTop: "12px" }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={families}
                   layout="vertical"
-                  margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                  margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
                 >
-                  <CartesianGrid stroke="#26262C" strokeDasharray="3 3" horizontal={false} />
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" horizontal={false} />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    stroke="#8A8A93"
-                    tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                    axisLine={{ stroke: "#26262C" }}
+                    stroke="rgba(255,255,255,0.1)"
+                    tick={{ fill: "#656773", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
                     tickLine={false}
                   />
                   <YAxis
                     type="category"
                     dataKey="name"
                     width={90}
-                    stroke="#F5F5F7"
-                    tick={{ fill: "#F5F5F7", fontSize: 12, fontWeight: 600 }}
+                    stroke="#E1E4EA"
+                    tick={{ fill: "#E1E4EA", fontSize: 11, fontWeight: 500, fontFamily: "var(--font-mono)" }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
-                    cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
+                    cursor={{ fill: "rgba(255, 255, 255, 0.03)" }}
                     content={({ active, payload }) => {
                       if (!active || !payload || payload.length === 0) return null;
                       const item = payload[0].payload as (typeof families)[number];
                       return (
                         <div
                           style={{
-                            backgroundColor: "#111114",
-                            border: "1px solid #2E2E38",
-                            borderRadius: "12px",
+                            backgroundColor: "#141418",
+                            border: "1px solid rgba(255, 255, 255, 0.1)",
+                            borderRadius: "8px",
                             padding: "8px 12px",
-                            fontSize: "12px",
+                            fontSize: "11px",
+                            fontFamily: "var(--font-mono)",
                           }}
                         >
-                          <div style={{ fontWeight: 700, color: item.color }}>{item.fullName}</div>
-                          <div style={{ color: "#FFFFFF", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                          <div style={{ fontWeight: 700, color: "#FFFFFF" }}>{item.fullName}</div>
+                          <div style={{ color: "#E1E4EA", marginTop: "4px" }}>
                             {item.count} alerts ({item.pct}%)
                           </div>
                         </div>
                       );
                     }}
                   />
-                  <Bar dataKey="rawCount" radius={[0, 8, 8, 0]} barSize={18}>
+                  <Bar dataKey="rawCount" radius={[0, 4, 4, 0]} barSize={14}>
                     {families.map((fam) => (
                       <Cell key={fam.name} fill={fam.color} />
                     ))}
@@ -143,131 +153,124 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
           )}
         </div>
 
-        {/* Colored action button */}
         <div style={{ marginTop: "20px" }}>
           <Link
             href="/evaluation"
-            className="nw-btn-pill nw-btn-purple"
-            style={{ width: "100%" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "100%",
+              padding: "10px",
+              borderRadius: "9999px",
+              backgroundColor: "rgba(255, 255, 255, 0.05)",
+              color: "#FFFFFF",
+              fontSize: "11px",
+              fontWeight: 700,
+              fontFamily: "var(--font-sans)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              transition: "background-color 0.15s ease",
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)")}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)")}
           >
             View Evaluation &amp; LOFO Table →
           </Link>
         </div>
       </div>
 
-      {/* ── CARD 2: ACTIVE MODEL & DRIFT HEALTH ────────────────── */}
+      {/* ── CARD B: ACTIVE MODEL & DRIFT HEALTH ──────────────── */}
       <div
         style={{
-          backgroundColor: "var(--nw-bg-panel)",
-          borderRadius: "22px",
-          padding: "24px",
+          padding: "20px",
+          borderRadius: "16px",
+          backgroundColor: "#0E0E12",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
         }}
       >
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
             <div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
-                Active Model &amp; Drift Health
-              </div>
-              <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
-                Production pipeline governance · v1-prod
+              <span style={{ fontSize: "12px", fontWeight: 500, color: "#8E909B" }}>Drift Monitoring &amp; Model Health</span>
+              <div style={{ fontSize: "11px", color: "#656773", marginTop: "2px" }}>
+                Production pipeline governance
               </div>
             </div>
-            <span className="nw-pill nw-pill-lime">{driftLabel}</span>
+            <span style={{
+              padding: "2px 8px",
+              borderRadius: "4px",
+              backgroundColor: "rgba(255, 255, 255, 0.1)",
+              color: "#FFFFFF",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              fontWeight: 700,
+            }}>
+              v4.8.2-PROD
+            </span>
           </div>
 
-          {/* Rows of data */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
-                borderRadius: "14px",
-              }}
-            >
-              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Ensemble Architecture</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--nw-text-primary)" }}>
-                LightGBM + Isolation Forest
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+              <span style={{ fontSize: "11px", color: "#8E909B" }}>Ensemble Architecture</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>LightGBM + Isolation Forest</span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+              <span style={{ fontSize: "11px", color: "#8E909B" }}>Operating Threshold</span>
+              <span style={{ fontSize: "11px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF" }}>
+                {report ? `${report.threshold.threshold.toFixed(3)} (FPR ≤ ${Math.round(report.threshold.fpr_budget * 10000)}/10k)` : "—"}
               </span>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
-                borderRadius: "14px",
-              }}
-            >
-              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Operating Threshold</span>
-              <span style={{ fontSize: "13px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--nw-card-1)" }}>
-                {report
-                  ? `${report.threshold.threshold.toFixed(3)} (FPR ≤ ${Math.round(report.threshold.fpr_budget * 10000)}/10k)`
-                  : "—"}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+              <span style={{ fontSize: "11px", color: "#8E909B" }}>Validation Setup</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>Temporal Block (No Leakage)</span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+              <span style={{ fontSize: "11px", color: "#8E909B" }}>Zero-Day Detection (Recall)</span>
+              <span style={{ fontSize: "11px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF" }}>
+                {report ? `${((report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100).toFixed(1)}%` : "—"}
               </span>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
-                borderRadius: "14px",
-              }}
-            >
-              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Leakage-Free Validation</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--nw-card-3)" }}>
-                5-Min Temporal Block (tests/test_split_leakage.py)
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
-                borderRadius: "14px",
-              }}
-            >
-              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Never-Seen Shown as Unknown</span>
-              <span style={{ fontSize: "13px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--nw-card-2)" }}>
-                {report
-                  ? `${((report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100).toFixed(1)}% (held-out test)`
-                  : "—"}
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
-                borderRadius: "14px",
-              }}
-            >
-              <span style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>Analyst Retraining Queue</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--nw-text-primary)" }}>
-                {falsePositives} False Positive{falsePositives === 1 ? "" : "s"} Logged
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+              <span style={{ fontSize: "11px", color: "#8E909B" }}>Analyst Retraining Queue</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>
+                {falsePositives} False Positive{falsePositives === 1 ? "" : "s"}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Colored action button */}
-        <div style={{ marginTop: "24px" }}>
+        <div style={{ marginTop: "20px" }}>
           <Link
             href="/drift"
-            className="nw-btn-pill nw-btn-lime"
-            style={{ width: "100%" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "100%",
+              padding: "10px",
+              borderRadius: "9999px",
+              backgroundColor: "#FFFFFF",
+              color: "#000000",
+              fontSize: "11px",
+              fontWeight: 700,
+              fontFamily: "var(--font-sans)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              boxShadow: "0 2px 8px rgba(255, 255, 255, 0.1)",
+              transition: "background-color 0.15s ease",
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#E1E4EA")}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#FFFFFF")}
           >
             Inspect Drift Monitor &amp; Retrain →
           </Link>
