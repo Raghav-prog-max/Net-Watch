@@ -151,6 +151,20 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     nov.fit(matrix(attacks_train, features), attacks_train["family"])
     nov.calibrate(matrix(attacks_val, features), attacks_val["family"])
 
+    # --- the alert rate the drift monitor compares against ----------------
+    # Measured, not assumed: run benign validation traffic through the same
+    # decision the API makes and count the Unknown alerts among flows the
+    # classifier did not name. The live monitor counts the same thing, so a
+    # burst of a known attack does not read as drift.
+    bv = matrix(val[val["family"] == "Benign"], features)
+    bv_known = clf_mod.attack_score(model, bv)[0] >= thr["threshold"]
+    bv_fam, _ = clf_mod.predicted_family(model, model.predict_proba(bv))
+    bv_ood = nov.is_out_of_family(nov.distance(bv, bv_fam), bv_fam)
+    bv_flag = det.is_anomalous(det.score(bv))
+    bv_named = bv_known & ~bv_ood
+    bv_unknown = (bv_known & bv_ood) | (~bv_known & bv_flag)
+    unexplained_rate = float(bv_unknown[~bv_named].mean()) if (~bv_named).any() else 0.0
+
     # --- honest evaluation on the held-out test set -----------------------
     known_test = test[test["family"].isin(TRAIN_FAMILIES)]
     Xt = matrix(known_test, features)
@@ -238,7 +252,9 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     joblib.dump(nov, out / "novelty.joblib")
     json.dump({"attack_threshold": thr["threshold"],
                "anomaly_threshold": det.threshold,
-               "fpr_budget": cfg["train"]["fpr_budget"]},
+               "fpr_budget": cfg["train"]["fpr_budget"],
+               # baseline for the drift monitor's alert-rate rule (see above)
+               "benign_unexplained_alert_rate": round(unexplained_rate, 5)},
               open(out / "thresholds.json", "w"), indent=2)
 
     bt = matrix(benign_train, features)

@@ -125,3 +125,26 @@ def test_alert_carries_explanation_and_metadata(scorer, flows):
 def test_missing_features_are_scored_as_zero(scorer):
     assert scorer._matrix([{}]).tolist() == [[0.0] * len(scorer.features)]
     assert scorer.score([]) == []
+
+
+@needs_models
+def test_normal_traffic_does_not_read_as_drift(flows):
+    # the regression: replaying only benign traffic turned the drift badge red
+    s = Scorer()
+    _score(s, flows[flows["family"] == "Benign"].sample(1500, random_state=1))
+    out = s.drift()
+    assert out["status"] == "stable", out
+    assert out["alert_rate_status"] == "stable"
+
+
+@needs_models
+def test_known_attack_burst_does_not_move_the_drift_rate(flows):
+    s = Scorer()
+    _score(s, flows[flows["family"] == "Benign"].sample(1500, random_state=2))
+    before = s.drift()["unexplained_alert_rate"]
+    _score(s, flows[flows["family"] == "PortScan"].sample(300, random_state=2))
+    after = s.drift()
+    assert after["alert_rate"] > 0.1                        # the burst did alert
+    assert after["unexplained_alert_rate"] <= before + 0.01  # but it is a named attack
+    assert after["status"] != "drift"
+    assert len(after["ks"]) > 0

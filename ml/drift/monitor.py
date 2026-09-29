@@ -112,6 +112,13 @@ def status(psi_by_feature, warn=0.10, drift=0.25,
             rate_state = "warning"
             rate_detail = f"alert rate {ratio:.1f}x baseline (>={warn_alert_mult}x)"
 
+    # The alert rate alone can raise a warning, not declare drift. It also rises
+    # when a novel attack arrives, which is an incident, not a changed network;
+    # drift needs the feature distributions (PSI) to have moved as well.
+    if rate_state == "drift" and psi_state == "stable":
+        rate_state = "warning"
+        rate_detail += "; capped at warning while PSI is stable"
+
     _rank = {"stable": 0, "warning": 1, "drift": 2}
     state = max(psi_state, rate_state, key=lambda s: _rank[s])
 
