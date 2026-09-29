@@ -89,7 +89,8 @@ def train_lgbm(
 
     fit_kwargs: dict[str, Any] = {}
     if X_val is not None and y_val is not None:
-        fit_kwargs["eval_set"] = [(X_val, y_val)]
+        fit_kwargs["eval_X"] = X_val
+        fit_kwargs["eval_y"] = y_val
         fit_kwargs["callbacks"] = [
             lgb.early_stopping(stopping_rounds=30, verbose=True),
             lgb.log_evaluation(period=50),

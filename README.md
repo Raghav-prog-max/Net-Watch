@@ -1,72 +1,50 @@
-# NetWatch
+# NetWatch (Microsoft Innovate 2026)
 
-ML network intrusion detection that surfaces alerts to a SOC analyst. Two models:
-a classifier for known attack families, and an anomaly detector trained on benign
-traffic only, which is what catches attacks the classifier has never seen.
+NetWatch is an ML-powered network intrusion detection system designed to surface high-fidelity alerts to a SOC analyst. It leverages a two-pronged approach:
+1. A **LightGBM Classifier** to detect known attack families (DDoS, Botnet, BruteForce, etc.).
+2. An **Isolation Forest Anomaly Detector**, trained exclusively on benign traffic, to catch novel zero-day attacks the classifier has never seen.
 
-Nothing in this repository blocks traffic.
+Nothing in this repository blocks traffic. The system operates passively, analyzing network flows and presenting triaged alerts.
 
-## Quick start (no dataset needed)
+---
 
-```bash
-pip install -r requirements.txt
-make synthetic      # fake traffic, for plumbing work only
-make data           # clean -> data/processed/flows.pkl
-make train          # trains both models, writes models/v1 + reports/metrics.json
-make test           # split-leakage test
-```
+## 🚀 Quick Start
 
-Then, in two terminals:
+See **[`HOW_TO_RUN.md`](HOW_TO_RUN.md)** for detailed, step-by-step instructions on setting up the virtual environment, generating data, and launching the API and Dashboard.
 
-```bash
-make api                                         # http://localhost:8000/docs
-python replay/replayer.py --scenario novel       # streams flows at the API
-```
+## 📖 Documentation
 
-And the dashboard:
+All extensive documentation and architectural explanations have been moved to the `docs/` folder to keep the root clean.
 
-```bash
-cd dashboard && npm install && npm run dev       # http://localhost:3000
-```
+| Document | Description |
+|---|---|
+| [`docs/plan.md`](docs/plan.md) | Day-by-day plan with owners and acceptance checks. |
+| [`docs/data_setup.md`](docs/data_setup.md) | Instructions for downloading and verifying the real CICIDS2017 files. |
+| [`docs/code_tour.md`](docs/code_tour.md) | Understanding why each module does what it does. |
+| [`docs/implementation.md`](docs/implementation.md) | The 8-step build process from empty repo to a fully deployed system. |
+| [`docs/backend.md`](docs/backend.md) | FastAPI backend architecture, API contracts, and endpoints (Tag D). |
+| [`docs/evaluation.md`](docs/evaluation.md) | ML evaluation methodology (Metrics, LOFO, Thresholds). |
+| [`docs/drift_strategy.md`](docs/drift_strategy.md) | Drift monitoring strategy (PSI, KS Test, Alert-rate logic). |
+| [`docs/model_card.md`](docs/model_card.md) | Auto-generated Model Card containing performance metrics. |
 
-## Real data
-
-Download CICIDS2017 (the `TrafficLabelling` CSVs, which keep the Timestamp column,
-or the corrected relabelling by Engelen et al. 2021) into `data/raw/`, then rerun
-`make data && make train`. Set `benign_downsample` in `ml/config.yaml` if the full
-dataset is too large for your machine.
-
-## What each part does
+## 📂 Repository Structure
 
 | Path | Role |
 |---|---|
-| `ml/data/` | loading, cleaning, label families, leakage-free time-block splits |
-| `ml/models/classifier.py` | LightGBM (or sklearn fallback) over six attack families |
-| `ml/models/anomaly.py` | Isolation Forest fitted on benign traffic only |
-| `ml/models/combine.py` | decision logic, severity score, MITRE mapping |
-| `ml/evaluate/` | per-class metrics, PR/ROC-AUC, FPR, threshold choice, LOFO |
-| `ml/drift/monitor.py` | PSI per feature, drift status, retraining recommendation |
-| `api/` | FastAPI scoring service, SQLite alert store, WebSocket feed |
-| `replay/replayer.py` | streams held-out flows to make the demo look live |
-| `dashboard/` | Next.js SOC UI (built separately) |
+| `ml/data/` | Loading, cleaning, label family mapping, leakage-free time-block splits. |
+| `ml/models/` | The LightGBM classifier, Isolation Forest anomaly detector, and `combine.py` for decision logic. |
+| `ml/evaluate/` | Logic for per-class metrics, PR/ROC-AUC, FPR, threshold choice, and LOFO tests. |
+| `ml/drift/` | Monitors PSI per feature, KS tests, and evaluates overall drift status. |
+| `api/` | The FastAPI scoring service, SQLite alert store, and WebSocket feed. |
+| `replay/` | Replays held-out flows (known, novel, drift scenarios) to simulate live traffic for demos. |
+| `dashboard/` | Next.js SOC UI. |
+| `scripts/` | Utilities for dataset download, DB seeding, synthetic data generation, and feedback-based retraining. |
+| `tests/` | Exhaustive `pytest` suite ensuring pipeline integrity. |
 
-## Documentation
+## 🛡️ Core Principles
 
-| Doc | Read it when |
-|---|---|
-| `docs/PLAN.md` | day-by-day plan with owners and acceptance checks |
-| `docs/DATA_SETUP.md` | downloading and verifying the real CICIDS2017 files |
-| `docs/CODE_TOUR.md` | understanding why each module does what it does |
-| `IMPLEMENTATION.md` | the eight build steps, shortest version |
-| `dashboard/README.md` | running the SOC UI |
-
-## Rules this repo keeps
-
-1. No random train/test split. Flows are grouped into 5-minute blocks; a test fails
-   the build if a block lands in two splits.
-2. No bare accuracy. Reports carry per-class precision and recall, PR-AUC, and false
-   alerts per 10,000 benign flows.
-3. The alert threshold comes from a false-positive budget, not from 0.5.
-4. Rare families (Infiltration, Heartbleed) are never trained on. They are test
-   material for the anomaly detector.
-5. No code path blocks, drops or rate-limits traffic.
+1. **No random train/test split.** Flows are grouped into 5-minute blocks; tests fail the build if a block lands in two splits.
+2. **No bare accuracy.** Reports carry per-class precision and recall, PR-AUC, and false alerts per 10,000 benign flows.
+3. **FPR Budgeting.** The alert threshold comes from a strict false-positive budget (e.g., 0.5%), not from an arbitrary 0.5 probability.
+4. **Zero-Day testing.** Rare families (e.g., Infiltration, Heartbleed) are never trained on. They serve purely as test material for the anomaly detector.
+5. **Passive Analysis.** No code path blocks, drops, or rate-limits live traffic.

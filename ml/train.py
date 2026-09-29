@@ -76,7 +76,7 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
             n_estimators=200, learning_rate=0.05, num_leaves=31,
             class_weight=cw, n_jobs=-1, verbose=-1, random_state=random_state
         )
-        model.fit(X_tr, y_tr, eval_set=[(X_val, y_val_enc)],
+        model.fit(X_tr, y_tr, eval_X=X_val, eval_y=y_val_enc,
                   callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
         
         y_pred = model.predict(X_val)
