@@ -11,7 +11,7 @@ PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK
 UVICORN := $(PYTHON) -m uvicorn
 PIP     := $(PYTHON) -m pip
 
-.PHONY: venv setup synthetic data train evaluate card dashboard-snapshot api demo seed retrain test quick holdout clean
+.PHONY: venv setup synthetic data train evaluate card dashboard-snapshot api demo seed retrain test quick holdout eda nslkdd clean
 
 venv:           ## create the virtual environment
 	$(PY_FALLBACK) -m venv .venv
@@ -60,6 +60,12 @@ seed:           ## seed the alert database for offline demo (run after make trai
 
 retrain:        ## retrain v2 with analyst feedback labels
 	$(PYTHON) scripts/retrain.py --out models/v2
+
+eda:            ## re-run the EDA notebook on data/processed (needs requirements-dev.txt)
+	$(PYTHON) -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb
+
+nslkdd:         ## NSL-KDD sanity check of the metrics code (needs data/raw/nsl-kdd/)
+	$(PYTHON) scripts/nslkdd_check.py
 
 test:           ## run the full test suite
 # pytest, not `python tests/x.py`: most test files have no __main__, so running
