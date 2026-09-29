@@ -1,5 +1,6 @@
 import json
 import os
+import copy
 from collections import Counter
 from pathlib import Path
 
@@ -252,6 +253,37 @@ VERSION_HISTORY = [
 ]
 
 
+# Measured figures on the active release, read from the current report so they
+# follow retraining (e.g. on CICIDS2017) instead of staying at the numbers the
+# release commit recorded.
+_LIVE_HIGHLIGHTS = {
+    "Held-Out PortScan LOFO": lambda r: next(
+        (x["caught_by_full_system"] for x in r.get("lofo", []) if x.get("family") == "PortScan"), None),
+    "Unseen Attacks Alerted": lambda r: r.get("novel_families", {}).get("alerted"),
+    "Unseen Shown as Unknown": lambda r: r.get("novel_families", {}).get("shown_as_unknown"),
+}
+
+VERSION_HISTORY_NOTE = (
+    "These are code releases of the one trained model bundle on disk (see `versions`), "
+    "not separate models. 'before' figures and those of superseded releases are as recorded "
+    "in each release's commit message; the active release's measured figures are read from "
+    "reports/metrics.json. All figures so far come from synthetic data."
+)
+
+
+def _version_history(report):
+    history = copy.deepcopy(VERSION_HISTORY)
+    for entry in history:
+        if entry["status"] != "active" or not report:
+            continue
+        for h in entry["highlights"]:
+            value = _LIVE_HIGHLIGHTS.get(h["label"], lambda r: None)(report)
+            if value is not None:
+                h["after"] = f"{100 * value:.1f}%"
+                h["source"] = "reports/metrics.json"
+    return history
+
+
 @router.get("/models")
 def get_models(db: Session = Depends(get_db)):
     active = Path(MODEL_DIR)
@@ -261,9 +293,8 @@ def get_models(db: Session = Depends(get_db)):
     t = json.load(open(thresholds_path))
     drift = _config().get("drift", {})
 
-    classifier = "unknown"
-    if REPORT_PATH.exists():
-        classifier = json.load(open(REPORT_PATH)).get("classifier", classifier)
+    report = json.load(open(REPORT_PATH)) if REPORT_PATH.exists() else None
+    classifier = (report or {}).get("classifier", "unknown")
 
     counts = Counter(status for (status,) in db.query(AlertModel.status).all())
     disk_versions = sorted(p.name for p in active.parent.iterdir()
@@ -281,6 +312,7 @@ def get_models(db: Session = Depends(get_db)):
         },
         "feedback": {s: counts.get(s, 0) for s in TRIAGE_STATUSES},
         "model_card": MODEL_CARD_PATH.read_text(encoding="utf-8") if MODEL_CARD_PATH.exists() else None,
-        "version_history": VERSION_HISTORY,
+        "version_history": _version_history(report),
+        "version_history_note": VERSION_HISTORY_NOTE,
     }
 

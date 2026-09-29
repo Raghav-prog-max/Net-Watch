@@ -13,152 +13,6 @@ const ORIGIN: Record<string, string> = {
   drift_psi_drift: "Standard PSI band",
 };
 
-// Static repository changelog history documenting the commits in ml/ and api/
-const REPO_VERSION_HISTORY: ModelVersionEntry[] = [
-  {
-    version: "v1.2",
-    title: "Log-Scaled Anomaly Geometry, Batch TreeSHAP & Naive-Split Proof",
-    date: "2026-09-29",
-    status: "active",
-    commit: "367d39d",
-    summary:
-      "Resolved the Isolation Forest missing low-magnitude quiet attacks by applying signed log1p feature compression before standardisation, upgraded live scoring to single-call batch TreeSHAP, and added a 5-seed naive random split benchmark beside the 5-minute time-block split.",
-    highlights: [
-      { label: "Held-Out PortScan LOFO", before: "0.0%", after: "99.7%" },
-      { label: "Unseen Attacks Alerted", before: "51.5%", after: "100.0%" },
-      { label: "Unseen Shown as Unknown", before: "90.7%", after: "93.2%" },
-      { label: "SHAP Batch Scoring", before: "Per-row", after: "~6x faster" },
-    ],
-    changelog: [
-      {
-        type: "fixed",
-        module: "ml/models/anomaly.py",
-        text: "Applied signed log1p compression (sign(X) * log1p(|X|)) prior to StandardScaler so heavy-tailed byte and duration columns no longer crush quiet probes into the 51st percentile of benign traffic.",
-      },
-      {
-        type: "fixed",
-        module: "ml/explain.py",
-        text: "Supported 3D SHAP array outputs (rows, features, classes) and replaced per-flow explanations with a single top_batch() call per alert batch (~6x faster during attack bursts).",
-      },
-      {
-        type: "added",
-        module: "ml/evaluate/naive.py",
-        text: "Added 5-seed stratified random row split benchmark alongside the 5-minute temporal block split to measure split-leakage inflation and block overlap.",
-      },
-      {
-        type: "changed",
-        module: "api/services/scorer.py",
-        text: "Wired live POST /score directly through ml/models/combine.decide and calibrated the 5,000-flow benign drift ramp (PSI >= 0.10 warning, >= 0.25 drift).",
-      },
-      {
-        type: "tradeoff",
-        module: "ml/evaluate/lofo.py",
-        text: "Recorded held-out Bot LOFO shift from 25.8% to 17.7%: compressing feature scale moves high-variance Bot traffic closer to benign baseline.",
-      },
-    ],
-  },
-  {
-    version: "v1.1",
-    title: "Out-of-Family Novelty Gate & Uncorroborated Label Rejection",
-    date: "2026-09-23",
-    status: "superseded",
-    commit: "0b55f56",
-    summary:
-      "Added per-family out-of-distribution distance checking (FamilyNovelty) and decoupled label rejection from anomaly detector corroboration so novel attacks are surfaced as Unknown instead of confident wrong labels.",
-    highlights: [
-      { label: "Heartbleed Shown as Unknown", before: "0.0%", after: "100.0%" },
-      { label: "Novel Families Unknown Rate", before: "0.0%", after: "90.7%" },
-      { label: "Known-Family Relabel Cost", before: "0.50%", after: "0.80%" },
-      { label: "Family Keep Budget", after: "99.0% quantile" },
-    ],
-    changelog: [
-      {
-        type: "added",
-        module: "ml/models/novelty.py",
-        text: "Implemented FamilyNovelty using median absolute robust z-scores (per-feature median and IQR) calibrated at keep_rate = 0.99 per attack family on validation traffic.",
-      },
-      {
-        type: "changed",
-        module: "ml/models/combine.py",
-        text: "Removed the requirement that the Isolation Forest also flag a flow before rejecting an out-of-family classifier label, which previously suppressed 100% of Heartbleed rejections at a 1% benign flag rate.",
-      },
-      {
-        type: "added",
-        module: "ml/features/select.py",
-        text: "Added correlation pruning, LightGBM importance ranking, sklearn feature pipelines, and TreeSHAP explainers.",
-      },
-      {
-        type: "verified",
-        module: "tests/test_novelty.py",
-        text: "Added 14 regression and unit tests covering per-family distance calibration and all decide() branches.",
-      },
-    ],
-  },
-  {
-    version: "v1.0",
-    title: "Initial Dual-Engine Baseline & 5-Minute Time-Block Split",
-    date: "2026-09-20",
-    status: "baseline",
-    commit: "d5fe2f7",
-    summary:
-      "Initial dual-engine IDS pairing a class-weighted LightGBM classifier over 6 known attack families with an unsupervised benign-only Isolation Forest, evaluated on non-overlapping 5-minute time blocks.",
-    highlights: [
-      { label: "Temporal Split Granularity", after: "5-min blocks (0% leak)" },
-      { label: "False-Positive Budget", after: "FPR <= 0.005 (50/10k)" },
-      { label: "Benign Detector Flag Rate", after: "1.0% val calibration" },
-      { label: "Known Families Covered", after: "6 attack families" },
-    ],
-    changelog: [
-      {
-        type: "added",
-        module: "ml/data/clean.py",
-        text: "Dropped host identifiers (Flow ID, src_ip, dst_ip, src_port) prior to training so the classifier cannot memorise lab IP addresses.",
-      },
-      {
-        type: "added",
-        module: "ml/data/split.py",
-        text: "Grouped flows into 5-minute time blocks via GroupShuffleSplit; verified zero block overlap in tests/test_split_leakage.py.",
-      },
-      {
-        type: "added",
-        module: "ml/models/classifier.py",
-        text: "Defined attack_score as 1 - P(Benign) and selected the operating threshold from the validation ROC curve within fpr_budget = 0.005.",
-      },
-      {
-        type: "added",
-        module: "ml/models/anomaly.py",
-        text: "Fitted 200-tree Isolation Forest exclusively on benign training flows to detect unseen attack families.",
-      },
-    ],
-  },
-  {
-    version: "v2.0",
-    title: "Analyst Supervision Loop & Candidate Promotion Gate",
-    date: "Planned",
-    status: "planned",
-    summary:
-      "Retraining candidate incorporating analyst false-positive and incident confirmations from SQLite. Promoted only if it beats v1.2 Macro-F1 on the identical 5-minute time-block test split within the FPR budget.",
-    highlights: [
-      { label: "Supervision Input", after: "SQLite triage labels" },
-      { label: "False-Positive Handling", after: "Relabelled as Benign" },
-      { label: "Promotion Gate", after: "Macro-F1 > v1.2 on test" },
-      { label: "Automated Blocking", after: "0% (human gate only)" },
-    ],
-    changelog: [
-      {
-        type: "added",
-        module: "api/routes/alerts.py",
-        text: "Persisted analyst status, analyst_label, and analyst_note in SQLite via PATCH /alerts/{id} to build the supervision dataset.",
-      },
-      {
-        type: "changed",
-        module: "ml/train.py",
-        text: "Candidate retraining folds analyst-marked false positives back into the benign training set and re-evaluates thresholds on the held-out time blocks.",
-      },
-    ],
-  },
-];
-
 function badgeForType(type: ChangelogItem["type"]): { label: string; className: string } {
   switch (type) {
     case "fixed":
@@ -203,7 +57,12 @@ export default function ModelsPage() {
       });
   }, []);
 
-  const versionHistory = info?.version_history ?? REPO_VERSION_HISTORY;
+  // served by GET /models; there is no copy in the dashboard to go stale
+  const versionHistory = info?.version_history ?? [];
+  const activeRelease = versionHistory.find((v) => v.status === "active");
+  const released = versionHistory.filter((v) => v.status !== "planned");
+  const liveFigure = (label: string, fallback: string) =>
+    activeRelease?.highlights.find((h) => h.label === label)?.after ?? fallback;
   const visibleVersions =
     selectedVersion === "All"
       ? versionHistory
@@ -220,7 +79,7 @@ export default function ModelsPage() {
           Model Registry, Version History &amp; Training Governance
         </h1>
         <p style={{ margin: 0, color: "var(--nw-text-muted)", fontSize: "13px", maxWidth: "860px" }}>
-          Production model versioning (`v1.0` &rarr; `v1.1` &rarr; `v1.2`), architectural changelogs, and analyst supervision loop.
+          The trained model bundle, the code releases that produced it (`v1.0` &rarr; `v1.1` &rarr; `v1.2`), and the analyst supervision loop.
           A candidate model is promoted only after beating the incumbent on the identical 5-minute time-block test split.
         </p>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
@@ -231,7 +90,7 @@ export default function ModelsPage() {
             {info ? "LIVE · GET /models" : `API OFFLINE · ${error ?? "Connect backend on :8000"}`}
           </span>
           <span className="nw-pill nw-pill-lime" style={{ fontSize: "10px", display: "inline-block" }}>
-            VERSIONS: {versionHistory.map((v) => v.version).join(" · ")}
+            MODEL BUNDLES: {info?.versions?.join(" · ") ?? "—"} · CODE RELEASES: {released.map((v) => v.version).join(" · ") || "—"}
           </span>
         </div>
       </div>
@@ -250,10 +109,10 @@ export default function ModelsPage() {
             Active Model Bundle
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {info ? `${info.active} (v1.2)` : "—"}
+            {info ? info.active : "—"}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
-            {info ? "Deployed in scoring pipeline" : "Start backend API for live status"}
+            {info ? `Deployed in scoring pipeline${activeRelease ? ` · code release ${activeRelease.version}` : ""}` : "Start backend API for live status"}
           </div>
         </div>
 
@@ -271,13 +130,13 @@ export default function ModelsPage() {
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--nw-card-3)", textTransform: "uppercase" }}>
-            Tracked Versions
+            Code Releases
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-3)", margin: "4px 0" }}>
-            {versionHistory.length}
+            {info ? released.length : "—"}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
-            v1.0, v1.1, v1.2 released · v2.0 planned
+            of one trained bundle · v2.0 planned, not trained
           </div>
         </div>
 
@@ -306,10 +165,11 @@ export default function ModelsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
           <div>
             <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
-              Version Progression Matrix (v1.0 &rarr; v1.1 &rarr; v1.2 &rarr; v2.0)
+              Release Progression (v1.0 &rarr; v1.1 &rarr; v1.2 &rarr; v2.0 planned)
             </div>
-            <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
-              Side-by-side comparison of architectural upgrades and validation metrics across model iterations
+            <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px", maxWidth: "760px" }}>
+              {info?.version_history_note ??
+                "Code releases of the one trained bundle. Older figures as recorded in each release commit."}
             </div>
           </div>
 
@@ -358,8 +218,8 @@ export default function ModelsPage() {
                 <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-lime" style={{ fontSize: "10px" }}>ACTIVE</span></td>
                 <td className="mono" style={{ padding: "12px 14px", color: "#FFFFFF" }}>sign(X) * log1p(|X|) + StandardScaler</td>
                 <td style={{ padding: "12px 14px" }}>Independent IQR z-score (keep 99%)</td>
-                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)", fontWeight: 700 }}>99.7%</td>
-                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-2)", fontWeight: 700 }}>93.2%</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)", fontWeight: 700 }}>{liveFigure("Held-Out PortScan LOFO", "—")}</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-2)", fontWeight: 700 }}>{liveFigure("Unseen Shown as Unknown", "—")}</td>
                 <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>Batch TreeSHAP (3D)</td>
               </tr>
               <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
@@ -632,6 +492,30 @@ export default function ModelsPage() {
           </table>
         </div>
       </div>
+
+      {/* ── MODEL CARD ───────────────────────────────────────── */}
+      {info?.model_card && (
+        <details
+          style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "24px", padding: "20px 24px", marginBottom: "26px" }}
+        >
+          <summary style={{ cursor: "pointer", fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
+            Model card <span style={{ fontSize: "12px", fontWeight: 400, color: "var(--nw-text-muted)" }}>(docs/model_card.md, generated by make evaluate)</span>
+          </summary>
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              fontSize: "12.5px",
+              lineHeight: 1.55,
+              color: "var(--nw-text-muted)",
+              marginTop: "14px",
+              maxHeight: "560px",
+              overflowY: "auto",
+            }}
+          >
+            {info.model_card}
+          </pre>
+        </details>
+      )}
 
       {/* ── GOVERNANCE PROMOTION CALLOUT ──────────────────────── */}
       <div

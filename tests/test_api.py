@@ -274,3 +274,23 @@ def test_models_reports_thresholds_and_triage_counts():
     thresholds = json.load(open("models/v1/thresholds.json"))
     assert body["thresholds"]["fpr_budget"] == thresholds["fpr_budget"]
     assert set(body) >= {"active", "versions", "classifier", "thresholds", "feedback", "model_card"}
+
+
+def test_active_release_figures_follow_the_report(tmp_path, monkeypatch):
+    # the Models page showed release figures typed into the code; after a retrain
+    # (e.g. on CICIDS2017) they would still show the synthetic numbers
+    report = {"classifier": "lightgbm",
+              "lofo": [{"family": "PortScan", "caught_by_full_system": 0.4321}],
+              "novel_families": {"alerted": 0.5, "shown_as_unknown": 0.25}}
+    path = tmp_path / "metrics.json"
+    path.write_text(json.dumps(report))
+    monkeypatch.setattr(metrics_route, "REPORT_PATH", path)
+    if not Path(metrics_route.MODEL_DIR, "thresholds.json").exists():
+        pytest.skip("needs `make train`")
+    body = client.get("/models").json()
+    active = next(v for v in body["version_history"] if v["status"] == "active")
+    got = {h["label"]: h["after"] for h in active["highlights"]}
+    assert got["Held-Out PortScan LOFO"] == "43.2%"
+    assert got["Unseen Attacks Alerted"] == "50.0%"
+    assert got["Unseen Shown as Unknown"] == "25.0%"
+    assert "not separate models" in body["version_history_note"]

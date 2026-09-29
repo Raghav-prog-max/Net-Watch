@@ -121,7 +121,8 @@ export interface ModelVersionEntry {
   status: "active" | "superseded" | "baseline" | "planned";
   commit?: string;
   summary: string;
-  highlights: { label: string; before?: string; after: string }[];
+  // `source` is set when the figure is read from reports/metrics.json
+  highlights: { label: string; before?: string; after: string; source?: string }[];
   changelog: ChangelogItem[];
 }
 
@@ -133,5 +134,6 @@ export interface ModelRegistryInfo {
   feedback: Record<string, number>;
   model_card?: string | null;
   version_history?: ModelVersionEntry[];
+  version_history_note?: string;
 }
 
