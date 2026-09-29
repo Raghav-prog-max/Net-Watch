@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from api.main import app
 from api.db.session import Base, get_db
+from api.db.models import AlertModel
 from api.routes.score import scorer_dependency
 from api.services.scorer import ModelsNotFound
 import uuid
@@ -91,6 +92,23 @@ def test_score_response_shape():
     assert body["scored"] == 2
     assert len(body["alerts"]) == 1
     assert body["alerts"][0]["flow"]["dst_port"] == "80"
+
+def test_model_inputs_are_stored_for_retraining_but_not_returned():
+    class WithFeatures(StubScorer):
+        def score(self, flows, metas=None):
+            out = super().score(flows, metas)
+            for a in out:
+                a["features"] = {"Flow Duration": 12.0}
+            return out
+    app.dependency_overrides[scorer_dependency] = lambda: WithFeatures()
+    res = client.post("/score", json={"flows": [flow("DoS")]})
+    alert = res.json()["alerts"][0]
+    assert "features" not in alert
+    assert "features" not in client.get(f"/alerts/{alert['id']}").json()
+    db = _TestSession()
+    stored = db.query(AlertModel).filter(AlertModel.id == alert["id"]).first()
+    assert stored.features == {"Flow Duration": 12.0}
+    db.close()
 
 def test_scored_alert_is_stored():
     res = client.post("/score", json={"flows": [flow("Bot", dst_port=6667)]})

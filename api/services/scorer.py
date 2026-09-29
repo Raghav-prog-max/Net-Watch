@@ -137,6 +137,9 @@ class Scorer:
                 "analyst_label": None,
                 "analyst_note": None,
                 "model_version": self.version,
+                # stored with the alert for retraining; removed before the
+                # alert is returned or broadcast
+                "features": {name: float(X[i][j]) for j, name in enumerate(self.features)},
             })
         return alerts
 

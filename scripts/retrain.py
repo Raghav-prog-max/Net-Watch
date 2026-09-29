@@ -1,19 +1,23 @@
-﻿"""Retrain the classifier using analyst-labelled alerts as additional data.
+"""Retrain with analyst feedback as extra training data, then compare with v1.
 
 Usage:
-    python scripts/retrain.py [--config ml/config.yaml] [--out models/v2]
+    python scripts/retrain.py [--config ml/config.yaml] [--out models/v2] [--skip-lofo]
 
-Workflow
---------
-1. Export all alerts where analyst_label is not NULL from the database.
-2. Build a new training DataFrame: original training data + labelled alerts.
-3. Call ml.train.main() with the combined data written to a temp parquet.
-4. Evaluate v2 against the same test set as v1.
-5. Print a promotion recommendation: promote if macro-F1 improves and FPR
-   stays within budget; the person runs the promotion manually.
+Workflow (handbook, "Retraining path")
+--------------------------------------
+1. Read triaged alerts from the API's alert store (api/db/session.py DB_PATH).
+2. Turn each into a training row: the model inputs stored with the alert, and
+   a label the model knows. "false_positive" -> Benign; an analyst label that
+   names a trained family -> that family. Anything else (free text, Unknown)
+   cannot be learned from and is skipped, with a count.
+3. Train v2 on the original data plus those rows. The rows go into training
+   only (ml/train.py), so v2 is evaluated on exactly v1's test and LOFO sets.
+4. Print the promotion check: promote only if macro-F1 improves and false
+   alerts stay within the FPR budget.
 
-The actual promotion (copying models/v2 -> models/active) is intentionally
-NOT automated. A human must review the comparison and decide.
+Promotion is NOT automated: a person reviews the comparison and copies
+models/v2 over models/v1. v1's reports/metrics.json is left untouched; v2's
+report goes to reports/v2/.
 """
 from __future__ import annotations
 
@@ -26,122 +30,106 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def export_labels(db_url: str | None = None):
-    """Pull analyst-labelled alerts from the database."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    import yaml
+def training_label(status, analyst_label, families):
+    """The label a triaged alert teaches, or None if it teaches nothing usable."""
+    if status == "false_positive":
+        return "Benign"
+    if analyst_label in families:
+        return analyst_label
+    return None
 
-    cfg = yaml.safe_load(open(ROOT / "ml" / "config.yaml"))
-    if db_url is None:
-        db_path = ROOT / "data" / "alerts.db"
-        db_url = f"sqlite:///{db_path}"
 
-    engine = create_engine(db_url, connect_args={"check_same_thread": False})
-    Session = sessionmaker(bind=engine)
-    db = Session()
+def export_feedback(families):
+    """Triaged alerts from the API's alert store, as (features, family) rows."""
+    from api.db.session import SessionLocal, ensure_schema
+    from api.db.models import AlertModel
 
+    ensure_schema()
+    db = SessionLocal()
     try:
-        from api.db.models import AlertModel
-        rows = db.query(AlertModel).filter(AlertModel.analyst_label.isnot(None)).all()
-        return [
-            {
-                "id": r.id,
-                "family": r.analyst_label,
-                "flow_features": r.flow,
-                "model_prediction": r.prediction.get("family") if r.prediction else None,
-            }
-            for r in rows
-        ]
+        rows = db.query(AlertModel).filter(
+            (AlertModel.status == "false_positive") | (AlertModel.analyst_label.isnot(None))
+        ).all()
+        used, no_features, unmapped = [], 0, 0
+        for r in rows:
+            label = training_label(r.status, r.analyst_label, families)
+            if label is None:
+                unmapped += 1
+            elif not r.features:
+                no_features += 1          # scored before features were stored
+            else:
+                used.append({**r.features, "family": label})
+        return used, {"triaged": len(rows), "used": len(used),
+                      "skipped_no_features": no_features, "skipped_unusable_label": unmapped}
     finally:
         db.close()
 
 
-def main(config_path: str, out_dir: str) -> None:
-    import yaml
+def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
     import pandas as pd
+    import yaml
 
-    cfg = yaml.safe_load(open(config_path))
+    from ml.data.labels import TRAIN_FAMILIES
+    from ml.train import main as train_main
+
+    cfg = yaml.safe_load(open(ROOT / config_path))
     processed = ROOT / cfg["paths"]["processed"]
-
     if not processed.exists():
         raise SystemExit("run `make data` first")
+    v1_report_path = ROOT / cfg["paths"]["reports_dir"] / "metrics.json"
+    v1 = json.load(open(v1_report_path)) if v1_report_path.exists() else None
 
-    labels = export_labels()
-    print(f"found {len(labels)} analyst-labelled alerts")
-
-    if len(labels) == 0:
-        print("no analyst labels found — retrain with `make train` instead")
+    rows, counts = export_feedback(TRAIN_FAMILIES)
+    print("analyst feedback:", ", ".join(f"{k} {v}" for k, v in counts.items()))
+    if not rows:
+        print("no usable feedback: mark alerts as false positive, or label them with a "
+              "family name, then run this again")
         return
 
-    # Build a minimal feedback frame from the labelled alerts
-    # Feature values in the DB are stored as string-keyed meta dicts;
-    # we map them back onto the feature columns the model expects.
-    from ml.features.select import feature_columns
-    df_base = pd.read_pickle(processed)
-    features = feature_columns(df_base)
+    base = pd.read_pickle(processed)
+    fb = pd.DataFrame(rows)
+    fb["feedback"] = True
+    combined = pd.concat([base, fb], ignore_index=True)
+    combined_path = processed.with_name("flows_with_feedback.pkl")
+    combined.to_pickle(combined_path)
+    print(f"combined dataset: {len(base):,} flows + {len(fb):,} feedback -> {combined_path}")
 
-    feedback_rows = []
-    for lab in labels:
-        feats = lab.get("flow_features") or {}
-        row = {f: float(feats.get(f, 0.0)) for f in features}
-        row["family"] = lab["family"]
-        feedback_rows.append(row)
-
-    df_feedback = pd.DataFrame(feedback_rows)
-    df_combined = pd.concat([df_base, df_feedback], ignore_index=True)
-    combined_path = ROOT / "data" / "processed" / "flows_with_feedback.pkl"
-    df_combined.to_pickle(combined_path)
-    print(f"combined dataset: {len(df_combined):,} rows -> {combined_path}")
-
-    # Override the processed path and model_dir for v2, then retrain
     cfg["paths"]["processed"] = str(combined_path.relative_to(ROOT))
     cfg["paths"]["model_dir"] = out_dir
-    cfg_tmp = ROOT / "ml" / "config_v2.yaml"
-    import yaml
-    with open(cfg_tmp, "w") as fh:
-        yaml.dump(cfg, fh)
+    cfg["paths"]["reports_dir"] = str(Path(cfg["paths"]["reports_dir"]) / Path(out_dir).name)
+    cfg_tmp = ROOT / "ml" / "config_retrain.yaml"
+    cfg_tmp.write_text(yaml.dump(cfg))
+    try:
+        print(f"training {out_dir} ...")
+        v2 = train_main(str(cfg_tmp), skip_lofo=skip_lofo)
+    finally:
+        cfg_tmp.unlink(missing_ok=True)
 
-    from ml.train import main as train_main
-    print(f"training v2 -> {out_dir} ...")
-    report = train_main(str(cfg_tmp), skip_lofo=True)
-
-    v1_report_path = ROOT / cfg_original["paths"]["reports_dir"] / "metrics.json"
-    if v1_report_path.exists():
-        v1 = json.load(open(v1_report_path))
-        v1_f1 = v1["main"]["macro_f1"]
-        v1_fpr = v1["main"]["false_alerts_per_10k_benign_flows"]
-        v2_f1 = report["main"]["macro_f1"]
-        v2_fpr = report["main"]["false_alerts_per_10k_benign_flows"]
-        fpr_budget = cfg_original["train"]["fpr_budget"] * 10000
-        print(f"\nPromotion check:")
-        print(f"  v1  macro-F1={v1_f1}  FP/10k={v1_fpr}")
-        print(f"  v2  macro-F1={v2_f1}  FP/10k={v2_fpr}")
-        improve = v2_f1 > v1_f1
-        within_budget = v2_fpr <= fpr_budget
-        if improve and within_budget:
-            print("  RECOMMEND PROMOTE: v2 improves F1 and stays within FPR budget.")
-            print(f"  Run: copy {out_dir} -> models/v1 (after your own review)")
-        else:
-            reasons = []
-            if not improve:
-                reasons.append(f"F1 did not improve ({v2_f1} <= {v1_f1})")
-            if not within_budget:
-                reasons.append(f"FPR over budget ({v2_fpr} > {fpr_budget})")
-            print(f"  DO NOT PROMOTE: {'; '.join(reasons)}")
+    if v1 is None:
+        print(f"no {v1_report_path}; compare manually")
+        return
+    budget = cfg["train"]["fpr_budget"] * 10000
+    f1_1, f1_2 = v1["main"]["macro_f1"], v2["main"]["macro_f1"]
+    fa_1 = v1["main"]["false_alerts_per_10k_benign_flows"]
+    fa_2 = v2["main"]["false_alerts_per_10k_benign_flows"]
+    print("\npromotion check (same test set):")
+    print(f"  v1  macro-F1 {f1_1}  false alerts/10k {fa_1}")
+    print(f"  v2  macro-F1 {f1_2}  false alerts/10k {fa_2}  (budget {budget:g})")
+    problems = []
+    if f1_2 <= f1_1:
+        problems.append(f"macro-F1 did not improve ({f1_2} <= {f1_1})")
+    if fa_2 > budget:
+        problems.append(f"false alerts over budget ({fa_2} > {budget:g})")
+    if problems:
+        print("  DO NOT PROMOTE: " + "; ".join(problems))
     else:
-        print("v1 metrics not found; compare manually")
-
-    cfg_tmp.unlink(missing_ok=True)
-    print("done")
+        print(f"  RECOMMEND PROMOTE: review, then copy {out_dir} over models/v1")
 
 
 if __name__ == "__main__":
-    import yaml
-    cfg_original = yaml.safe_load(open(ROOT / "ml" / "config.yaml"))
-
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="ml/config.yaml")
     ap.add_argument("--out", default="models/v2")
-    args = ap.parse_args()
-    main(args.config, args.out)
+    ap.add_argument("--skip-lofo", action="store_true")
+    a = ap.parse_args()
+    main(a.config, a.out, a.skip_lofo)

@@ -1,14 +1,21 @@
 import json
+import os
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 from typing import Any, List, Optional
+
+# One alert store per checkout, whatever directory the API is started from, so
+# scripts/retrain.py reads the same file the API writes. NETWATCH_DB overrides.
+DB_PATH = Path(os.environ.get("NETWATCH_DB",
+                              Path(__file__).resolve().parents[2] / "netwatch.db"))
 
 try:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker, declarative_base
 
     SQLALCHEMY_AVAILABLE = True
-    SQLALCHEMY_DATABASE_URL = "sqlite:///./netwatch.db"
+    SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
 
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
@@ -17,7 +24,7 @@ try:
     Base = declarative_base()
 except ImportError:
     SQLALCHEMY_AVAILABLE = False
-    SQLALCHEMY_DATABASE_URL = "./netwatch.db"
+    SQLALCHEMY_DATABASE_URL = str(DB_PATH)
 
     class _ColumnExpr:
         def __init__(self, name: str):
@@ -48,7 +55,8 @@ except ImportError:
                     status TEXT DEFAULT 'open',
                     analyst_label TEXT,
                     analyst_note TEXT,
-                    model_version TEXT
+                    model_version TEXT,
+                    features TEXT
                 )
                 """
             )
@@ -162,8 +170,8 @@ except ImportError:
                     INSERT OR REPLACE INTO alerts (
                         id, timestamp, flow, prediction, anomaly_score, is_novel,
                         severity, explanation, mitre, recommended_action, status,
-                        analyst_label, analyst_note, model_version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        analyst_label, analyst_note, model_version, features
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         obj.id,
@@ -180,6 +188,7 @@ except ImportError:
                         obj.analyst_label,
                         obj.analyst_note,
                         obj.model_version or "v1",
+                        json.dumps(getattr(obj, "features", None)),
                     ),
                 )
             self._conn.commit()
@@ -193,6 +202,24 @@ except ImportError:
 
     def SessionLocal():
         return SqliteSession(SQLALCHEMY_DATABASE_URL)
+
+
+def ensure_schema(db_path: Path = DB_PATH) -> None:
+    """Add columns introduced after a database was first created.
+
+    create_all() makes missing tables but never alters existing ones, so an
+    alert store from before `features` existed would fail on every insert.
+    """
+    if not Path(db_path).exists():
+        return
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(alerts)")}
+        if cols and "features" not in cols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN features JSON")
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def get_db():

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 import yaml
 
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
@@ -96,6 +97,13 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     started = time.time()
 
     df = load_processed(cfg["paths"]["processed"])
+    # Analyst-labelled alerts added by scripts/retrain.py. They go into training
+    # only and are kept out of the split, so a retrained model is evaluated on
+    # exactly the test and LOFO sets the current one was.
+    feedback = df.iloc[:0]
+    if "feedback" in df.columns:
+        is_fb = df["feedback"].fillna(False).astype(bool)
+        feedback, df = df[is_fb].drop(columns="feedback"), df[~is_fb].drop(columns="feedback")
     df = df[df["family"].isin(TRAIN_FAMILIES + ["Infiltration", "Heartbleed"])]
     df = add_blocks(df, cfg["split"]["block_minutes"])
 
@@ -114,6 +122,11 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
         skip_lofo = True
     train = downsample_benign(train, cfg["train"]["benign_downsample"],
                               cfg["split"]["random_state"])
+    if len(feedback):
+        # after downsampling: an analyst's "this was benign" is never sampled away
+        train = pd.concat([train, feedback[feedback["family"].isin(TRAIN_FAMILIES)]],
+                          ignore_index=True)
+        print(f"added {len(feedback):,} analyst-labelled flows to training")
 
     print(f"train {len(train):,} | val {len(val):,} | test {len(test):,} | features {len(features)}")
 
