@@ -48,6 +48,29 @@ def test_status_bands():
     assert status({"a": 0.15, "b": 0.01})["status"] == "warning"
 
 
+def test_alert_rate_at_its_baseline_is_stable():
+    # the regression: ordinary traffic alerts at about its measured baseline and
+    # used to read as "drift" because it was compared with the FPR budget
+    calm = {"a": 0.02, "b": 0.01}
+    assert status(calm, alert_rate=0.010, baseline_alert_rate=0.010)["status"] == "stable"
+    assert status(calm, alert_rate=0.014, baseline_alert_rate=0.010)["status"] == "stable"
+
+
+def test_alert_rate_alone_warns_but_cannot_declare_drift():
+    calm = {"a": 0.02, "b": 0.01}
+    assert status(calm, alert_rate=0.016, baseline_alert_rate=0.010)["status"] == "warning"
+    out = status(calm, alert_rate=0.20, baseline_alert_rate=0.010)
+    assert out["status"] == "warning"
+    assert out["alert_rate_status"] == "warning"
+    assert "capped" in out["alert_rate_detail"]
+
+
+def test_alert_rate_with_moving_features_declares_drift():
+    moving = {"a": 0.15, "b": 0.01}
+    assert status(moving, alert_rate=0.03, baseline_alert_rate=0.010)["status"] == "drift"
+    assert status(moving, alert_rate=0.010, baseline_alert_rate=0.010)["status"] == "warning"
+
+
 def test_one_noisy_feature_cannot_declare_drift():
     """Drift needs three features over the line, so a single noisy column only
     ever reaches warning -- otherwise every busy hour would page someone."""

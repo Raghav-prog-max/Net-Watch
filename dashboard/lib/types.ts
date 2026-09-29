@@ -58,6 +58,8 @@ export interface SummaryMetrics {
   auc: Record<string, { pr_auc: number; roc_auc: number }>;
   confusion_matrix: { labels: string[]; rows: number[][] };
   accuracy_for_reference_only: number;
+  // one-vs-rest, thinned: pr = [recall, precision], roc = [fpr, tpr]
+  curves?: Record<string, { pr: number[][]; roc: number[][] }>;
 }
 
 // Mirrors reports/metrics.json as written by `make train` and served by GET /metrics/model.
@@ -106,6 +108,11 @@ export interface EvaluationReport {
     shown_as_unknown?: number;
   };
   synthetic_data?: boolean;
+  imbalance_study?: {
+    evaluated_on: string;
+    chosen: string;
+    results: { strategy: string; macro_f1: number; recall?: Record<string, number> }[];
+  };
 }
 
 export interface ChangelogItem {
@@ -121,7 +128,8 @@ export interface ModelVersionEntry {
   status: "active" | "superseded" | "baseline" | "planned";
   commit?: string;
   summary: string;
-  highlights: { label: string; before?: string; after: string }[];
+  // `source` is set when the figure is read from reports/metrics.json
+  highlights: { label: string; before?: string; after: string; source?: string }[];
   changelog: ChangelogItem[];
 }
 
@@ -133,5 +141,6 @@ export interface ModelRegistryInfo {
   feedback: Record<string, number>;
   model_card?: string | null;
   version_history?: ModelVersionEntry[];
+  version_history_note?: string;
 }
 

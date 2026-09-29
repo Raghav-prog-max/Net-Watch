@@ -4,12 +4,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db.session import engine, Base
+from .db.session import engine, Base, ensure_schema
 from .routes import score, alerts, metrics, ws
 from .services.scorer import ModelsNotFound, get_scorer
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+ensure_schema()
 
 log = logging.getLogger("netwatch")
 

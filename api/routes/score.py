@@ -26,7 +26,9 @@ def scorer_dependency():
 async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
                       scorer=Depends(scorer_dependency)):
     alerts = scorer.score([f.features for f in req.flows], [f.meta for f in req.flows])
-    for alert_data in alerts:
+    # model inputs are stored for retraining, not sent to analysts
+    features = [a.pop("features", None) for a in alerts]
+    for alert_data, feats in zip(alerts, features):
         db.add(AlertModel(
             id=alert_data["id"],
             timestamp=datetime.fromisoformat(alert_data["timestamp"].replace("Z", "+00:00")),
@@ -41,7 +43,8 @@ async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
             status=alert_data["status"],
             analyst_label=alert_data["analyst_label"],
             analyst_note=alert_data["analyst_note"],
-            model_version=alert_data["model_version"]
+            model_version=alert_data["model_version"],
+            features=feats,
         ))
     db.commit()
     for alert_data in alerts:

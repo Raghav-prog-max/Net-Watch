@@ -7,6 +7,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 import yaml
 
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
@@ -81,7 +82,11 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
         
         y_pred = model.predict(X_val)
         macro = float(f1_score(y_val_enc, y_pred, average="macro", zero_division=0))
-        results.append({"strategy": name, "macro_f1": round(macro, 4)})
+        from sklearn.metrics import recall_score
+        rec = recall_score(y_val_enc, y_pred, labels=range(len(le.classes_)), average=None,
+                           zero_division=0)
+        results.append({"strategy": name, "macro_f1": round(macro, 4),
+                        "recall": {c: round(float(r), 4) for c, r in zip(le.classes_, rec)}})
         print(f"  {name:20s}  macro-F1={macro:.4f}")
 
     out = Path("reports/model_comparison.json")
@@ -89,13 +94,21 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
     with open(out, "w") as fh:
         json.dump(results, fh, indent=2)
     print(f"Imbalance study saved to {out}")
+    return results
 
 
-def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
+def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     cfg = yaml.safe_load(open(config_path))
     started = time.time()
 
     df = load_processed(cfg["paths"]["processed"])
+    # Analyst-labelled alerts added by scripts/retrain.py. They go into training
+    # only and are kept out of the split, so a retrained model is evaluated on
+    # exactly the test and LOFO sets the current one was.
+    feedback = df.iloc[:0]
+    if "feedback" in df.columns:
+        is_fb = df["feedback"].fillna(False).astype(bool)
+        feedback, df = df[is_fb].drop(columns="feedback"), df[~is_fb].drop(columns="feedback")
     df = df[df["family"].isin(TRAIN_FAMILIES + ["Infiltration", "Heartbleed"])]
     df = add_blocks(df, cfg["split"]["block_minutes"])
 
@@ -114,18 +127,27 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
         skip_lofo = True
     train = downsample_benign(train, cfg["train"]["benign_downsample"],
                               cfg["split"]["random_state"])
+    if len(feedback):
+        # after downsampling: an analyst's "this was benign" is never sampled away
+        train = pd.concat([train, feedback[feedback["family"].isin(TRAIN_FAMILIES)]],
+                          ignore_index=True)
+        print(f"added {len(feedback):,} analyst-labelled flows to training")
 
     print(f"train {len(train):,} | val {len(val):,} | test {len(test):,} | features {len(features)}")
 
-    if imbalance_study:
-        _run_imbalance_study(train, val, features, cfg["split"]["random_state"])
+    # handbook: compare no handling, class weights, benign undersampling and SMOTE
+    # on macro-F1 and per-class recall, and show the ones not chosen too
+    imbalance = None
+    if imbalance_study and not holdout:
+        imbalance = _run_imbalance_study(train, val, features, cfg["split"]["random_state"])
 
     # --- classifier -------------------------------------------------------
     kind, model = clf_mod.build(cfg["train"]["classifier"], cfg["split"]["random_state"])
     model.fit(matrix(train, features), train["family"])
     print(f"classifier: {kind}")
 
-    base = clf_mod.baseline(cfg["split"]["random_state"])
+    base = clf_mod.baseline(cfg["split"]["random_state"],
+                            cfg.get("classifier", {}).get("random_forest", {}).get("n_estimators", 300))
     base.fit(matrix(train, features), train["family"])
 
     # --- threshold from the false-positive budget -------------------------
@@ -151,6 +173,20 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     nov.fit(matrix(attacks_train, features), attacks_train["family"])
     nov.calibrate(matrix(attacks_val, features), attacks_val["family"])
 
+    # --- the alert rate the drift monitor compares against ----------------
+    # Measured, not assumed: run benign validation traffic through the same
+    # decision the API makes and count the Unknown alerts among flows the
+    # classifier did not name. The live monitor counts the same thing, so a
+    # burst of a known attack does not read as drift.
+    bv = matrix(val[val["family"] == "Benign"], features)
+    bv_known = clf_mod.attack_score(model, bv)[0] >= thr["threshold"]
+    bv_fam, _ = clf_mod.predicted_family(model, model.predict_proba(bv))
+    bv_ood = nov.is_out_of_family(nov.distance(bv, bv_fam), bv_fam)
+    bv_flag = det.is_anomalous(det.score(bv))
+    bv_named = bv_known & ~bv_ood
+    bv_unknown = (bv_known & bv_ood) | (~bv_known & bv_flag)
+    unexplained_rate = float(bv_unknown[~bv_named].mean()) if (~bv_named).any() else 0.0
+
     # --- honest evaluation on the held-out test set -----------------------
     known_test = test[test["family"].isin(TRAIN_FAMILIES)]
     Xt = matrix(known_test, features)
@@ -173,6 +209,12 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     base_proba = base.predict_proba(Xt)
     base_score, _ = clf_mod.attack_score(base, Xt)
     base_fam, _ = clf_mod.predicted_family(base, base_proba)
+    if imbalance is not None:
+        report["imbalance_study"] = {
+            "evaluated_on": "validation split, LightGBM, macro-F1 and per-class recall",
+            "chosen": cfg.get("imbalance_strategy", "class_weight"),
+            "results": imbalance,
+        }
     report["random_forest_baseline"] = metrics.summarise(
         known_test["family"], np.where(base_score >= 0.5, base_fam, "Benign"),
         base_score >= 0.5, base_proba, base.classes_)
@@ -238,7 +280,9 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=False):
     joblib.dump(nov, out / "novelty.joblib")
     json.dump({"attack_threshold": thr["threshold"],
                "anomaly_threshold": det.threshold,
-               "fpr_budget": cfg["train"]["fpr_budget"]},
+               "fpr_budget": cfg["train"]["fpr_budget"],
+               # baseline for the drift monitor's alert-rate rule (see above)
+               "benign_unexplained_alert_rate": round(unexplained_rate, 5)},
               open(out / "thresholds.json", "w"), indent=2)
 
     bt = matrix(benign_train, features)
@@ -270,6 +314,8 @@ if __name__ == "__main__":
     ap.add_argument("--skip-lofo", action="store_true")
     ap.add_argument("--holdout", default=None,
                     help="train without this family, for the novel-attack demo")
-    ap.add_argument("--imbalance-study", action="store_true", help="Run the imbalance handling comparison")
+    ap.add_argument("--skip-imbalance", action="store_true",
+                    help="skip the imbalance-strategy comparison (it runs by default)")
+    ap.add_argument("--imbalance-study", action="store_true", help=argparse.SUPPRESS)  # old flag; now the default
     a = ap.parse_args()
-    main(a.config, a.skip_lofo, a.holdout, a.imbalance_study)
+    main(a.config, a.skip_lofo, a.holdout, not a.skip_imbalance)

@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import joblib
 import numpy as np
 
-from ml.drift.monitor import status as drift_status, window_psi
+from ml.drift.monitor import ks_test, status as drift_status, window_psi
 from ml.explain import Explainer
 from ml.models import classifier as clf_mod
 from ml.models.combine import decide
@@ -68,6 +68,9 @@ class Scorer:
                                    ref["benign_mean"], ref["benign_std"])
         self.window = deque(maxlen=drift_window)
         self.alert_history = deque(maxlen=drift_window)
+        # 1/0 per flow the classifier did not name as a known attack: was it
+        # raised as Unknown? This is the rate the drift rule watches.
+        self.unexplained_history = deque(maxlen=drift_window)
 
     def _matrix(self, flows: List[Dict[str, float]]) -> np.ndarray:
         return np.array([[float(f.get(name, 0.0)) for name in self.features] for f in flows],
@@ -96,6 +99,9 @@ class Scorer:
                           float(pct[i]), bool(flagged[i]),
                           self.thresholds["attack_threshold"], bool(ood[i]))
             self.alert_history.append(1 if core else 0)
+            # a named attack burst is an attack, not a change in normal traffic
+            if not (core and not core["is_novel"]):
+                self.unexplained_history.append(1 if core else 0)
             if core:
                 decided.append((i, core))
             else:
@@ -131,6 +137,9 @@ class Scorer:
                 "analyst_label": None,
                 "analyst_note": None,
                 "model_version": self.version,
+                # stored with the alert for retraining; removed before the
+                # alert is returned or broadcast
+                "features": {name: float(X[i][j]) for j, name in enumerate(self.features)},
             })
         return alerts
 
@@ -139,11 +148,18 @@ class Scorer:
             return {"status": "warming_up", "flows_seen": len(self.window)}
         psi = window_psi(np.array(self.window), self.features, self.reference)
         alert_rate = round(float(np.mean(self.alert_history)), 4)
-        # baseline_alert_rate is the FPR budget (≈ expected benign alert rate);
-        # a simple heuristic until the model card stores the training alert rate.
-        baseline = self.thresholds.get("fpr_budget", 0.005)
-        out = drift_status(psi, alert_rate=alert_rate, baseline_alert_rate=baseline)
+        unexplained = (round(float(np.mean(self.unexplained_history)), 4)
+                       if self.unexplained_history else 0.0)
+        # Measured on benign validation traffic by `make train`. Comparing against
+        # the FPR budget instead read ordinary traffic as drift: the detector alone
+        # flags about 1% of benign flows by design, twice the 0.5% budget.
+        # Models trained before the baseline was saved fall back to that 1%.
+        baseline = self.thresholds.get("benign_unexplained_alert_rate", 0.01)
+        out = drift_status(psi, alert_rate=unexplained, baseline_alert_rate=baseline)
         out["alert_rate"] = alert_rate
+        out["unexplained_alert_rate"] = unexplained
+        out["baseline_unexplained_alert_rate"] = baseline
+        out["ks"] = ks_test(np.array(self.window), self.features, self.reference, top_n=15)
         out["flows_seen"] = len(self.window)
         return out
 

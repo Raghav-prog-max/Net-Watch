@@ -17,11 +17,13 @@ interface Props {
   alerts: Alert[];
   report: EvaluationReport | null;
   drift: DriftStatus | null;
+  // all false positives in the alert store (GET /models); the loaded alerts are only a page
+  falsePositivesTotal?: number | null;
 }
 
 const HEX_COLORS = ["#F4A93E", "#A78BFA", "#C7DB6E"];
 
-export default function LowerDetailCards({ alerts, report, drift }: Props) {
+export default function LowerDetailCards({ alerts, report, drift, falsePositivesTotal }: Props) {
   // families among the alerts on screen, largest first
   const counts = new Map<string, number>();
   alerts.forEach((a) => counts.set(a.prediction.family, (counts.get(a.prediction.family) ?? 0) + 1));
@@ -36,7 +38,8 @@ export default function LowerDetailCards({ alerts, report, drift }: Props) {
       pct: Math.round((100 * n) / Math.max(alerts.length, 1)),
       color: name === "Unknown" ? "#C7DB6E" : HEX_COLORS[i % 2],
     }));
-  const falsePositives = alerts.filter((a) => a.status === "false_positive").length;
+  const falsePositives =
+    falsePositivesTotal ?? alerts.filter((a) => a.status === "false_positive").length;
   const topPsi = drift?.top_features?.[0]?.psi;
   const driftLabel = !drift
     ? "DRIFT: —"

@@ -5,22 +5,36 @@
 | Signal | How | When |
 |---|---|---|
 | Feature distribution shift | Population Stability Index (PSI) per feature | Every 5,000 benign-looking flows |
-| Feature distribution shift | KS test on top 15 features by importance | Every drift window |
-| Alert rate | Rolling mean over the drift window | Continuously |
-| Analyst feedback | Share of alerts marked false_positive | Per session |
+| Feature distribution shift | KS statistic, top 15 features by KS (reported in `ks`, not used in the status) | Every drift window |
+| Unexplained alert rate | Share of Unknown alerts among flows the classifier did **not** name as a known attack, rolling over the last 5,000 such flows | Continuously |
+| Alert rate | Share of all flows that alerted (reported, not used in the status) | Continuously |
+| Analyst feedback | Share of alerts marked false_positive | Per session (not yet in the status) |
 
 PSI bins come from 10 quantile edges computed on benign validation traffic at
 training time and saved to `models/v1/reference_stats.json`.
 Only flows that did **not** alert are counted, so a busy attack hour does not
 read as distribution drift.
 
+The alert-rate **baseline** is measured by `make train`: benign validation flows
+go through the same decision the API makes, and the share raised as Unknown is
+saved to `models/v1/thresholds.json` as `benign_unexplained_alert_rate`. It is
+about 1%, because the anomaly detector is calibrated to flag 1% of benign
+traffic. (An earlier version compared against the 0.5% FPR budget, so ordinary
+traffic already read as "drift".)
+
 ## Status rules
 
 | Status | Condition |
 |---|---|
-| Stable | All features PSI < 0.1 AND alert rate < 1.5x baseline |
-| Warning | Any feature PSI 0.1–0.25 OR alert rate 1.5–2x baseline |
-| Drift | 3+ features PSI > 0.25 OR alert rate > 2x baseline |
+| Stable | All features PSI < 0.1 AND unexplained alert rate < 1.5x baseline |
+| Warning | Any feature PSI 0.1–0.25, OR unexplained alert rate ≥ 1.5x baseline |
+| Drift | 3+ features PSI > 0.25, OR unexplained alert rate ≥ 2x baseline **while PSI is at least Warning** |
+
+One deviation from the handbook: the alert rate alone can raise Warning but not
+Drift. A novel-attack burst also raises the unexplained rate, and that is an
+incident for the analyst, not a changed network; declaring drift then would
+recommend retraining on an attack. When features have moved as well, the rate
+rule applies as the handbook describes.
 
 ## Retraining path
 

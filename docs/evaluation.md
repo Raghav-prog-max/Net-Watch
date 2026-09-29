@@ -31,6 +31,22 @@ The same classifier and settings are scored on (a) the honest time-block split
 and (b) a plain `train_test_split` that ignores time. The gap shows how much
 a leaky split would have flattered the numbers.
 
+## Curves and model comparison
+
+`reports/metrics.json` also carries, for the dashboard's evaluation page:
+
+- **PR and ROC curves** per class, one-vs-rest on the test set (`main.curves`,
+  thinned to 50 points). Read PR first; ROC flatters imbalanced data.
+- **Random forest baseline** on the same split (`random_forest_baseline`, 300
+  trees from `ml/config.yaml`), beside the chosen LightGBM.
+- **Imbalance strategies** (`imbalance_study`): no handling, class weights,
+  benign undersampling and SMOTE, each scored on the validation split by
+  macro-F1 and per-class recall. Resampling touches the training rows only.
+  `make train` runs it; `--skip-imbalance` skips it.
+
+The confusion matrix is shown row-normalised (share of each actual class), with
+raw counts one click away.
+
 ## Threshold selection
 
 The attack threshold is chosen on the validation set at the highest TPR

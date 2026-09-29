@@ -20,6 +20,9 @@ if SQLALCHEMY_AVAILABLE:
         analyst_label = Column(String, nullable=True)
         analyst_note = Column(String, nullable=True)
         model_version = Column(String)
+        # the model inputs that produced the alert: what scripts/retrain.py needs
+        # to turn an analyst's label into a training row. Not returned by the API.
+        features = Column(JSON, nullable=True)
 else:
     from .session import _ColumnExpr
 
@@ -46,6 +49,7 @@ else:
             analyst_label=None,
             analyst_note=None,
             model_version="v1",
+            features=None,
         ):
             self.id = id
             self.timestamp = timestamp
@@ -61,3 +65,4 @@ else:
             self.analyst_label = analyst_label
             self.analyst_note = analyst_note
             self.model_version = model_version
+            self.features = features

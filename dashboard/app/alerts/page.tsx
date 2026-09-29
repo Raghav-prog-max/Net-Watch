@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
-import { listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, Level } from "@/lib/types";
 
@@ -21,15 +21,24 @@ export default function AlertFeed() {
   const [triagePendingId, setTriagePendingId] = useState<string | null>(null);
   const [triageSuccessMsg, setTriageSuccessMsg] = useState<string | null>(null);
   const [triageErrorMsg, setTriageErrorMsg] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Initial load & real-time WebSocket subscription
   useEffect(() => {
     listAlerts({ limit: "250" }).then((loadedAlerts) => {
+      setLoadError(null);
       setAlerts(loadedAlerts);
       if (loadedAlerts.length > 0 && !expandedId) {
         setExpandedId(loadedAlerts[0].id);
       }
-    }).catch(() => setAlerts([]));
+    }).catch((e) => {
+      setAlerts([]);
+      setLoadError(
+        e instanceof ApiUnreachable
+          ? "The API is not reachable on :8000. Start it with `make api`."
+          : `Could not load alerts: ${e instanceof Error ? e.message : "unknown error"}`
+      );
+    });
 
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
       setAlerts((prev) => {
@@ -71,7 +80,7 @@ export default function AlertFeed() {
     }
   }
 
-  // Filtered alert list
+  // Filtered alert list, most severe first (handbook: "sorted by severity")
   const filteredAlerts = useMemo(() => {
     return alerts.filter((a) => {
       if (level !== "All" && a.severity.level !== level) return false;
@@ -89,8 +98,16 @@ export default function AlertFeed() {
         }
       }
       return true;
-    });
+    }).sort((x, y) =>
+      y.severity.score - x.severity.score || y.timestamp.localeCompare(x.timestamp));
   }, [alerts, level, novelOnly, statusFilter, searchQuery]);
+
+  // counts by family across everything loaded, largest first
+  const familyCounts = useMemo(() => {
+    const c = new Map<string, number>();
+    alerts.forEach((a) => c.set(a.prediction.family, (c.get(a.prediction.family) ?? 0) + 1));
+    return Array.from(c.entries()).sort((a, b) => b[1] - a[1]);
+  }, [alerts]);
 
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
@@ -224,6 +241,17 @@ export default function AlertFeed() {
         </div>
       </div>
 
+      {familyCounts.length > 0 && (
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px", fontSize: "12px" }}>
+          <span style={{ color: "var(--nw-text-muted)", alignSelf: "center" }}>By family:</span>
+          {familyCounts.map(([fam, n]) => (
+            <span key={fam} className={`nw-pill ${fam === "Unknown" ? "nw-pill-amber" : "nw-pill-purple"}`}>
+              {fam} {n}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* ── ALERTS LIST ────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {filteredAlerts.length === 0 && (
@@ -238,7 +266,9 @@ export default function AlertFeed() {
               fontSize: "13px",
             }}
           >
-            {alerts.length === 0
+            {loadError
+              ? loadError
+              : alerts.length === 0
               ? "No alerts recorded yet. Start the backend API (`make api`) and stream traffic (`make demo`) to receive live alerts."
               : "No alerts match the active filters."}
           </div>

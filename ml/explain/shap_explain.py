@@ -1,126 +1,65 @@
+"""ml/explain/shap_explain.py — why a flow was flagged.
+
+SHAP (TreeExplainer) when available, z-scores against benign traffic otherwise.
+Used by api/services/scorer.py through `from ml.explain import Explainer`.
 """
-ml/explain/shap_explain.py
-───────────────────────────
-TreeSHAP wrapper for the LightGBM/RandomForest classifier.
-
-Returns the top-N feature impacts per prediction in the format
-expected by the alert schema:
-  [{"feature": str, "value": float, "impact": float}, ...]
-
-Performance note (from spec):
-  TreeSHAP runs on alerts only (not on every flow). For the live demo,
-  explanations are computed per alert in the scoring service. In
-  high-throughput production, consider precomputing for demo flows.
-"""
-from __future__ import annotations
-
-import sys
-from pathlib import Path
-from typing import Any
-
 import numpy as np
-import pandas as pd
 
 
-def explain(
-    clf,
-    X_row: np.ndarray,
-    feature_names: list[str],
-    class_idx: int | None = None,
-    top_n: int = 6,
-) -> list[dict[str, Any]]:
-    """
-    Compute TreeSHAP values for a single flow and return top-N impacts.
+class Explainer:
+    def __init__(self, model, features, benign_mean, benign_std):
+        self.features = list(features)
+        self.benign_mean = np.asarray(benign_mean, dtype="float64")
+        self.benign_std = np.where(np.asarray(benign_std, dtype="float64") == 0, 1.0,
+                                   np.asarray(benign_std, dtype="float64"))
+        self.shap = None
+        try:
+            import shap
+            self.shap = shap.TreeExplainer(model)
+        except Exception:
+            self.shap = None   # falls back to z-scores; no crash, no silent wrong answer
 
-    Parameters
-    ----------
-    clf          : fitted LGBMClassifier or RandomForestClassifier
-    X_row        : 2-D numpy array of shape (1, n_features)
-    feature_names: feature column names matching X_row columns
-    class_idx    : class index to explain (default: argmax predicted class)
-    top_n        : number of features to return
+    def _shap_impact(self, X):
+        """|SHAP| per (row, feature), taking the largest over classes.
 
-    Returns
-    -------
-    List of dicts sorted by |impact| descending:
-      [{"feature": str, "value": float, "impact": float}, ...]
-    """
-    import shap
+        shap has returned multiclass values in two layouts: a list of
+        (rows, features) arrays, one per class, and, in newer versions, one
+        (rows, features, classes) array. Flattening the new layout as if it were
+        the old one mixes features with classes and names the wrong features.
+        """
+        n, f = X.shape
+        values = self.shap.shap_values(X)
+        if isinstance(values, list):
+            return np.abs(np.stack(values)).max(axis=0)          # (classes, n, f)
+        values = np.abs(np.asarray(values))
+        if values.shape == (n, f):
+            return values
+        if values.ndim == 3 and values.shape[:2] == (n, f):
+            return values.max(axis=2)                             # (n, f, classes)
+        if values.ndim == 3 and values.shape[1:] == (n, f):
+            return values.max(axis=0)                             # (classes, n, f)
+        raise ValueError(f"unexpected SHAP shape {values.shape} for {n} rows x {f} features")
 
-    # Use TreeExplainer for tree models (fast, exact)
-    explainer = shap.TreeExplainer(clf)
-    shap_vals  = explainer.shap_values(X_row)
+    def top_batch(self, X, k=3):
+        """Top-k reasons for every row of X, with one SHAP call for the batch."""
+        X = np.asarray(X, dtype="float64").reshape(-1, len(self.features))
+        if len(X) == 0:
+            return []
+        impact = None
+        if self.shap is not None:
+            try:
+                impact = self._shap_impact(X)
+            except Exception:
+                impact = None
+        if impact is None:
+            impact = np.abs((X - self.benign_mean) / self.benign_std)
+        out = []
+        for x, imp in zip(X, impact):
+            order = np.argsort(imp)[::-1][:k]
+            out.append([{"feature": self.features[i],
+                         "value": round(float(x[i]), 3),
+                         "impact": round(float(imp[i]), 3)} for i in order])
+        return out
 
-    # shap_values shape depends on model type:
-    #   LightGBM multiclass: list of (n_samples, n_features), one per class
-    #   RandomForest:        same
-    if isinstance(shap_vals, list):
-        if class_idx is None:
-            proba = clf.predict_proba(X_row)[0]
-            class_idx = int(np.argmax(proba))
-        vals = shap_vals[class_idx][0]  # shape (n_features,)
-    else:
-        vals = shap_vals[0]
-
-    # Build explanation list
-    impacts = list(zip(feature_names, X_row[0], vals))
-    impacts.sort(key=lambda x: abs(x[2]), reverse=True)
-
-    return [
-        {
-            "feature": feat,
-            "value":   round(float(val),    4),
-            "impact":  round(float(impact), 4),
-        }
-        for feat, val, impact in impacts[:top_n]
-    ]
-
-
-def batch_explain(
-    clf,
-    X: np.ndarray,
-    feature_names: list[str],
-    class_indices: np.ndarray | None = None,
-    top_n: int = 6,
-) -> list[list[dict[str, Any]]]:
-    """
-    Compute TreeSHAP explanations for multiple flows.
-    Uses a single TreeExplainer call for efficiency.
-
-    Parameters
-    ----------
-    X             : numpy array (n_samples, n_features)
-    class_indices : per-sample class index to explain; defaults to argmax
-
-    Returns
-    -------
-    List of explanation lists, one per sample.
-    """
-    import shap
-
-    explainer = shap.TreeExplainer(clf)
-    shap_vals  = explainer.shap_values(X)
-
-    if class_indices is None:
-        class_indices = np.argmax(clf.predict_proba(X), axis=1)
-
-    results = []
-    for i in range(len(X)):
-        if isinstance(shap_vals, list):
-            vals = shap_vals[class_indices[i]][i]
-        else:
-            vals = shap_vals[i]
-
-        impacts = list(zip(feature_names, X[i], vals))
-        impacts.sort(key=lambda x: abs(x[2]), reverse=True)
-
-        results.append([
-            {
-                "feature": feat,
-                "value":   round(float(val),    4),
-                "impact":  round(float(impact), 4),
-            }
-            for feat, val, impact in impacts[:top_n]
-        ])
-
-    return results
+    def top(self, x_row, k=3):
+        return self.top_batch(np.asarray(x_row).reshape(1, -1), k)[0]

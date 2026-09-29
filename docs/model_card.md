@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-29T06:36:50Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-09-29T19:42:31Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 > **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
 
@@ -62,7 +62,14 @@ No accuracy figure is reported: about 80% of traffic is benign, so a model that 
 
 ### Attacks it was never trained on
 
-Leave-one-family-out was not run for this model (`make quick` skips it). Run `make train` for the full table.
+Leave-one-family-out: each family is removed from training entirely, a fresh model is trained, and the held-out family is replayed at it. Each run sets its own threshold from the same budget.
+
+| Held-out family | Flows | Classifier alone | Detector alone | Full system | Benign FPR |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| PortScan | 897 | 0.0% | 99.7% | 99.7% | 1.30% |
+| BruteForce | 360 | 100.0% | 3.1% | 100.0% | 1.27% |
+| WebAttack | 211 | 100.0% | 92.9% | 100.0% | 1.32% |
+| Bot | 186 | 15.6% | 3.8% | 17.7% | 0.88% |
 
 Families withheld from training altogether (Heartbleed, Infiltration, 103 test flows): 100.0% raised an alert, and **93.2% were shown to the analyst as Unknown** rather than under a known family's name.
 
@@ -70,7 +77,8 @@ Families withheld from training altogether (Heartbleed, Infiltration, 103 test f
 
 Observed on the test set, most severe first.
 
-- **Bot is the weakest known family**, at 0.801 recall.
+- **Novel attacks that look like normal traffic are missed.** Held out of training, Bot is caught only 17.7% of the time: it sits close enough to benign traffic that neither model separates it.
+- **Bot is also the weakest known family**, at 0.801 recall.
 - **DDoS and DoS are confused with each other.** 124 DDoS flows were labelled DoS, and 109 the other way.
 - **Every false alert on benign traffic was labelled Bot** (all 24).
 - **Some novel attacks keep a confident wrong name.** 6.8% of never-trained-on flows are still reported under a known family's label.

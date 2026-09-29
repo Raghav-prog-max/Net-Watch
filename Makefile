@@ -53,19 +53,9 @@ retrain:        ## retrain v2 with analyst feedback labels
 	$(PYTHON) scripts/retrain.py --out models/v2
 
 test:           ## run the full test suite
-	$(PYTHON) tests/test_split_leakage.py
-	$(PYTHON) tests/test_novelty.py
-	$(PYTHON) tests/test_anomaly.py
-	$(PYTHON) tests/test_drift.py
-	$(PYTHON) tests/test_classifier.py
-	$(PYTHON) tests/test_combine.py
-	$(PYTHON) tests/test_explain.py
-	$(PYTHON) tests/test_mitre.py
-	$(PYTHON) tests/test_naive_split.py
-	$(PYTHON) tests/test_schema.py
-	$(PYTHON) tests/test_scorer.py
-	$(PYTHON) tests/test_thresholds.py
-	$(PYTHON) tests/test_api.py
+# pytest, not `python tests/x.py`: most test files have no __main__, so running
+# them as scripts executed none of their tests and still exited 0
+	$(PYTHON) -m pytest -q
 
 clean:
 	rm -rf data/processed/* models/v1/* reports/* data/alerts.db

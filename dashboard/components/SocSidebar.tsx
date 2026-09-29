@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 
 export default function SocSidebar() {
   const pathname = usePathname();
-  const [escalated, setEscalated] = useState(false);
 
   const navItems = [
     {
@@ -227,15 +225,17 @@ export default function SocSidebar() {
             Escalate Incident
           </div>
           <div style={{ fontSize: "11px", opacity: 0.85, lineHeight: 1.4, marginBottom: "12px" }}>
-            Direct uplink to Tier-2 Lead for confirmed zero-day anomalies.
+            Open an alert and press Escalate: that is what records the decision.
           </div>
 
-          <button
-            onClick={() => {
-              setEscalated(true);
-              setTimeout(() => setEscalated(false), 3000);
-            }}
+          {/* A link, not a button: nothing here notifies anyone, and a "Lead
+              Alerted" confirmation would tell the analyst otherwise. */}
+          <Link
+            href="/alerts"
             style={{
+              display: "block",
+              textAlign: "center",
+              textDecoration: "none",
               width: "100%",
               padding: "7px 12px",
               backgroundColor: "#FFFFFF",
@@ -249,8 +249,8 @@ export default function SocSidebar() {
               transition: "transform 0.15s ease",
             }}
           >
-            {escalated ? "✓ Lead Alerted" : "Escalate to Lead"}
-          </button>
+            Review Alerts to Escalate →
+          </Link>
         </div>
 
         {/* Bottom items */}

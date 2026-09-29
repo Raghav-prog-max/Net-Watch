@@ -1,7 +1,7 @@
 data/raw/*
 data/processed/*
 data/alerts.db
-models/v1*/
+models/v*/
 reports/*
 __pycache__/
 *.pyc
