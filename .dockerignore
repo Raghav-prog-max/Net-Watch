@@ -1,0 +1,11 @@
+# keep the build context small and platform-neutral
+.git
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+dashboard/node_modules
+dashboard/.next
+netwatch.db
+data/processed

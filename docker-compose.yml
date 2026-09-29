@@ -8,7 +8,9 @@ services:
     image: node:20-alpine
     working_dir: /app
     command: sh -c "npm install && npm run dev"
-    volumes: ["./dashboard:/app"]
+    # node_modules and .next live in the container, so its Linux build does not
+    # overwrite (or reuse) the host's Windows/macOS copies
+    volumes: ["./dashboard:/app", "/app/node_modules", "/app/.next"]
     ports: ["3000:3000"]
     environment:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
