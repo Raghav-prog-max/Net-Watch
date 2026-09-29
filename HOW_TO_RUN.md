@@ -1,49 +1,23 @@
 # How to Run NetWatch
 
-Welcome to the NetWatch project! This guide will walk you through initializing your environment, downloading the data, and spinning up the full ML pipeline, backend API, and frontend SOC dashboard.
+Welcome to NetWatch! This guide walks you through setting up the environment, preparing the data, and spinning up the full ML pipeline, backend API, and SOC dashboard.
 
 ---
 
 ## 1. Environment Setup
 
-We have provided convenient setup scripts to automatically construct your Python virtual environment and install all necessary dependencies.
+We strongly recommend using the provided `Makefile` which automates environment creation and target execution.
 
-**For Windows (PowerShell):**
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\setup.ps1
-```
-
-**For Linux / macOS (Bash):**
+Create your virtual environment and install all dependencies:
 ```bash
-bash setup.sh
+make venv
 ```
 > [!NOTE]
-> This creates a local `.venv` folder in the project root and installs everything from `requirements.txt`.
+> This creates a local `.venv` folder in the project root and installs everything from `requirements.txt`. All `make` commands will automatically detect and use this environment.
 
 ---
 
-## 2. Running Commands
-
-You can activate the virtual environment manually (e.g. `.\.venv\Scripts\Activate.ps1` or `source .venv/bin/activate`), but we've also provided a handy `run` script wrapper that executes commands directly inside the environment:
-
-**Windows:**
-```powershell
-.\run.ps1 ml\train.py
-.\run.ps1 -m pytest tests\
-```
-
-**Linux / macOS:**
-```bash
-./run.sh python ml/train.py
-./run.sh pytest tests/
-```
-
-Alternatively, you can just use the provided `Makefile` which is already wired up to the project!
-
----
-
-## 3. Data & Training Pipeline
+## 2. Data & Training Pipeline
 
 To get the system running, you need data and trained models.
 
@@ -58,22 +32,23 @@ To get the system running, you need data and trained models.
    python scripts/download_data.py
    ```
 3. **Process & Train**
-   Process the raw CSVs into a cleaned pickle file, and train both the LightGBM classifier and the Isolation Forest anomaly detector.
+   Clean the raw CSVs into a `.pkl` file, train the LightGBM classifier and the Isolation Forest anomaly detector, and generate the evaluation metrics.
    ```bash
    make data
    make train
+   make evaluate
    ```
    > [!TIP]
-   > The models and reference stats will be saved to `models/v1/` and the evaluation metrics to `reports/metrics.json`.
+   > The models and reference stats are saved to `models/v1/`, the metrics to `reports/metrics.json`, and the Model Card to `docs/model_card.md`.
 
 ---
 
-## 4. Spin Up the System
+## 3. Spin Up the System
 
-Once your models are trained, you can bring up the NetWatch API and Dashboard! Open three separate terminals.
+Once your models are trained, open three separate terminals to bring up the full system.
 
 **Terminal 1: Start the Scoring API**
-The API provides endpoints and WebSockets for the UI.
+The FastAPI server provides REST endpoints and WebSockets for the UI.
 ```bash
 make api
 ```
@@ -82,19 +57,32 @@ make api
 **Terminal 2: Replay Traffic**
 The replayer acts like a network tap, continuously streaming held-out flows into the API to simulate live traffic.
 ```bash
-python replay/replayer.py --scenario novel --rate 60
+make demo
 ```
+*(You can also run specific scenarios: `python replay/replayer.py --scenario drift`)*
 
 **Terminal 3: Start the SOC Dashboard**
 Boot up the frontend UI to watch the alerts roll in.
 ```bash
-cd dashboard
-npm install
-npm run dev
+make dashboard
 ```
 *(Available at `http://localhost:3000`)*
 
 ---
 
-### Verifying the Setup
-If everything is working correctly, you should see the replayer terminal printing "Sent flow..." messages, and your Dashboard at `http://localhost:3000` should start lighting up with incoming network flows and alerts!
+## 4. Offline Demo Mode
+
+If you need to demo the dashboard without the live replayer streaming traffic, you can pre-seed the database:
+```bash
+make seed
+```
+This populates the SQLite database with generated alerts so the dashboard looks active immediately.
+
+---
+
+## 5. Testing
+
+To run the complete suite of tests (API, ML pipeline, Drift logic, etc.):
+```bash
+make test
+```

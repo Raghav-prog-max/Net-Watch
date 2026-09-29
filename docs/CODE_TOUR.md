@@ -59,10 +59,8 @@ For each family: drop it from train and val, retrain both models, then measure h
 of it the classifier catches alone versus the classifier plus the detector. This is the
 experiment that answers the problem statement's headline claim.
 
-## ml/drift/monitor.py
-Quantile bin edges saved at training time, PSI per feature at inference, a status of
-stable / warning / drift, and a recommendation. It recommends retraining; it never
-retrains.
+## ml/drift/monitor.py & reference.py
+Quantile bin edges saved at training time, PSI per feature at inference, KS tests for the top 15 features, and alert-rate thresholding (1.5x for Warning, 2x for Drift). It returns a status of stable / warning / drift and a recommendation to retrain, but it never retrains automatically.
 
 ## ml/train.py
 The one entry point. Loads, splits, downsamples benign in train, fits the classifier and
@@ -71,11 +69,9 @@ evaluates on test, runs LOFO, then writes `models/v1/` and `reports/metrics.json
 `--holdout WebAttack` trains a demo model without that family so "Unknown / novel"
 appears on stage; `--skip-lofo` is for fast iteration.
 
-## api/services/scorer.py
-Loads the artefacts on first use, scores batches, attaches explanations (one SHAP call
-per batch), and keeps a rolling
-window for drift. The window holds only flows that produced no alert, so an attack burst
-does not masquerade as distribution drift.
+## api/services/scorer.py & drift_service.py
+`scorer.py` loads the artefacts on first use, scores batches, attaches explanations (one SHAP call per batch), and keeps a rolling window of benign-looking flows.
+`drift_service.py` handles parsing this rolling window against the drift monitor to provide a live health check.
 
 ## api/main.py
 Eight endpoints and a WebSocket, matching `api/schemas.py`. `POST /score` stores alerts

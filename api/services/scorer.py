@@ -138,8 +138,12 @@ class Scorer:
         if len(self.window) < 500:
             return {"status": "warming_up", "flows_seen": len(self.window)}
         psi = window_psi(np.array(self.window), self.features, self.reference)
-        out = drift_status(psi)
-        out["alert_rate"] = round(float(np.mean(self.alert_history)), 4)
+        alert_rate = round(float(np.mean(self.alert_history)), 4)
+        # baseline_alert_rate is the FPR budget (≈ expected benign alert rate);
+        # a simple heuristic until the model card stores the training alert rate.
+        baseline = self.thresholds.get("fpr_budget", 0.005)
+        out = drift_status(psi, alert_rate=alert_rate, baseline_alert_rate=baseline)
+        out["alert_rate"] = alert_rate
         out["flows_seen"] = len(self.window)
         return out
 

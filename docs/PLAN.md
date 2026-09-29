@@ -13,7 +13,7 @@ Two rules hold all the way through. Nothing merges to `main` unless `make train`
 | Owner | Task | Done when |
 |---|---|---|
 | All | Clone, `pip install -r requirements.txt`, `make synthetic && make data && make quick` | Everyone has their own `reports/metrics.json` |
-| C | Start the CICIDS2017 download (`docs/DATA_SETUP.md`), take `GeneratedLabelledFlows.zip` | Download running |
+| C | Start the CICIDS2017 download (`docs/data_setup.md`), take `GeneratedLabelledFlows.zip` | Download running |
 | F | Repo, branch protection, one-PR-one-reviewer rule, shared tracker | Every task below has an owner and a day |
 | D, R | Read `api/schemas.py` together, agree the alert shape | Contract frozen; changes now need both of you |
 
@@ -23,7 +23,7 @@ Hazard: the download needs a form and can be slow. Start it before anything else
 
 | Owner | Task | Done when |
 |---|---|---|
-| C | `make data` on the real CSVs; compare counts against the table in `docs/DATA_SETUP.md` | Counts match within a few percent |
+| C | `make data` on the real CSVs; compare counts against the table in `docs/data_setup.md` | Counts match within a few percent |
 | C | Fix any family showing as `Unknown` (label encoding, see the data doc) | All 15 raw labels map |
 | C | `make test` on the real data | Leakage test passes |
 | A | First real `make quick`; read per-class recall, not accuracy | Baseline numbers written in the tracker |
