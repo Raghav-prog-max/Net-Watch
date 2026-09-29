@@ -87,6 +87,23 @@ To run the complete suite of tests (API, ML pipeline, Drift logic, etc.):
 make test
 ```
 
+### Checking the metrics code on NSL-KDD (optional)
+
+`make nslkdd` trains a quick Random Forest on NSL-KDD and recomputes every number
+in `ml/evaluate/metrics.py` a second way (from raw counts and ranks); it fails if
+any of them disagree. It needs `KDDTrain+.txt` and `KDDTest+.txt` in
+`data/raw/nsl-kdd/` — not in the repository, fetch them yourself. The result goes to
+`reports/nslkdd_check.json`. The tests already run the same check on a small
+fixture, so CI covers the code without the dataset.
+
+### Exploratory analysis notebook (optional)
+
+```bash
+pip install -r requirements-dev.txt
+make eda
+```
+Re-runs `ml/notebooks/eda.ipynb` on whatever is in `data/processed/`.
+
 ---
 
 ## 6. Without `make` (plain Windows)
@@ -107,6 +124,8 @@ repository root with the virtual environment's Python:
 | `make seed` | `.venv\Scripts\python scripts/seed_db.py --count 80 --scenario known` |
 | `make retrain` | `.venv\Scripts\python scripts/retrain.py --out models/v2` |
 | `make test` | `.venv\Scripts\python -m pytest -q` |
+| `make nslkdd` | `.venv\Scripts\python scripts/nslkdd_check.py` |
+| `make eda` | `.venv\Scripts\python -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb` |
 
 Use `http://127.0.0.1:8000`, not `localhost`, if you point anything at the API
 by hand: on Windows `localhost` tries IPv6 first and each request waits ~2 s.
