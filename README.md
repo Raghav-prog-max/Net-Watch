@@ -1,5 +1,7 @@
 # NetWatch (Microsoft Innovate 2026)
 
+[![CI](https://github.com/Raghav-prog-max/Net-Watch/actions/workflows/ci.yml/badge.svg)](https://github.com/Raghav-prog-max/Net-Watch/actions/workflows/ci.yml)
+
 NetWatch is an ML-powered network intrusion detection system designed to surface high-fidelity alerts to a SOC analyst. It leverages a two-pronged approach:
 1. A **LightGBM Classifier** to detect known attack families (DDoS, Botnet, BruteForce, etc.).
 2. An **Isolation Forest Anomaly Detector**, trained exclusively on benign traffic, to catch novel zero-day attacks the classifier has never seen.
