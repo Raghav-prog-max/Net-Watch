@@ -1,13 +1,22 @@
-﻿PYTHON := $(shell if exist .venv\Scripts\python.exe (echo .venv\Scripts\python.exe) else (echo python))
-UVICORN := $(shell if exist .venv\Scripts\uvicorn.exe (echo .venv\Scripts\uvicorn.exe) else (echo uvicorn))
-PIP := $(shell if exist .venv\Scripts\pip.exe (echo .venv\Scripts\pip.exe) else (echo pip))
+# Use the project's .venv when it exists, on Windows and on macOS/Linux alike.
+# ($(wildcard) is evaluated by make itself, so no shell-specific syntax.)
+ifeq ($(OS),Windows_NT)
+VENV_BIN := .venv/Scripts
+PY_FALLBACK := python
+else
+VENV_BIN := .venv/bin
+PY_FALLBACK := python3
+endif
+PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK))
+UVICORN := $(PYTHON) -m uvicorn
+PIP     := $(PYTHON) -m pip
 
 .PHONY: venv setup synthetic data train evaluate card dashboard-snapshot api demo seed retrain test quick holdout clean
 
 venv:           ## create the virtual environment
-	python -m venv .venv
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
+	$(PY_FALLBACK) -m venv .venv
+	$(VENV_BIN)/python -m pip install --upgrade pip
+	$(VENV_BIN)/python -m pip install -r requirements.txt
 
 setup:          ## install dependencies into the active venv
 	$(PIP) install -r requirements.txt
