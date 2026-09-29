@@ -31,6 +31,28 @@ def auc_scores(y_true, proba, classes):
     return out
 
 
+def _thin(x, y, points):
+    """At most `points` evenly spaced (x, y) pairs, enough to draw the curve."""
+    idx = np.unique(np.linspace(0, len(x) - 1, min(points, len(x))).round().astype(int))
+    return [[round(float(x[i]), 4), round(float(y[i]), 4)] for i in idx]
+
+
+def curves(y_true, proba, classes, points=50):
+    """One-vs-rest PR curve as [recall, precision] and ROC curve as [fpr, tpr],
+    per class, thinned for the dashboard (handbook: PR and ROC curves)."""
+    from sklearn.metrics import precision_recall_curve, roc_curve
+    out = {}
+    for i, cls in enumerate(classes):
+        binary = (np.asarray(y_true) == cls).astype(int)
+        if binary.sum() == 0 or binary.sum() == len(binary):
+            continue
+        prec, rec, _ = precision_recall_curve(binary, proba[:, i])
+        fpr, tpr, _ = roc_curve(binary, proba[:, i])
+        order = np.argsort(rec)
+        out[cls] = {"pr": _thin(rec[order], prec[order], points), "roc": _thin(fpr, tpr, points)}
+    return out
+
+
 def summarise(y_true, y_pred, y_is_attack, proba, classes):
     fpr = false_positive_rate(y_true, y_is_attack)
     return {
@@ -39,6 +61,7 @@ def summarise(y_true, y_pred, y_is_attack, proba, classes):
         "false_positive_rate": round(fpr, 5),
         "false_alerts_per_10k_benign_flows": round(fpr * 10000, 1),
         "auc": auc_scores(y_true, proba, list(classes)),
+        "curves": curves(y_true, proba, list(classes)),
         "confusion_matrix": {
             "labels": list(classes),
             "rows": confusion_matrix(y_true, y_pred, labels=list(classes)).tolist(),

@@ -328,9 +328,15 @@ def render():
 
 
 def main():
+    text = render() + "\n"
     path = ROOT / "docs" / "model_card.md"
-    path.write_text(render() + "\n", encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
     print(f"wrote {path.relative_to(ROOT)}")
+    # handbook layout: the card also travels with the model bundle it describes
+    model_dir = ROOT / yaml.safe_load(open(ROOT / "ml" / "config.yaml"))["paths"]["model_dir"]
+    if model_dir.exists():
+        (model_dir / "model_card.md").write_text(text, encoding="utf-8")
+        print(f"wrote {(model_dir / 'model_card.md').relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

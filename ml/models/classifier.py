@@ -62,9 +62,11 @@ def build(kind="auto", random_state=42):
     params = {**_RF_DEFAULTS, "random_state": random_state}
     return "rf", RandomForestClassifier(**params)
 
-def baseline(random_state=42):
+def baseline(random_state=42, n_estimators=300):
+    """Handbook baseline: RandomForest(n_estimators=300, balanced_subsample).
+    n_estimators comes from ml/config.yaml classifier.random_forest."""
     return RandomForestClassifier(
-        n_estimators=200, class_weight="balanced_subsample",
+        n_estimators=n_estimators, class_weight="balanced_subsample",
         n_jobs=-1, random_state=random_state)
 
 
