@@ -86,3 +86,30 @@ To run the complete suite of tests (API, ML pipeline, Drift logic, etc.):
 ```bash
 make test
 ```
+
+---
+
+## 6. Without `make` (plain Windows)
+
+Windows does not ship `make`. Every target is one command; run them from the
+repository root with the virtual environment's Python:
+
+| Make target | Command |
+|---|---|
+| `make venv` | `python -m venv .venv` then `.venv\Scripts\python -m pip install -r requirements.txt` |
+| `make synthetic` | `.venv\Scripts\python scripts/make_synthetic.py --rows 60000` |
+| `make data` | `.venv\Scripts\python -m ml.prepare --config ml/config.yaml` |
+| `make train` | `.venv\Scripts\python -m ml.train --config ml/config.yaml` |
+| `make evaluate` | `.venv\Scripts\python -m ml.evaluate.model_card` |
+| `make api` | `.venv\Scripts\python -m uvicorn api.main:app --port 8000` |
+| `make demo` | `.venv\Scripts\python replay/replayer.py --scenario known --rate 60` |
+| `make dashboard` | `cd dashboard && npm install && npm run dev` |
+| `make seed` | `.venv\Scripts\python scripts/seed_db.py --count 80 --scenario known` |
+| `make retrain` | `.venv\Scripts\python scripts/retrain.py --out models/v2` |
+| `make test` | `.venv\Scripts\python -m pytest -q` |
+
+Use `http://127.0.0.1:8000`, not `localhost`, if you point anything at the API
+by hand: on Windows `localhost` tries IPv6 first and each request waits ~2 s.
+
+Or run the whole stack in Docker: `docker compose up` (train the models first;
+the API reads `models/v1/` from the repository folder).
