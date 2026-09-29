@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
+import { SplineHero } from "@/components/SplineHero";
+
 
 // Count-up animated number hook
 function useCountUp(end: number, duration: number = 1400, trigger: boolean = false) {
@@ -249,79 +251,9 @@ export default function LandingPage() {
           </Link>
         </div>
 
-        {/* Visual Mini-Preview Card */}
-        <div
-          className="reveal-init stagger-4"
-          style={{
-            width: "100%",
-            maxWidth: "1000px",
-            backgroundColor: "var(--nw-bg-panel)",
-            borderRadius: "24px",
-            padding: "24px",
-            border: "1px solid rgba(255, 255, 255, 0.06)",
-            boxShadow: "0 24px 70px rgba(0, 0, 0, 0.5)",
-            textAlign: "left",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#FF5F56" }} />
-              <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#FFBD2E" }} />
-              <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#27C93F" }} />
-            </div>
-            <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-              HONEST EVALUATION // 5-MIN TIME-BLOCK SPLIT
-            </div>
-            <span className="nw-pill nw-pill-lime">{dataLabel.toUpperCase()}</span>
-          </div>
-
-          {/* Mini 3-stat row */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "14px",
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: "var(--nw-card-1)",
-                borderRadius: "16px",
-                padding: "16px",
-                color: "#111114",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>MACRO-F1</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? report.main.macro_f1.toFixed(3) : "—"}</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>every attack family weighted equally</div>
-            </div>
-
-            <div
-              style={{
-                backgroundColor: "var(--nw-card-2)",
-                borderRadius: "16px",
-                padding: "16px",
-                color: "#111114",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>FALSE ALERTS / 10K</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? falsePer10k : "—"}</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>budget: {report ? `≤ ${budgetPer10k}` : "—"} per 10k normal flows</div>
-            </div>
-
-            <div
-              style={{
-                backgroundColor: "var(--nw-card-3)",
-                borderRadius: "16px",
-                padding: "16px",
-                color: "#111114",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>NEVER-SEEN → UNKNOWN</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? `${unknownPct.toFixed(1)}%` : "—"}</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>{report ? report.novel_families.families.join(" & ") : "—"}</div>
-            </div>
-          </div>
+        {/* ── SPLINE 3D INTERACTIVE HERO ─────────────────────── */}
+        <div className="reveal-init stagger-4" style={{ width: "100%", maxWidth: "1000px" }}>
+          <SplineHero />
         </div>
       </section>
 
