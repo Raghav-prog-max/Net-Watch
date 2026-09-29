@@ -1,27 +1,12 @@
 import type { Alert } from "./types";
-import { addLocalAlert, normalizeAlert } from "./api";
+import { normalizeAlert } from "./api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";   // see lib/api.ts
 
 type AlertListener = (alert: Alert) => void;
-const internalListeners: Set<AlertListener> = new Set();
-
-/** Trigger a simulated live alert broadcast across all subscribers */
-export function broadcastSimulatedAlert(alert: Alert) {
-  addLocalAlert(alert);
-  internalListeners.forEach((fn) => {
-    try {
-      fn(alert);
-    } catch (e) {
-      console.error("Error in alert listener:", e);
-    }
-  });
-}
 
 /** Subscribes to the live alert feed. Returns an unsubscribe function. */
 export function subscribeToAlerts(onAlert: AlertListener): () => void {
-  internalListeners.add(onAlert);
-
   const url = BASE.replace(/^http/, "ws") + "/ws/alerts";
   let socket: WebSocket | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
@@ -34,7 +19,6 @@ export function subscribeToAlerts(onAlert: AlertListener): () => void {
       socket.onmessage = (event) => {
         try {
           const parsed = normalizeAlert(JSON.parse(event.data) as Alert);
-          addLocalAlert(parsed);
           onAlert(parsed);
         } catch {
           // ignore malformed payloads
@@ -55,7 +39,6 @@ export function subscribeToAlerts(onAlert: AlertListener): () => void {
 
   return () => {
     closed = true;
-    internalListeners.delete(onAlert);
     if (retry) clearTimeout(retry);
     socket?.close();
   };

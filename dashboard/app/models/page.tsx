@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getModelRegistryInfo, type ModelRegistryInfo } from "@/lib/api";
+import { getModelRegistryInfo } from "@/lib/api";
+import type { ChangelogItem, ModelRegistryInfo, ModelVersionEntry } from "@/lib/types";
 
 // where each threshold comes from (api/routes/metrics.py, models/v1/thresholds.json)
 const ORIGIN: Record<string, string> = {
@@ -12,37 +13,228 @@ const ORIGIN: Record<string, string> = {
   drift_psi_drift: "Standard PSI band",
 };
 
+// Static repository changelog history documenting the commits in ml/ and api/
+const REPO_VERSION_HISTORY: ModelVersionEntry[] = [
+  {
+    version: "v1.2",
+    title: "Log-Scaled Anomaly Geometry, Batch TreeSHAP & Naive-Split Proof",
+    date: "2026-09-29",
+    status: "active",
+    commit: "367d39d",
+    summary:
+      "Resolved the Isolation Forest missing low-magnitude quiet attacks by applying signed log1p feature compression before standardisation, upgraded live scoring to single-call batch TreeSHAP, and added a 5-seed naive random split benchmark beside the 5-minute time-block split.",
+    highlights: [
+      { label: "Held-Out PortScan LOFO", before: "0.0%", after: "99.7%" },
+      { label: "Unseen Attacks Alerted", before: "51.5%", after: "100.0%" },
+      { label: "Unseen Shown as Unknown", before: "90.7%", after: "93.2%" },
+      { label: "SHAP Batch Scoring", before: "Per-row", after: "~6x faster" },
+    ],
+    changelog: [
+      {
+        type: "fixed",
+        module: "ml/models/anomaly.py",
+        text: "Applied signed log1p compression (sign(X) * log1p(|X|)) prior to StandardScaler so heavy-tailed byte and duration columns no longer crush quiet probes into the 51st percentile of benign traffic.",
+      },
+      {
+        type: "fixed",
+        module: "ml/explain.py",
+        text: "Supported 3D SHAP array outputs (rows, features, classes) and replaced per-flow explanations with a single top_batch() call per alert batch (~6x faster during attack bursts).",
+      },
+      {
+        type: "added",
+        module: "ml/evaluate/naive.py",
+        text: "Added 5-seed stratified random row split benchmark alongside the 5-minute temporal block split to measure split-leakage inflation and block overlap.",
+      },
+      {
+        type: "changed",
+        module: "api/services/scorer.py",
+        text: "Wired live POST /score directly through ml/models/combine.decide and calibrated the 5,000-flow benign drift ramp (PSI >= 0.10 warning, >= 0.25 drift).",
+      },
+      {
+        type: "tradeoff",
+        module: "ml/evaluate/lofo.py",
+        text: "Recorded held-out Bot LOFO shift from 25.8% to 17.7%: compressing feature scale moves high-variance Bot traffic closer to benign baseline.",
+      },
+    ],
+  },
+  {
+    version: "v1.1",
+    title: "Out-of-Family Novelty Gate & Uncorroborated Label Rejection",
+    date: "2026-09-23",
+    status: "superseded",
+    commit: "0b55f56",
+    summary:
+      "Added per-family out-of-distribution distance checking (FamilyNovelty) and decoupled label rejection from anomaly detector corroboration so novel attacks are surfaced as Unknown instead of confident wrong labels.",
+    highlights: [
+      { label: "Heartbleed Shown as Unknown", before: "0.0%", after: "100.0%" },
+      { label: "Novel Families Unknown Rate", before: "0.0%", after: "90.7%" },
+      { label: "Known-Family Relabel Cost", before: "0.50%", after: "0.80%" },
+      { label: "Family Keep Budget", after: "99.0% quantile" },
+    ],
+    changelog: [
+      {
+        type: "added",
+        module: "ml/models/novelty.py",
+        text: "Implemented FamilyNovelty using median absolute robust z-scores (per-feature median and IQR) calibrated at keep_rate = 0.99 per attack family on validation traffic.",
+      },
+      {
+        type: "changed",
+        module: "ml/models/combine.py",
+        text: "Removed the requirement that the Isolation Forest also flag a flow before rejecting an out-of-family classifier label, which previously suppressed 100% of Heartbleed rejections at a 1% benign flag rate.",
+      },
+      {
+        type: "added",
+        module: "ml/features/select.py",
+        text: "Added correlation pruning, LightGBM importance ranking, sklearn feature pipelines, and TreeSHAP explainers.",
+      },
+      {
+        type: "verified",
+        module: "tests/test_novelty.py",
+        text: "Added 14 regression and unit tests covering per-family distance calibration and all decide() branches.",
+      },
+    ],
+  },
+  {
+    version: "v1.0",
+    title: "Initial Dual-Engine Baseline & 5-Minute Time-Block Split",
+    date: "2026-09-20",
+    status: "baseline",
+    commit: "d5fe2f7",
+    summary:
+      "Initial dual-engine IDS pairing a class-weighted LightGBM classifier over 6 known attack families with an unsupervised benign-only Isolation Forest, evaluated on non-overlapping 5-minute time blocks.",
+    highlights: [
+      { label: "Temporal Split Granularity", after: "5-min blocks (0% leak)" },
+      { label: "False-Positive Budget", after: "FPR <= 0.005 (50/10k)" },
+      { label: "Benign Detector Flag Rate", after: "1.0% val calibration" },
+      { label: "Known Families Covered", after: "6 attack families" },
+    ],
+    changelog: [
+      {
+        type: "added",
+        module: "ml/data/clean.py",
+        text: "Dropped host identifiers (Flow ID, src_ip, dst_ip, src_port) prior to training so the classifier cannot memorise lab IP addresses.",
+      },
+      {
+        type: "added",
+        module: "ml/data/split.py",
+        text: "Grouped flows into 5-minute time blocks via GroupShuffleSplit; verified zero block overlap in tests/test_split_leakage.py.",
+      },
+      {
+        type: "added",
+        module: "ml/models/classifier.py",
+        text: "Defined attack_score as 1 - P(Benign) and selected the operating threshold from the validation ROC curve within fpr_budget = 0.005.",
+      },
+      {
+        type: "added",
+        module: "ml/models/anomaly.py",
+        text: "Fitted 200-tree Isolation Forest exclusively on benign training flows to detect unseen attack families.",
+      },
+    ],
+  },
+  {
+    version: "v2.0",
+    title: "Analyst Supervision Loop & Candidate Promotion Gate",
+    date: "Planned",
+    status: "planned",
+    summary:
+      "Retraining candidate incorporating analyst false-positive and incident confirmations from SQLite. Promoted only if it beats v1.2 Macro-F1 on the identical 5-minute time-block test split within the FPR budget.",
+    highlights: [
+      { label: "Supervision Input", after: "SQLite triage labels" },
+      { label: "False-Positive Handling", after: "Relabelled as Benign" },
+      { label: "Promotion Gate", after: "Macro-F1 > v1.2 on test" },
+      { label: "Automated Blocking", after: "0% (human gate only)" },
+    ],
+    changelog: [
+      {
+        type: "added",
+        module: "api/routes/alerts.py",
+        text: "Persisted analyst status, analyst_label, and analyst_note in SQLite via PATCH /alerts/{id} to build the supervision dataset.",
+      },
+      {
+        type: "changed",
+        module: "ml/train.py",
+        text: "Candidate retraining folds analyst-marked false positives back into the benign training set and re-evaluates thresholds on the held-out time blocks.",
+      },
+    ],
+  },
+];
+
+function badgeForType(type: ChangelogItem["type"]): { label: string; className: string } {
+  switch (type) {
+    case "fixed":
+      return { label: "FIXED", className: "nw-pill-lime" };
+    case "added":
+      return { label: "ADDED", className: "nw-pill-purple" };
+    case "changed":
+      return { label: "CHANGED", className: "nw-pill-amber" };
+    case "verified":
+      return { label: "VERIFIED", className: "nw-pill-lime" };
+    case "tradeoff":
+      return { label: "TRADE-OFF", className: "nw-pill-amber" };
+  }
+}
+
+function statusPillForVersion(status: ModelVersionEntry["status"]): { label: string; className: string } {
+  switch (status) {
+    case "active":
+      return { label: "ACTIVE RELEASE", className: "nw-pill-lime" };
+    case "superseded":
+      return { label: "SUPERSEDED", className: "nw-pill-purple" };
+    case "baseline":
+      return { label: "INITIAL BASELINE", className: "nw-pill-purple" };
+    case "planned":
+      return { label: "PLANNED CANDIDATE", className: "nw-pill-amber" };
+  }
+}
+
 export default function ModelsPage() {
   const [info, setInfo] = useState<ModelRegistryInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string>("All");
 
   useEffect(() => {
-    getModelRegistryInfo().then(setInfo);
+    getModelRegistryInfo()
+      .then((data) => {
+        setInfo(data);
+        setError(null);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Could not reach GET /models");
+      });
   }, []);
 
-  if (!info) {
-    return (
-      <div style={{ padding: "40px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-        Loading model registry telemetry...
-      </div>
-    );
-  }
+  const versionHistory = info?.version_history ?? REPO_VERSION_HISTORY;
+  const visibleVersions =
+    selectedVersion === "All"
+      ? versionHistory
+      : versionHistory.filter((v) => v.version === selectedVersion);
+
+  const thresholdEntries = Object.entries(info?.thresholds ?? {});
+  const feedbackEntries = Object.entries(info?.feedback ?? {});
 
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
       {/* ── HEADER ─────────────────────────────────────────────── */}
       <div style={{ marginBottom: "26px" }}>
         <h1 style={{ fontSize: "24px", fontWeight: 800, margin: "0 0 6px", color: "var(--nw-text-primary)" }}>
-          Model Registry &amp; Training Governance
+          Model Registry, Version History &amp; Training Governance
         </h1>
         <p style={{ margin: 0, color: "var(--nw-text-muted)", fontSize: "13px", maxWidth: "860px" }}>
-          Production model versioning and analyst supervision loop. A candidate model is promoted
-          only after beating the incumbent on the identical 5-minute time-block test split.
+          Production model versioning (`v1.0` &rarr; `v1.1` &rarr; `v1.2`), architectural changelogs, and analyst supervision loop.
+          A candidate model is promoted only after beating the incumbent on the identical 5-minute time-block test split.
         </p>
-        <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px", display: "inline-block", marginTop: "10px" }}>
-          {info.source === "live" ? "LIVE · GET /models" : "API OFFLINE · LAST TRAINING RUN"}
-        </span>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+          <span
+            className={`nw-pill ${info ? "nw-pill-purple" : "nw-pill-amber"}`}
+            style={{ fontSize: "10px", display: "inline-block" }}
+          >
+            {info ? "LIVE · GET /models" : `API OFFLINE · ${error ?? "Connect backend on :8000"}`}
+          </span>
+          <span className="nw-pill nw-pill-lime" style={{ fontSize: "10px", display: "inline-block" }}>
+            VERSIONS: {versionHistory.map((v) => v.version).join(" · ")}
+          </span>
+        </div>
       </div>
-
 
       {/* ── STATS HIGHLIGHTS ─────────────────────────────────── */}
       <div
@@ -55,12 +247,14 @@ export default function ModelsPage() {
       >
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--nw-card-2)", textTransform: "uppercase" }}>
-            Active Version
+            Active Model Bundle
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {info.active}
+            {info ? `${info.active} (v1.2)` : "—"}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Deployed in scoring pipeline</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+            {info ? "Deployed in scoring pipeline" : "Start backend API for live status"}
+          </div>
         </div>
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
@@ -68,9 +262,23 @@ export default function ModelsPage() {
             Classifier Engine
           </div>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--nw-text-primary)", margin: "10px 0 4px" }}>
-            {info.classifier}
+            {info ? info.classifier : "—"}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-card-3)" }}>TreeSHAP explainer attached</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-card-3)" }}>
+            {info ? "TreeSHAP explainer attached" : "Awaiting GET /models"}
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--nw-card-3)", textTransform: "uppercase" }}>
+            Tracked Versions
+          </div>
+          <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-3)", margin: "4px 0" }}>
+            {versionHistory.length}
+          </div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+            v1.0, v1.1, v1.2 released · v2.0 planned
+          </div>
         </div>
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
@@ -78,9 +286,261 @@ export default function ModelsPage() {
             Analyst False Positives
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-1)", margin: "4px 0" }}>
-            {info.feedback?.false_positive ?? 0}
+            {info ? info.feedback?.false_positive ?? 0 : "—"}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Kept as labels for the next training run</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+            Kept as labels for the next training run
+          </div>
+        </div>
+      </div>
+
+      {/* ── VERSION PROGRESSION COMPARISON TABLE ─────────────── */}
+      <div
+        style={{
+          backgroundColor: "var(--nw-bg-panel)",
+          borderRadius: "24px",
+          padding: "24px",
+          marginBottom: "26px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+          <div>
+            <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
+              Version Progression Matrix (v1.0 &rarr; v1.1 &rarr; v1.2 &rarr; v2.0)
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px" }}>
+              Side-by-side comparison of architectural upgrades and validation metrics across model iterations
+            </div>
+          </div>
+
+          {/* Version Filter Pills */}
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {["All", ...versionHistory.map((v) => v.version)].map((ver) => (
+              <button
+                key={ver}
+                onClick={() => setSelectedVersion(ver)}
+                style={{
+                  border: "none",
+                  outline: "none",
+                  padding: "6px 14px",
+                  borderRadius: "9999px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  backgroundColor:
+                    selectedVersion === ver ? "var(--nw-accent-purple)" : "rgba(255, 255, 255, 0.05)",
+                  color: selectedVersion === ver ? "#FFFFFF" : "var(--nw-text-muted)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {ver === "All" ? "All Versions" : ver}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #26262C", textAlign: "left", color: "var(--nw-text-muted)" }}>
+                <th style={{ padding: "10px 14px" }}>Version</th>
+                <th style={{ padding: "10px 14px" }}>Status</th>
+                <th style={{ padding: "10px 14px" }}>Anomaly Feature Scaling</th>
+                <th style={{ padding: "10px 14px" }}>Out-of-Family Gate</th>
+                <th style={{ padding: "10px 14px" }}>PortScan LOFO Recall</th>
+                <th style={{ padding: "10px 14px" }}>Unseen &rarr; Unknown</th>
+                <th style={{ padding: "10px 14px", textAlign: "right" }}>SHAP Engine</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)", backgroundColor: "rgba(199, 219, 110, 0.04)" }}>
+                <td className="mono" style={{ padding: "12px 14px", fontWeight: 800, color: "var(--nw-card-3)" }}>v1.2</td>
+                <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-lime" style={{ fontSize: "10px" }}>ACTIVE</span></td>
+                <td className="mono" style={{ padding: "12px 14px", color: "#FFFFFF" }}>sign(X) * log1p(|X|) + StandardScaler</td>
+                <td style={{ padding: "12px 14px" }}>Independent IQR z-score (keep 99%)</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)", fontWeight: 700 }}>99.7%</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-2)", fontWeight: 700 }}>93.2%</td>
+                <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>Batch TreeSHAP (3D)</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
+                <td className="mono" style={{ padding: "12px 14px", fontWeight: 800, color: "var(--nw-card-2)" }}>v1.1</td>
+                <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>SUPERSEDED</span></td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Raw StandardScaler</td>
+                <td style={{ padding: "12px 14px" }}>Independent IQR z-score (keep 99%)</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)" }}>0.0%</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-2)", fontWeight: 700 }}>90.7%</td>
+                <td className="mono" style={{ padding: "12px 14px", textAlign: "right", color: "var(--nw-text-muted)" }}>Per-row TreeSHAP</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
+                <td className="mono" style={{ padding: "12px 14px", fontWeight: 800, color: "var(--nw-text-primary)" }}>v1.0</td>
+                <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>BASELINE</span></td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Raw StandardScaler</td>
+                <td style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Gated on detector corroboration</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)" }}>0.0%</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>0.0% (Heartbleed)</td>
+                <td className="mono" style={{ padding: "12px 14px", textAlign: "right", color: "var(--nw-text-muted)" }}>Z-score fallback</td>
+              </tr>
+              <tr>
+                <td className="mono" style={{ padding: "12px 14px", fontWeight: 800, color: "var(--nw-card-1)" }}>v2.0</td>
+                <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-amber" style={{ fontSize: "10px" }}>PLANNED</span></td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>sign(X) * log1p(|X|) + StandardScaler</td>
+                <td style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Re-calibrated with analyst FP labels</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Gated (&ge; v1.2)</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Gated (&ge; v1.2)</td>
+                <td className="mono" style={{ padding: "12px 14px", textAlign: "right", color: "var(--nw-text-muted)" }}>Batch TreeSHAP (3D)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── VERSION RELEASE CARDS & CHANGELOGS ───────────────── */}
+      <div style={{ marginBottom: "26px" }}>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--nw-text-primary)", marginBottom: "14px" }}>
+          Release Changelogs &amp; Architectural Diffs
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {visibleVersions.map((ver) => {
+            const statusPill = statusPillForVersion(ver.status);
+            const isActive = ver.status === "active";
+
+            return (
+              <div
+                key={ver.version}
+                style={{
+                  backgroundColor: "var(--nw-bg-panel)",
+                  borderRadius: "24px",
+                  padding: "26px",
+                  border: isActive
+                    ? "1px solid rgba(199, 219, 110, 0.3)"
+                    : "1px solid rgba(255, 255, 255, 0.05)",
+                }}
+              >
+                {/* Version Header Row */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    flexWrap: "wrap",
+                    gap: "12px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: "22px",
+                        fontWeight: 800,
+                        color: isActive ? "var(--nw-card-3)" : "var(--nw-card-2)",
+                        backgroundColor: "rgba(255, 255, 255, 0.05)",
+                        padding: "4px 14px",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      {ver.version}
+                    </span>
+                    <div>
+                      <h2 style={{ fontSize: "17px", fontWeight: 700, margin: 0, color: "var(--nw-text-primary)" }}>
+                        {ver.title}
+                      </h2>
+                      <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px", fontFamily: "var(--font-mono)" }}>
+                        Release Date: {ver.date}
+                        {ver.commit ? ` · Commit ${ver.commit}` : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className={`nw-pill ${statusPill.className}`} style={{ fontSize: "10px" }}>
+                    {statusPill.label}
+                  </span>
+                </div>
+
+                {/* Version Summary */}
+                <p style={{ margin: "0 0 18px", fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.6 }}>
+                  {ver.summary}
+                </p>
+
+                {/* Highlights / Metric Deltas Strip */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  {ver.highlights.map((h) => (
+                    <div
+                      key={h.label}
+                      style={{
+                        backgroundColor: "rgba(0, 0, 0, 0.25)",
+                        borderRadius: "14px",
+                        padding: "12px 16px",
+                        border: "1px solid rgba(255, 255, 255, 0.04)",
+                      }}
+                    >
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--nw-text-muted)", textTransform: "uppercase", marginBottom: "4px" }}>
+                        {h.label}
+                      </div>
+                      <div className="mono" style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>
+                        {h.before ? (
+                          <>
+                            <span style={{ color: "var(--nw-text-muted)", textDecoration: "line-through", marginRight: "6px", fontWeight: 500 }}>
+                              {h.before}
+                            </span>
+                            <span style={{ color: "var(--nw-card-2)", marginRight: "6px" }}>&rarr;</span>
+                            <span style={{ color: "var(--nw-card-3)" }}>{h.after}</span>
+                          </>
+                        ) : (
+                          <span style={{ color: "var(--nw-card-2)" }}>{h.after}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Detailed Changelog Items */}
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--nw-text-muted)", textTransform: "uppercase", marginBottom: "10px", letterSpacing: "0.04em" }}>
+                  Changelog ({ver.changelog.length} entries)
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {ver.changelog.map((item, idx) => {
+                    const badge = badgeForType(item.type);
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "95px 190px 1fr",
+                          gap: "12px",
+                          alignItems: "baseline",
+                          backgroundColor: "rgba(255, 255, 255, 0.025)",
+                          padding: "12px 16px",
+                          borderRadius: "14px",
+                        }}
+                        className="changelog-row"
+                      >
+                        <div>
+                          <span className={`nw-pill ${badge.className}`} style={{ fontSize: "9px", padding: "2px 8px" }}>
+                            {badge.label}
+                          </span>
+                        </div>
+                        <div className="mono" style={{ fontSize: "12px", color: "var(--nw-card-2)", fontWeight: 600 }}>
+                          {item.module}
+                        </div>
+                        <div style={{ fontSize: "13px", color: "var(--nw-text-primary)", lineHeight: 1.5 }}>
+                          {item.text}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -108,17 +568,25 @@ export default function ModelsPage() {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(info.thresholds).map(([param, val]) => (
-                <tr key={param} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
-                  <td style={{ padding: "10px 0", textTransform: "capitalize" }}>{param.replace(/_/g, " ")}</td>
-                  <td className="mono" style={{ padding: "10px 0", color: "var(--nw-card-2)", fontWeight: 700 }}>
-                    {val}
-                  </td>
-                  <td style={{ padding: "10px 0", textAlign: "right", color: "var(--nw-text-muted)" }}>
-                    {ORIGIN[param] ?? "—"}
+              {thresholdEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={{ padding: "16px 0", color: "var(--nw-text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }}>
+                    No live thresholds loaded — start `make api` after running `make train`.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                thresholdEntries.map(([param, val]) => (
+                  <tr key={param} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
+                    <td style={{ padding: "10px 0", textTransform: "capitalize" }}>{param.replace(/_/g, " ")}</td>
+                    <td className="mono" style={{ padding: "10px 0", color: "var(--nw-card-2)", fontWeight: 700 }}>
+                      {val}
+                    </td>
+                    <td style={{ padding: "10px 0", textAlign: "right", color: "var(--nw-text-muted)" }}>
+                      {ORIGIN[param] ?? "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -138,20 +606,28 @@ export default function ModelsPage() {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(info.feedback ?? {}).map(([statusKey, count]) => {
-                const isFp = statusKey === "false_positive";
-                return (
-                  <tr key={statusKey} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
-                    <td style={{ padding: "10px 0", textTransform: "capitalize" }}>{statusKey.replace(/_/g, " ")}</td>
-                    <td className="mono" style={{ padding: "10px 0", fontWeight: 700, color: isFp ? "var(--nw-card-1)" : "#FFFFFF" }}>
-                      {count}
-                    </td>
-                    <td style={{ padding: "10px 0", textAlign: "right", color: "var(--nw-text-muted)" }}>
-                      {isFp ? "Relabel as Benign" : "Confirmation Signal"}
-                    </td>
-                  </tr>
-                );
-              })}
+              {feedbackEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={{ padding: "16px 0", color: "var(--nw-text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }}>
+                    No live triage counts loaded — start `make api` to query SQLite alert dispositions.
+                  </td>
+                </tr>
+              ) : (
+                feedbackEntries.map(([statusKey, count]) => {
+                  const isFp = statusKey === "false_positive";
+                  return (
+                    <tr key={statusKey} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
+                      <td style={{ padding: "10px 0", textTransform: "capitalize" }}>{statusKey.replace(/_/g, " ")}</td>
+                      <td className="mono" style={{ padding: "10px 0", fontWeight: 700, color: isFp ? "var(--nw-card-1)" : "#FFFFFF" }}>
+                        {count}
+                      </td>
+                      <td style={{ padding: "10px 0", textAlign: "right", color: "var(--nw-text-muted)" }}>
+                        {isFp ? "Relabel as Benign" : "Confirmation Signal"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -173,16 +649,25 @@ export default function ModelsPage() {
       >
         <div>
           <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--nw-card-2)", marginBottom: "4px" }}>
-            Governance Protocol // Model Candidate v2 Promotion (planned)
+            Governance Protocol // Model Candidate v2.0 Promotion (planned)
           </div>
           <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", maxWidth: "800px" }}>
-            Analyst dispositions are stored with each alert in SQLite. The plan: train a candidate v2 on
-            that feedback and promote it ONLY if it achieves a higher macro-F1 than v1 on the identical
-            5-minute time-block test split without exceeding the FPR budget. Not built yet: today
-            retraining is <code>make train</code>, run by hand.
+            Analyst dispositions are stored with each alert in SQLite. The plan: train a candidate v2.0 on
+            that feedback and promote it ONLY if it achieves a higher macro-F1 than v1.2 on the identical
+            5-minute time-block test split without exceeding the FPR budget. Today retraining is{" "}
+            <code>make train</code>, run by hand.
           </div>
         </div>
       </div>
+
+      <style jsx global>{`
+        @media (max-width: 760px) {
+          .changelog-row {
+            grid-template-columns: 1fr !important;
+            gap: 6px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,3 +1,16 @@
+"use client";
+
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { Explanation } from "@/lib/types";
 
 export default function ShapBar({ items }: { items: Explanation[] }) {
@@ -9,80 +22,90 @@ export default function ShapBar({ items }: { items: Explanation[] }) {
     );
   }
 
-  const maxImpact = Math.max(...items.map((i) => Math.abs(i.impact)), 0.01);
+  const data = items.map((item) => ({
+    feature: item.feature,
+    value: item.value,
+    impact: Number(item.impact.toFixed(4)),
+    absImpact: Math.abs(item.impact),
+  }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      {items.map((item) => {
-        const absImpact = Math.abs(item.impact);
-        const percent = Math.min(100, Math.max(6, (absImpact / maxImpact) * 100));
-        const isPositive = item.impact >= 0;
-
-        return (
-          <div
-            key={item.feature}
-            style={{
-              backgroundColor: "rgba(0, 0, 0, 0.25)",
-              borderRadius: "14px",
-              padding: "10px 14px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                fontSize: "12px",
-                marginBottom: "6px",
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      <div
+        style={{
+          width: "100%",
+          height: `${Math.max(150, items.length * 46)}px`,
+          backgroundColor: "rgba(0, 0, 0, 0.25)",
+          borderRadius: "16px",
+          padding: "12px 14px 6px 6px",
+        }}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 10, bottom: 4 }}>
+            <CartesianGrid stroke="#26262C" strokeDasharray="3 3" horizontal={false} />
+            <XAxis
+              type="number"
+              stroke="#8A8A93"
+              tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+              axisLine={{ stroke: "#26262C" }}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="feature"
+              width={135}
+              stroke="#F5F5F7"
+              tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <ReferenceLine x={0} stroke="#8A8A93" strokeOpacity={0.4} />
+            <Tooltip
+              cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
+              content={({ active, payload }) => {
+                if (!active || !payload || payload.length === 0) return null;
+                const row = payload[0].payload as (typeof data)[number];
+                const isPos = row.impact >= 0;
+                return (
+                  <div
+                    style={{
+                      backgroundColor: "#111114",
+                      border: "1px solid #2E2E38",
+                      borderRadius: "12px",
+                      padding: "8px 12px",
+                      fontSize: "11px",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: "#FFFFFF" }}>{row.feature}</div>
+                    <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)", marginTop: "2px" }}>
+                      val: {typeof row.value === "number" ? row.value.toLocaleString() : row.value}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontWeight: 700,
+                        color: isPos ? "#F4A93E" : "#A78BFA",
+                        marginTop: "2px",
+                      }}
+                    >
+                      SHAP impact: {isPos ? "+" : ""}
+                      {row.impact.toFixed(3)}
+                    </div>
+                  </div>
+                );
               }}
-            >
-              <span
-                style={{
-                  fontWeight: 600,
-                  color: "var(--nw-text-primary)",
-                }}
-              >
-                {item.feature}
-              </span>
-              <div style={{ display: "flex", gap: "12px", fontFamily: "var(--font-mono)", fontSize: "11px" }}>
-                <span style={{ color: "var(--nw-text-muted)" }}>
-                  val: {typeof item.value === "number" ? item.value.toLocaleString() : item.value}
-                </span>
-                <span
-                  style={{
-                    color: isPositive ? "var(--nw-card-1)" : "var(--nw-card-2)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {isPositive ? "+" : ""}
-                  {item.impact.toFixed(3)}
-                </span>
-              </div>
-            </div>
-
-            {/* Impact Bar */}
-            <div
-              style={{
-                height: "5px",
-                width: "100%",
-                backgroundColor: "rgba(255, 255, 255, 0.06)",
-                borderRadius: "9999px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${percent}%`,
-                  backgroundColor: isPositive ? "var(--nw-card-1)" : "var(--nw-card-2)",
-                  borderRadius: "9999px",
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </div>
-          </div>
-        );
-      })}
+            />
+            <Bar dataKey="impact" radius={[4, 4, 4, 4]} barSize={16}>
+              {data.map((entry) => (
+                <Cell
+                  key={entry.feature}
+                  fill={entry.impact >= 0 ? "#F4A93E" : "#A78BFA"}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

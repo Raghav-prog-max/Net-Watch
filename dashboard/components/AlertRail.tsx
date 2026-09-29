@@ -7,14 +7,12 @@ interface AlertRailProps {
   alerts: Alert[];
   onSelectAlert: (alert: Alert) => void;
   onTriage: (id: string, status: Alert["status"]) => void;
-  onInjectTestFlow?: () => void;
 }
 
 export default function AlertRail({
   alerts,
   onSelectAlert,
   onTriage,
-  onInjectTestFlow,
 }: AlertRailProps) {
   const [filter, setFilter] = useState<"All" | "Critical" | "Novel">("All");
 
@@ -49,17 +47,6 @@ export default function AlertRail({
             {alerts.length} flagged events in queue
           </div>
         </div>
-
-        {onInjectTestFlow && (
-          <button
-            onClick={onInjectTestFlow}
-            className="nw-btn-pill nw-btn-dark"
-            style={{ fontSize: "11px", padding: "5px 12px" }}
-            title="Inject a realistic test flow into the feed"
-          >
-            + Inject Flow
-          </button>
-        )}
       </div>
 
       {/* Filter pills */}

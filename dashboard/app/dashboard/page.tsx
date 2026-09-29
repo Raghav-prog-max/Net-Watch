@@ -8,9 +8,8 @@ import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
 import SocTopBar from "@/components/SocTopBar";
 import { getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
-import { subscribeToAlerts, broadcastSimulatedAlert } from "@/lib/socket";
-import type { Alert, DriftStatus } from "@/lib/types";
-import type { EvaluationReport } from "@/lib/mockData";
+import { subscribeToAlerts } from "@/lib/socket";
+import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
 
 export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -38,66 +37,10 @@ export default function DashboardPage() {
         setSelectedAlert(updated);
       }
     } catch (e) {
-      // Offline triage never lands here (lib/api.ts keeps a local copy). This is
-      // the API refusing, so leave the alert as it was and say nothing was saved.
       setTriageError(
         `Could not update ${id}: ${e instanceof Error ? e.message : "unknown error"}. Nothing was saved.`
       );
     }
-  }
-
-  function handleInjectTestFlow() {
-    const families = ["DDoS", "WebAttack", "Infiltration", "PortScan", "Bot"];
-    const chosen = families[Math.floor(Math.random() * families.length)];
-    const isNovel = chosen === "Infiltration";
-    const src = `192.168.10.${Math.floor(Math.random() * 200) + 10}`;
-
-    const newAlert: Alert = {
-      id: `alt_${Math.random().toString(16).slice(2, 10)}`,
-      timestamp: new Date().toISOString(),
-      flow: {
-        src_ip: src,
-        dst_ip: "172.16.0.1",
-        dst_port: isNovel ? "443" : chosen === "WebAttack" ? "8080" : "80",
-        protocol: "TCP",
-        truth: chosen,
-        duration: "0.85s",
-        flow_bytes_s: "184000",
-        fwd_packets: "1920",
-      },
-      prediction: {
-        family: isNovel ? "Unknown" : chosen,
-        confidence: isNovel ? 0.912 : 0.965,
-      },
-      anomaly_score: isNovel ? -0.375 : -0.264,
-      is_novel: isNovel,
-      also_abnormal: true,
-      severity: {
-        score: isNovel ? 91 : 88,
-        level: "Critical",
-      },
-      explanation: [
-        { feature: "Flow Bytes/s", value: 184000, impact: 0.42 },
-        { feature: "Total Fwd Packets", value: 1920, impact: 0.31 },
-        { feature: "Flow IAT Mean", value: 18400, impact: -0.19 },
-      ],
-      mitre: isNovel
-        ? { tactic: "Unmapped", technique: "Zero-Day Anomaly (Analyst to classify)" }
-        : chosen === "DDoS"
-        ? { tactic: "Impact", technique: "T1498 Network Denial of Service" }
-        : chosen === "WebAttack"
-        ? { tactic: "Initial Access", technique: "T1190 Exploit Public-Facing Application" }
-        : { tactic: "Discovery", technique: "T1046 Network Service Discovery" },
-      recommended_action: isNovel
-        ? "Zero-day deviation pattern. Review payload and isolate endpoint."
-        : "Investigate target service and verify firewall telemetry.",
-      status: "open",
-      analyst_label: null,
-      analyst_note: null,
-      model_version: "v1",
-    };
-
-    broadcastSimulatedAlert(newAlert);
   }
 
   const criticalCount = alerts.filter((a) => a.severity.level === "Critical").length;
@@ -177,7 +120,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Main Chart Card */}
-          <MainThreatChart />
+          <MainThreatChart alerts={alerts} />
 
           {/* Two lower detail breakdown cards */}
           <LowerDetailCards alerts={alerts} report={report} drift={drift} />
@@ -189,7 +132,6 @@ export default function DashboardPage() {
             alerts={alerts}
             onSelectAlert={(al) => setSelectedAlert(al)}
             onTriage={handleTriage}
-            onInjectTestFlow={handleInjectTestFlow}
           />
         </div>
       </div>

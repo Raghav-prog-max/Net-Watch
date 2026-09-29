@@ -1,20 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getDrift } from "@/lib/api";
 import {
-  MOCK_DRIFT_STATUS,
-  MOCK_DRIFT_WARNING,
-  MOCK_DRIFT_CRITICAL,
-} from "@/lib/mockData";
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { getDrift } from "@/lib/api";
 import type { DriftStatus } from "@/lib/types";
 
+interface HistoryPoint {
+  sample: string;
+  psi: number;
+}
+
 export default function DriftMonitorPage() {
-  const [drift, setDrift] = useState<DriftStatus>(MOCK_DRIFT_STATUS);
-  const [history, setHistory] = useState<number[]>([
-    0.04, 0.05, 0.04, 0.06, 0.05, 0.07, 0.05, 0.06, 0.08, 0.09, 0.08, 0.07,
-  ]);
-  const [activeScenario, setActiveScenario] = useState<"stable" | "warning" | "drift">("stable");
+  const [drift, setDrift] = useState<DriftStatus | null>(null);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -22,14 +31,22 @@ export default function DriftMonitorPage() {
       getDrift()
         .then((d) => {
           if (!mounted) return;
-          if (activeScenario === "stable") {
-            // show warming_up as it is: under 500 benign flows there is no PSI yet
-            setDrift(d);
-            const top = d.top_features?.[0]?.psi;
-            if (top !== undefined) setHistory((prev) => [...prev, top].slice(-30));
+          setError(null);
+          setDrift(d);
+          const top = d.top_features?.[0]?.psi;
+          if (top !== undefined) {
+            const label = new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            });
+            setHistory((prev) => [...prev, { sample: label, psi: Number(top.toFixed(4)) }].slice(-30));
           }
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (!mounted) return;
+          setError(e instanceof Error ? e.message : "Could not reach GET /metrics/drift");
+        });
     };
 
     fetchDrift();
@@ -38,25 +55,13 @@ export default function DriftMonitorPage() {
       mounted = false;
       clearInterval(interval);
     };
-  }, [activeScenario]);
+  }, []);
 
-  function handleScenarioSwitch(mode: "stable" | "warning" | "drift") {
-    setActiveScenario(mode);
-    if (mode === "stable") {
-      setDrift(MOCK_DRIFT_STATUS);
-      setHistory([0.04, 0.05, 0.04, 0.06, 0.05, 0.07, 0.06, 0.05, 0.04]);
-    } else if (mode === "warning") {
-      setDrift(MOCK_DRIFT_WARNING);
-      setHistory([0.05, 0.08, 0.11, 0.14, 0.16, 0.18, 0.17, 0.18]);
-    } else {
-      setDrift(MOCK_DRIFT_CRITICAL);
-      setHistory([0.05, 0.09, 0.14, 0.19, 0.24, 0.28, 0.34, 0.38]);
-    }
-  }
-
-  const isDrift = drift.status === "drift" || (drift.top_features?.[0]?.psi ?? 0) >= 0.25;
-  const isWarn = drift.status === "warning";
-  const maxPsi = Math.max(...history, 0.4);
+  const isDrift = drift?.status === "drift" || (drift?.top_features?.[0]?.psi ?? 0) >= 0.25;
+  const isWarn = drift?.status === "warning";
+  const warnBand = drift?.bands?.warning ?? 0.1;
+  const driftBand = drift?.bands?.drift ?? 0.25;
+  const topFeatures = drift?.top_features ?? [];
 
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
@@ -71,37 +76,10 @@ export default function DriftMonitorPage() {
             An attack burst does not read as distribution drift.
           </p>
           <div style={{ marginTop: "10px" }}>
-            <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>
-              {activeScenario !== "stable"
-                ? "SIMULATED SCENARIO · not live data"
-                : drift.source === "live"
-                ? "LIVE · GET /metrics/drift"
-                : "API OFFLINE · SAMPLE DATA"}
+            <span className={`nw-pill ${error ? "nw-pill-amber" : "nw-pill-purple"}`} style={{ fontSize: "10px" }}>
+              {error ? `API OFFLINE · ${error}` : "LIVE · GET /metrics/drift"}
             </span>
           </div>
-        </div>
-
-        {/* Scenario Switcher */}
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", color: "var(--nw-text-muted)", fontWeight: 600 }}>VIEW:</span>
-          <button
-            onClick={() => handleScenarioSwitch("stable")}
-            className={`nw-btn-pill ${activeScenario === "stable" ? "nw-btn-lime" : "nw-btn-dark"}`}
-          >
-            Live
-          </button>
-          <button
-            onClick={() => handleScenarioSwitch("warning")}
-            className={`nw-btn-pill ${activeScenario === "warning" ? "nw-btn-soft-purple" : "nw-btn-dark"}`}
-          >
-            Simulate warning
-          </button>
-          <button
-            onClick={() => handleScenarioSwitch("drift")}
-            className={`nw-btn-pill ${activeScenario === "drift" ? "nw-btn-amber" : "nw-btn-dark"}`}
-          >
-            Simulate drift
-          </button>
         </div>
       </div>
 
@@ -126,7 +104,7 @@ export default function DriftMonitorPage() {
               ▲ Retrain Recommended // Critical Distribution Shift
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-primary)", maxWidth: "800px" }}>
-              Monitored features exceed critical threshold (PSI &ge; 0.25). The underlying network distribution
+              Monitored features exceed critical threshold (PSI &ge; {driftBand.toFixed(2)}). The underlying network distribution
               has statistically drifted from training baselines. Retraining is a human decision and runs offline:
               <code style={{ margin: "0 4px" }}>make train</code>, then restart the API. It is not triggered from this page.
             </div>
@@ -150,15 +128,27 @@ export default function DriftMonitorPage() {
           <div style={{ margin: "8px 0" }}>
             <span
               className={`nw-pill ${
-                isDrift ? "nw-pill-amber" : isWarn ? "nw-pill-purple" : "nw-pill-lime"
+                !drift
+                  ? "nw-pill-purple"
+                  : isDrift
+                  ? "nw-pill-amber"
+                  : isWarn
+                  ? "nw-pill-purple"
+                  : "nw-pill-lime"
               }`}
               style={{ fontSize: "12px", padding: "5px 14px" }}
             >
-              {drift.status.toUpperCase()}
+              {drift ? drift.status.toUpperCase() : "OFFLINE"}
             </span>
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
-            {isDrift ? "Retrain recommended" : "Operating within limits"}
+            {!drift
+              ? "Awaiting backend connection"
+              : isDrift
+              ? "Retrain recommended"
+              : drift.status === "warming_up"
+              ? "Collecting 500 benign flows"
+              : "Operating within limits"}
           </div>
         </div>
 
@@ -167,7 +157,7 @@ export default function DriftMonitorPage() {
             Benign Window Flows
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {(drift.flows_seen ?? 0).toLocaleString()}
+            {drift ? (drift.flows_seen ?? 0).toLocaleString() : "—"}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-card-2)" }}>Unflagged flows evaluated</div>
         </div>
@@ -177,7 +167,7 @@ export default function DriftMonitorPage() {
             Window Alert Rate
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {drift.alert_rate !== undefined ? `${(drift.alert_rate * 100).toFixed(1)}%` : "—"}
+            {drift?.alert_rate !== undefined ? `${(drift.alert_rate * 100).toFixed(1)}%` : "—"}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Fraction of flows alerted</div>
         </div>
@@ -187,13 +177,13 @@ export default function DriftMonitorPage() {
             PSI Thresholds
           </div>
           <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--nw-text-primary)", margin: "10px 0 4px" }}>
-            Warning: <span style={{ color: "var(--nw-card-2)" }}>&ge;0.10</span> · Drift: <span style={{ color: "var(--nw-card-1)" }}>&ge;0.25</span>
+            Warning: <span style={{ color: "var(--nw-card-2)" }}>&ge;{warnBand.toFixed(2)}</span> · Drift: <span style={{ color: "var(--nw-card-1)" }}>&ge;{driftBand.toFixed(2)}</span>
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>10-quantile bin boundaries</div>
         </div>
       </div>
 
-      {/* ── HIGHEST PSI OVER TIME TIMELINE ────────────────────── */}
+      {/* ── HIGHEST PSI OVER TIME TIMELINE (RECHARTS) ─────────── */}
       <div
         style={{
           backgroundColor: "var(--nw-bg-panel)",
@@ -208,80 +198,121 @@ export default function DriftMonitorPage() {
               Highest Feature PSI Over Time
             </div>
             <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-              Dashed line marks critical threshold PSI 0.25
+              Dashed reference lines mark Warning ({warnBand.toFixed(2)}) and Critical Drift ({driftBand.toFixed(2)}) thresholds
             </div>
           </div>
         </div>
 
-        {/* Timeline SVG */}
-        <div style={{ width: "100%", height: "140px", backgroundColor: "#111114", borderRadius: "16px", padding: "16px" }}>
-          <svg viewBox="0 0 600 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
-            {/* Threshold Line at 0.25 */}
-            {(() => {
-              const y025 = 100 - (0.25 / maxPsi) * 90;
-              return (
-                <>
-                  <line
-                    x1="0"
-                    y1={y025}
-                    x2="600"
-                    y2={y025}
-                    stroke="var(--nw-card-1)"
-                    strokeDasharray="4 4"
-                    strokeWidth="1.5"
-                  />
-                  <text
-                    x="590"
-                    y={y025 - 4}
-                    textAnchor="end"
-                    fill="var(--nw-card-1)"
-                    fontFamily="var(--font-sans)"
-                    fontSize="9"
-                    fontWeight="700"
-                  >
-                    PSI 0.25 (RETRAIN THRESHOLD)
-                  </text>
-                </>
-              );
-            })()}
-
-            {/* Bars */}
-            {history.map((val, idx) => {
-              const xStep = 600 / Math.max(history.length, 12);
-              const x = idx * xStep + 4;
-              const barWidth = Math.max(xStep - 6, 8);
-              const height = (val / maxPsi) * 90;
-              const y = 100 - height;
-              const isOverDrift = val >= 0.25;
-              const isOverWarning = val >= 0.10;
-
-              return (
-                <rect
-                  key={idx}
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={height}
-                  rx="4"
-                  fill={
-                    isOverDrift
-                      ? "var(--nw-card-1)"
-                      : isOverWarning
-                      ? "var(--nw-card-2)"
-                      : "var(--nw-card-3)"
-                  }
+        <div style={{ width: "100%", height: "210px", backgroundColor: "#111114", borderRadius: "16px", padding: "16px", position: "relative" }}>
+          {history.length === 0 ? (
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--nw-text-muted)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "12px",
+                textAlign: "center",
+              }}
+            >
+              {!drift
+                ? "Backend API unreachable. Start `make api` to monitor live distribution PSI."
+                : `Warming up reference window (${drift.flows_seen} / 500 benign flows observed)...`}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={history} margin={{ top: 10, right: 16, left: -12, bottom: 0 }}>
+                <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="sample"
+                  stroke="#8A8A93"
+                  tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                  axisLine={{ stroke: "#26262C" }}
+                  tickLine={false}
                 />
-              );
-            })}
-          </svg>
+                <YAxis
+                  domain={[0, (dataMax: number) => Math.max(Number((dataMax * 1.15).toFixed(2)), 0.35)]}
+                  stroke="#8A8A93"
+                  tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <ReferenceLine
+                  y={warnBand}
+                  stroke="#A78BFA"
+                  strokeDasharray="3 3"
+                  label={{
+                    value: `WARN (${warnBand.toFixed(2)})`,
+                    position: "insideTopRight",
+                    fill: "#A78BFA",
+                    fontSize: 10,
+                  }}
+                />
+                <ReferenceLine
+                  y={driftBand}
+                  stroke="#F4A93E"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: `DRIFT (${driftBand.toFixed(2)})`,
+                    position: "insideTopRight",
+                    fill: "#F4A93E",
+                    fontSize: 10,
+                  }}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const pt = payload[0].payload as HistoryPoint;
+                    return (
+                      <div
+                        style={{
+                          backgroundColor: "#17171B",
+                          border: "1px solid #2E2E38",
+                          borderRadius: "12px",
+                          padding: "8px 12px",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
+                          {pt.sample}
+                        </div>
+                        <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF", marginTop: "2px" }}>
+                          Max PSI: {pt.psi.toFixed(4)}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="psi" radius={[6, 6, 0, 0]} maxBarSize={28}>
+                  {history.map((entry, idx) => (
+                    <Cell
+                      key={idx}
+                      fill={
+                        entry.psi >= driftBand
+                          ? "#F4A93E"
+                          : entry.psi >= warnBand
+                          ? "#A78BFA"
+                          : "#C7DB6E"
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
-        <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--nw-text-muted)" }}>
-          {drift.recommendation}
-        </div>
+        {drift?.recommendation && (
+          <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--nw-text-muted)" }}>
+            {drift.recommendation}
+          </div>
+        )}
       </div>
 
-      {/* ── TOP MONITORED FEATURES TABLE ──────────────────────── */}
+      {/* ── TOP MONITORED FEATURES CHART + TABLE ──────────────── */}
       <div
         style={{
           backgroundColor: "var(--nw-bg-panel)",
@@ -296,6 +327,81 @@ export default function DriftMonitorPage() {
           Comparing current 5,000-flow window against training reference quantile bins
         </div>
 
+        {topFeatures.length > 0 && (
+          <div
+            style={{
+              width: "100%",
+              height: `${Math.max(180, topFeatures.length * 42)}px`,
+              backgroundColor: "#111114",
+              borderRadius: "16px",
+              padding: "16px",
+              marginBottom: "20px",
+            }}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topFeatures} layout="vertical" margin={{ top: 6, right: 20, left: 10, bottom: 6 }}>
+                <CartesianGrid stroke="#26262C" strokeDasharray="3 3" horizontal={false} />
+                <XAxis
+                  type="number"
+                  domain={[0, (dataMax: number) => Math.max(Number((dataMax * 1.15).toFixed(2)), 0.35)]}
+                  stroke="#8A8A93"
+                  tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
+                  axisLine={{ stroke: "#26262C" }}
+                  tickLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="feature"
+                  width={155}
+                  stroke="#F5F5F7"
+                  tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <ReferenceLine x={warnBand} stroke="#A78BFA" strokeDasharray="3 3" />
+                <ReferenceLine x={driftBand} stroke="#F4A93E" strokeDasharray="4 4" />
+                <Tooltip
+                  cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const row = payload[0].payload as { feature: string; psi: number };
+                    return (
+                      <div
+                        style={{
+                          backgroundColor: "#17171B",
+                          border: "1px solid #2E2E38",
+                          borderRadius: "12px",
+                          padding: "8px 12px",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: "#FFFFFF" }}>{row.feature}</div>
+                        <div style={{ fontFamily: "var(--font-mono)", color: "#A78BFA", marginTop: "2px" }}>
+                          PSI: {row.psi.toFixed(4)}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="psi" radius={[0, 6, 6, 0]} barSize={16}>
+                  {topFeatures.map((f) => (
+                    <Cell
+                      key={f.feature}
+                      fill={
+                        f.psi >= driftBand
+                          ? "#F4A93E"
+                          : f.psi >= warnBand
+                          ? "#A78BFA"
+                          : "#C7DB6E"
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
@@ -307,38 +413,46 @@ export default function DriftMonitorPage() {
               </tr>
             </thead>
             <tbody>
-              {(drift.top_features ?? []).map((f) => {
-                const isD = f.psi >= 0.25;
-                const isW = f.psi >= 0.10 && f.psi < 0.25;
+              {topFeatures.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ padding: "20px 14px", color: "var(--nw-text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }}>
+                    No feature PSI measurements available yet. At least 500 unflagged benign flows are required to compute quantile bin shifts.
+                  </td>
+                </tr>
+              ) : (
+                topFeatures.map((f) => {
+                  const isD = f.psi >= driftBand;
+                  const isW = f.psi >= warnBand && f.psi < driftBand;
 
-                return (
-                  <tr key={f.feature} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
-                    <td style={{ padding: "12px 14px", fontWeight: 600 }}>{f.feature}</td>
-                    <td
-                      className="mono"
-                      style={{
-                        padding: "12px 14px",
-                        fontWeight: 700,
-                        color: isD ? "var(--nw-card-1)" : isW ? "var(--nw-card-2)" : "var(--nw-card-3)",
-                      }}
-                    >
-                      {f.psi.toFixed(3)}
-                    </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <span className={`nw-pill ${isD ? "nw-pill-amber" : isW ? "nw-pill-purple" : "nw-pill-lime"}`}>
-                        {isD ? "CRITICAL DRIFT" : isW ? "WARNING SHIFT" : "STABLE"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>
-                      {isD
-                        ? "Distribution shape significantly displaced from baseline"
-                        : isW
-                        ? "Moderate deviation observed in upper quantiles"
-                        : "Within acceptable quantile variation bounds"}
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr key={f.feature} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
+                      <td style={{ padding: "12px 14px", fontWeight: 600 }}>{f.feature}</td>
+                      <td
+                        className="mono"
+                        style={{
+                          padding: "12px 14px",
+                          fontWeight: 700,
+                          color: isD ? "var(--nw-card-1)" : isW ? "var(--nw-card-2)" : "var(--nw-card-3)",
+                        }}
+                      >
+                        {f.psi.toFixed(3)}
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <span className={`nw-pill ${isD ? "nw-pill-amber" : isW ? "nw-pill-purple" : "nw-pill-lime"}`}>
+                          {isD ? "CRITICAL DRIFT" : isW ? "WARNING SHIFT" : "STABLE"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>
+                        {isD
+                          ? "Distribution shape significantly displaced from baseline"
+                          : isW
+                          ? "Moderate deviation observed in upper quantiles"
+                          : "Within acceptable quantile variation bounds"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

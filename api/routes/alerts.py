@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Any, List, Optional
+try:
+    from sqlalchemy.orm import Session
+except ImportError:
+    Session = Any  # type: ignore[misc,assignment]
 
 from ..schemas import Alert, Feedback
 from ..db.session import get_db
