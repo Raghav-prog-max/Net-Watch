@@ -34,13 +34,26 @@ export interface Alert {
   model_version: string;
 }
 
+export interface DriftHistoryPoint {
+  flows_scored: number;
+  timestamp: string;
+  status: DriftStatus["status"];
+  max_psi: number | null;        // null while the window was still warming up
+  top_feature: string | null;
+  alert_rate: number | null;
+  unexplained_alert_rate: number | null;
+}
+
 export interface DriftStatus {
   status: "stable" | "warning" | "drift" | "warming_up";
   top_features?: { feature: string; psi: number }[];
   recommendation?: string;
   alert_rate?: number;
   flows_seen: number;
+  flows_scored?: number;
   bands?: { warning: number; drift: number };
+  // one snapshot every `history_every` flows scored (ml/config.yaml), oldest first
+  history?: DriftHistoryPoint[];
 }
 
 export interface ClassMetrics {
