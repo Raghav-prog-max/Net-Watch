@@ -207,18 +207,18 @@ export default function StitchLayout() {
 </div>
 {/*  High-Fidelity Monochromatic Technical SVG Area Graph  */}
 <div className="relative w-full h-64 mt-1">
-<svg className="w-full h-full overflow-visible" fill="none" preserveaspectratio="none" viewBox="0 0 800 240">
+<svg className="w-full h-full overflow-visible" fill="none" preserveAspectRatio="none" viewBox="0 0 800 240">
 <defs>
 {/*  White/Silver Area Gradient  */}
-<lineargradient id="whiteGlow" x1="0" x2="0" y1="0" y2="1">
+<linearGradient id="whiteGlow" x1="0" x2="0" y1="0" y2="1">
 <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.25"></stop>
 <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.0"></stop>
-</lineargradient>
+</linearGradient>
 {/*  Dark Slate Area Gradient  */}
-<lineargradient id="slateGlow" x1="0" x2="0" y1="0" y2="1">
+<linearGradient id="slateGlow" x1="0" x2="0" y1="0" y2="1">
 <stop offset="0%" stop-color="#8E909B" stop-opacity="0.18"></stop>
 <stop offset="100%" stop-color="#8E909B" stop-opacity="0.0"></stop>
-</lineargradient>
+</linearGradient>
 </defs>
 {/*  Gridlines  */}
 <line stroke="rgba(255, 255, 255, 0.06)" strokeDasharray="3 3" x1="0" x2="800" y1="40" y2="40"></line>
