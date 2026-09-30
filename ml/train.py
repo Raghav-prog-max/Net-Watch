@@ -258,8 +258,10 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     budget = cfg["train"]["fpr_budget"]
     det_test = det.score(Xt)
     test_benign = (known_test["family"] == "Benign").to_numpy()
-    report["system"] = system.summary(test_benign, attack_score >= thr["threshold"],
+    sys_summary = system.summary(test_benign, attack_score >= thr["threshold"],
                                       det.is_anomalous(det_test), budget)
+    sys_summary["macro_f1"] = report["system"]["macro_f1"]
+    report["system"] = sys_summary
 
     base_proba = base.predict_proba(Xt)
     base_score, _ = clf_mod.attack_score(base, Xt)
