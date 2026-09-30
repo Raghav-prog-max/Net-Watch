@@ -5,10 +5,14 @@
 | Signal | How | When |
 |---|---|---|
 | Feature distribution shift | Population Stability Index (PSI) per feature | Every 5,000 benign-looking flows |
-| Feature distribution shift | KS statistic, top 15 features by KS (reported in `ks`, not used in the status) | Every drift window |
+| Feature distribution shift | KS statistic on the classifier's 15 most important features (reported in `ks`, not used in the status) | Every drift window |
 | Unexplained alert rate | Share of Unknown alerts among flows the classifier did **not** name as a known attack, rolling over the last 5,000 such flows | Continuously |
 | Alert rate | Share of all flows that alerted (reported, not used in the status) | Continuously |
-| Analyst feedback | Share of alerts marked false_positive | Per session (not yet in the status) |
+| Predicted family mix | Share of each family among alerts over the same window (`family_mix`) | Continuously |
+| Analyst feedback | Share of the last 500 alerts marked false_positive (`fp_share`; untriaged alerts count in the denominator) | On every request (not used in the status) |
+| History | One snapshot every 1,000 flows scored, last 100 kept (`history`: status, max PSI, alert rates, family mix) | Continuously |
+
+All thresholds and sizes are read from `drift:` in `ml/config.yaml`.
 
 PSI bins come from 10 quantile edges computed on benign validation traffic at
 training time and saved to `models/v1/reference_stats.json`.
@@ -18,9 +22,9 @@ read as distribution drift.
 The alert-rate **baseline** is measured by `make train`: benign validation flows
 go through the same decision the API makes, and the share raised as Unknown is
 saved to `models/v1/thresholds.json` as `benign_unexplained_alert_rate`. It is
-about 1%, because the anomaly detector is calibrated to flag 1% of benign
-traffic. (An earlier version compared against the 0.5% FPR budget, so ordinary
-traffic already read as "drift".)
+about 0.1%, because the anomaly detector is calibrated to flag 0.1% of benign
+traffic (its share of the 0.5% false-alert budget). An earlier version compared
+against the 0.5% FPR budget, so ordinary traffic already read as "drift".
 
 ## Status rules
 
