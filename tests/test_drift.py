@@ -104,6 +104,23 @@ def test_drift_scenario_ramps_rather_than_stepping():
     assert len(np.unique(np.round(f, 4))) > 50, "a ramp, not a handful of steps"
 
 
+def test_drift_scenario_holds_in_the_warning_band_before_the_peak():
+    """A straight ramp went stable -> drift with no Warning in between: the
+    unexplained alert rate passed 2x its baseline as soon as PSI passed 0.10.
+    The scenario now holds a moderate shift first, and that hold has to read
+    as Warning on its own -- not Stable, and not already Drift."""
+    df = _frame()
+    out = pick(df, "drift", limit=2000)
+    f = _factors(df, out, "Flow Duration")
+    hold = f[250:1000]                       # after the climb, before the ramp
+    assert np.allclose(hold, hold[0]), "the moderate shift should be held flat"
+    assert 1.3 < hold[0] < 2.0
+
+    ref = reference_stats(df[SHIFTED].to_numpy(), SHIFTED)
+    got = window_psi(out[SHIFTED].to_numpy()[250:1000], SHIFTED, ref)
+    assert status(got)["status"] == "warning", f"the hold reads as {got}"
+
+
 def test_drift_scenario_respects_the_limit():
     """The ramp has to fit inside what the replayer actually sends, or it is cut
     off during the baseline and never reaches drift."""

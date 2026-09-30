@@ -41,8 +41,9 @@ def pick(df, scenario, limit=None):
         # A gradual shift in normal traffic, not an attack: the detector should
         # stay mostly quiet while the drift monitor notices the distribution move.
         #
-        # Three phases, in stream order, so the status walks stable -> warning ->
-        # drift within one replay: hold the baseline, ramp, then hold the shift.
+        # Phases, in stream order, so the status walks stable -> warning -> drift
+        # within one replay: a short baseline, a quick climb to a moderate shift,
+        # a hold there, then a ramp to the peak and a hold at it.
         #
         # The peak is 3x because smaller shifts do not cross the standard PSI
         # bands this monitor uses. Flow features span orders of magnitude, so a
@@ -50,22 +51,36 @@ def pick(df, scenario, limit=None):
         # PSI ~0.08 (still "stable"), 1.6x ~0.23 ("warning"), 2x ~0.47 ("drift").
         # The previous 1.2-1.4x was also one scalar per column -- an instant step,
         # not the gradual shift this comment always described.
+        #
+        # The hold at 1.45x is what makes Warning visible. Drift is declared when
+        # PSI is at least Warning *and* the unexplained alert rate is >= 2x its
+        # training baseline (docs/drift_strategy.md). That baseline is ~0.1%, and
+        # shifted flows raise it, so a straight ramp crossed 2x at the same moment
+        # PSI crossed 0.10 and the status went stable -> drift. With every flow at
+        # 1.4-1.45x, PSI sits at ~0.11-0.13 while the rate stays under 2x; at 1.5x
+        # the rate reaches 2x within 3000 flows. Measured end to end at --limit
+        # 5000: stable, stable, warning, drift, drift (one snapshot per 1000).
         out = df[df["family"] == "Benign"].sample(frac=0.5, random_state=3).copy()
         # Truncate before building the ramp, not after: the replayer only sends
         # --limit flows (5000 by default), and a ramp laid across all the sampled
         # rows would be cut off during the hold phase and never reach drift.
         if limit:
             out = out.iloc[:limit]
-        # Phases are weighted toward the shifted level on purpose. The drift window
+        # Phases are weighted toward the shifted levels on purpose. The drift window
         # holds up to 5000 flows and a demo replay is no longer than that, so
         # nothing ages out: the unshifted opening stays in the window and dilutes
-        # PSI for the whole run. With an even split the status only crossed into
-        # "drift" on the final batch at --limit 5000, and never at --limit 2000.
-        n, peak = len(out), 3.0
-        hold, ramp = n // 5, (3 * n) // 10
+        # PSI for the whole run. It is kept short (5%, at least 100 flows) so the
+        # moderate hold can reach the warning band.
+        n, warn_level, peak = len(out), 1.45, 3.0
+        hold = max(100, n // 20)                # unshifted baseline
+        climb = hold + n // 20                  # quick climb to the moderate shift
+        plateau = n // 2                        # hold it: PSI in the warning band
+        ramp = plateau + n // 5                 # ramp to the peak, then hold it
         factor = np.ones(n)
-        factor[hold:hold + ramp] = np.linspace(1.0, peak, ramp)
-        factor[hold + ramp:] = peak
+        factor[hold:climb] = np.linspace(1.0, warn_level, climb - hold)
+        factor[climb:plateau] = warn_level
+        factor[plateau:ramp] = np.linspace(warn_level, peak, ramp - plateau)
+        factor[ramp:] = peak
         shift_cols = [c for c in ("Flow Duration", "Flow IAT Mean", "Flow Bytes/s",
                                   "Total Fwd Packets") if c in out.columns]
         for c in shift_cols:
