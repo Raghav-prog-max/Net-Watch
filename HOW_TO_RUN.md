@@ -92,7 +92,9 @@ make test
 `make nslkdd` trains a quick Random Forest on NSL-KDD and recomputes every number
 in `ml/evaluate/metrics.py` a second way (from raw counts and ranks); it fails if
 any of them disagree. It needs `KDDTrain+.txt` and `KDDTest+.txt` in
-`data/raw/nsl-kdd/` — not in the repository, fetch them yourself. The result goes to
+`data/raw/nsl-kdd/` — not in the repository. The official UNB page no longer serves
+them; we used the mirror at https://github.com/Jehuty4949/NSL_KDD (19.1 MB + 3.4 MB).
+The result goes to
 `reports/nslkdd_check.json`. The tests already run the same check on a small
 fixture, so CI covers the code without the dataset.
 

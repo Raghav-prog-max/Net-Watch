@@ -69,6 +69,34 @@ between the two cut-offs (both chosen on validation, nothing retrained), with
 false alerts, macro-F1, never-trained families alerted and LOFO recall for each.
 The team chose 0.4% + 0.1% on 30 Sep 2026 from this table; the model card prints it.
 
+## Metrics code check on NSL-KDD (handbook t4)
+
+Before trusting `ml/evaluate/metrics.py` on CICIDS2017, `make nslkdd`
+(`scripts/nslkdd_check.py`) trains a quick Random Forest (100 trees) on NSL-KDD.
+It recomputes every number `metrics.summarise` reports a second way: per-class
+precision, recall and F1, macro-F1, FPR and accuracy from raw counts; ROC-AUC
+from Mann-Whitney ranks; PR-AUC from tie-grouped average precision; and the
+confusion-matrix row sums. **Run on 30 Sep 2026: every number agreed on both
+test sets.**
+
+The model is not NetWatch's and its scores are not results we report. They are
+shown because they make the same point our evaluation is built around:
+
+| Scored on | Macro-F1 | False alerts / 10k benign | Recall DoS / Probe / R2L / U2R |
+| --- | ---: | ---: | --- |
+| 20% holdout of KDDTrain+ (same file as training) | 0.962 | 5.2 | 1.000 / 0.995 / 0.955 / 0.800 |
+| KDDTest+ (17 attack types absent from training) | 0.491 | 264.6 | 0.816 / 0.604 / 0.035 / 0.005 |
+
+A holdout drawn from the training file flatters the model; on a test set with
+new attack types, R2L and U2R recall collapse and false alerts rise fifty-fold.
+This is why NetWatch splits by time block, runs leave-one-family-out tests, and
+adds an anomaly detector.
+
+Data: `KDDTrain+.txt` (125,973 rows) and `KDDTest+.txt` (22,544 rows) from the
+GitHub mirror [Jehuty4949/NSL_KDD](https://github.com/Jehuty4949/NSL_KDD); the
+official UNB download page says the dataset is no longer available. Row counts
+match the published NSL-KDD files.
+
 ## What we do not report
 
 No bare accuracy figure is reported anywhere, including the pitch deck.
