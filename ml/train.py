@@ -112,9 +112,26 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
         is_fb = df["feedback"].fillna(False).astype(bool)
         feedback, df = df[is_fb].drop(columns="feedback"), df[~is_fb].drop(columns="feedback")
     df = df[df["family"].isin(TRAIN_FAMILIES + ["Infiltration", "Heartbleed"])]
+    
+    # Hold out Monday for drift evaluation (Benign traffic only)
+    drift = None
+    if "day" in df.columns:
+        is_drift = df["day"] == "Monday"
+        drift = df[is_drift].reset_index(drop=True)
+        df = df[~is_drift].reset_index(drop=True)
+
     df = add_blocks(df, cfg["split"]["block_minutes"])
 
     train, val, test = make_splits(df, cfg["split"]["test_size"], cfg["split"]["random_state"])
+    
+    splits_dir = Path(cfg["paths"]["splits"])
+    splits_dir.mkdir(parents=True, exist_ok=True)
+    train.to_pickle(splits_dir / "train.pkl")
+    val.to_pickle(splits_dir / "val.pkl")
+    test.to_pickle(splits_dir / "test.pkl")
+    if drift is not None and not drift.empty:
+        drift.to_pickle(splits_dir / "drift.pkl")
+
     features = feature_columns(train)
 
     # Rare families are never trained on. They exist to test the anomaly detector.

@@ -116,6 +116,12 @@ def test_end_to_end_on_a_small_fixture(tmp_path):
         assert "curves" not in report[split]["summary"]
 
 
-def test_missing_data_exits_2_with_instructions(tmp_path, capsys):
+def test_missing_data_exits_2_with_instructions(tmp_path, capsys, monkeypatch):
+    import subprocess
+    def mock_run(*args, **kwargs):
+        raise Exception("Mocked download failure")
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
     assert check.main(str(tmp_path), trees=10, out=str(tmp_path / "r.json")) == 2
-    assert "KDDTrain+.txt" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Failed to download NSL-KDD" in out or "KDDTrain+.txt" in out

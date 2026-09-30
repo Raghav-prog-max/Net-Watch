@@ -21,7 +21,7 @@ paths:
 
 # ── Kaggle dataset ────────────────────────────────────────────────────────────
 kaggle:
-  dataset: "cicdataset/cicids2017"      # <owner>/<dataset-slug> on Kaggle
+  dataset: "shadman1028/cicids2017-official-flow-feature-csv-files"      # <owner>/<dataset-slug> on Kaggle
   expected_files:                        # presence check before download
     - "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv"
     - "Monday-WorkingHours.pcap_ISCX.csv"
