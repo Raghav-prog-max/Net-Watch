@@ -12,7 +12,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from ml.data.split import downsample_benign
-from ml.evaluate import metrics
+from ml.evaluate import metrics, system
 from ml.evaluate.thresholds import pick_threshold
 from ml.features.select import matrix
 from ml.models import classifier as clf_mod
@@ -72,7 +72,7 @@ def _run_once(df, features, cfg, rs):
     model.fit(matrix(train, features), train["family"])
 
     val_score, _ = clf_mod.attack_score(model, matrix(val, features))
-    thr = pick_threshold(val["family"] != "Benign", val_score, cfg["train"]["fpr_budget"])
+    thr = pick_threshold(val["family"] != "Benign", val_score, system.classifier_budget(cfg))
 
     X = matrix(test, features)
     proba = model.predict_proba(X)

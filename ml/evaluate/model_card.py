@@ -15,6 +15,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from ml.evaluate.system import PREVIOUS_SPLIT
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -143,12 +145,29 @@ def render():
     # ------------------------------------------------------------------ performance
     w("## Performance")
     w("")
-    w(f"Macro-F1 **{main['macro_f1']:.3f}** across benign and {len(attacks)} attack families. "
-      f"The alert threshold ({thr['attack_threshold']:.4f}) was chosen on validation to stay "
-      f"within a false-positive budget of {pct(budget)}; on the test set it produced "
-      f"**{main['false_alerts_per_10k_benign_flows']:.1f} false alerts per 10,000 benign "
-      f"flows** ({pct(realised, 2)})"
-      + (", slightly over budget." if realised > budget else ", within budget."))
+    sysr = m.get("system")
+    w(f"Macro-F1 **{main['macro_f1']:.3f}** across benign and {len(attacks)} attack families.")
+    w("")
+    if sysr:
+        # the analyst's workload is the union of both models, not the classifier alone
+        over = not sysr["within_budget"]
+        w(f"**False alerts: {sysr['false_alerts_per_10k_benign_flows']:.1f} per 10,000 benign "
+          f"flows** ({pct(sysr['false_positive_rate'], 2)}) for the full system on the test set, "
+          + (f"**over** the {pct(budget)} budget ({budget * 10000:g} per 10,000). "
+             if over else f"within the {pct(budget)} budget ({budget * 10000:g} per 10,000). ")
+          + f"The budget is split between the two models, both cut-offs chosen on validation: "
+          f"{sysr['from_classifier_per_10k']:.1f} come from the classifier, whose threshold "
+          f"({thr['attack_threshold']:.4f}) keeps it within "
+          f"{pct(thr.get('classifier_fpr_budget', budget), 2)}; "
+          f"{sysr['from_detector_only_per_10k']:.1f} come from the anomaly detector alone, "
+          f"calibrated to flag {pct(cfg['anomaly']['benign_flag_rate'], 2)} of benign traffic. "
+          "An alert from either model reaches the analyst.")
+    else:
+        w(f"The alert threshold ({thr['attack_threshold']:.4f}) was chosen on validation to "
+          f"stay within a false-positive budget of {pct(budget)}; on the test set the "
+          f"classifier produced **{main['false_alerts_per_10k_benign_flows']:.1f} false alerts "
+          f"per 10,000 benign flows** ({pct(realised, 2)}). This report predates the "
+          "full-system measurement: retrain to include the anomaly detector's alerts.")
     w("")
     w("No accuracy figure is reported: about 80% of traffic is benign, so a model that "
       "never alerts would score about 80%.")
@@ -192,11 +211,43 @@ def render():
           "Unknown** rather than under a known family's name.")
         w("")
 
+    trade = m.get("budget_trade_off")
+    if trade:
+        w("### Splitting the false-alert budget between the two models")
+        w("")
+        w("The same models at other cut-offs, both chosen on validation; nothing is retrained. "
+          "The first row is the configuration in use (`train.classifier_fpr_budget` and "
+          "`anomaly.benign_flag_rate` in `ml/config.yaml`). Each row trades false alerts "
+          "against catching attacks the classifier has never seen.")
+        w("")
+        lofo_fams = list(trade[0].get("lofo_caught_by_full_system", {}))
+        w("| Classifier budget | Detector flag rate | False alerts / 10k (val) | "
+          "False alerts / 10k (test) | Macro-F1 | Never-trained families alerted | "
+          + "".join(f"LOFO {f} | " for f in lofo_fams))
+        w("| ---: | ---: | ---: | ---: | ---: | ---: | " + "---: | " * len(lofo_fams))
+        for r in trade:
+            previous = (r["classifier_budget"], r["detector_flag_rate"]) == PREVIOUS_SPLIT
+            mark = " (in use)" if r["configured"] else " (before 30 Sep)" if previous else ""
+            nov_a = pct(r["novel_flows_alerted"]) if "novel_flows_alerted" in r else "—"
+            det_rate = pct(r["detector_flag_rate"], 2) if r["detector_flag_rate"] else "off"
+            w(f"| {pct(r['classifier_budget'], 2)}{mark} | {det_rate} | "
+              f"{r['val_false_alerts_per_10k']:.1f} | {r['test_false_alerts_per_10k']:.1f}"
+              + ("" if r["within_budget"] else " (over)")
+              + f" | {r['macro_f1']:.3f} | {nov_a} | "
+              + "".join(f"{pct(r['lofo_caught_by_full_system'][f])} | " for f in lofo_fams))
+        w("")
+
     # ------------------------------------------------------------------ failure modes
     w("## Failure modes")
     w("")
     w("Observed on the test set, most severe first.")
     w("")
+    if sysr and not sysr["within_budget"]:
+        w(f"- **The system is over its false-alert budget.** Analysts would see "
+          f"{sysr['false_alerts_per_10k_benign_flows']:.1f} false alerts per 10,000 benign flows "
+          f"against a budget of {budget * 10000:g}, because the anomaly detector's flags come "
+          "on top of the classifier's. The table above shows splits of the budget that stay "
+          "within it.")
     weak_lofo = None
     if lofo:
         weak_lofo = min((r for r in lofo if "note" not in r),
@@ -309,10 +360,14 @@ def render():
     w("At Drift the dashboard recommends retraining. A person approves it; nothing retrains "
       "on its own.")
     w("")
-    w("**Not yet built** — the handbook specifies these as well: a KS test on the top 15 "
-      "features; alert-rate rules (Warning above 1.5x baseline, Drift above 2x); tracking the "
-      "share of alerts analysts mark as false positives; and v2 retraining, promoted only if "
-      "macro-F1 improves and the false-positive rate stays within budget.")
+    w(f"A KS test runs on {d.get('top_features_ks', 15)} features, and the rate of Unknown "
+      "alerts is compared with its benign-validation baseline: Warning above "
+      f"{d.get('alert_rate_warning_multiplier', 1.5)}x, Drift above "
+      f"{d.get('alert_rate_drift_multiplier', 2.0)}x only when PSI has moved too. Retraining "
+      "(`make retrain`) adds analyst labels and is promoted only by a person, if macro-F1 "
+      "improves and the full system stays within the false-alert budget.")
+    w("")
+    w("**Not yet built:** tracking the share of alerts analysts mark as false positives.")
     w("")
 
     # ------------------------------------------------------------------ reproduce

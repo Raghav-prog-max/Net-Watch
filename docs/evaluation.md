@@ -49,10 +49,25 @@ raw counts one click away.
 
 ## Threshold selection
 
-The attack threshold is chosen on the validation set at the highest TPR
-consistent with an FPR budget of 0.5% (50 false alerts per 10,000 benign
-flows). The anomaly threshold is set so ~1% of benign validation flows are
-flagged.
+The false-alert budget is 0.5% (50 false alerts per 10,000 benign flows) for
+the whole system, split between the two models (`ml/config.yaml`): the attack
+threshold is chosen on the validation set at the highest TPR within 0.4%
+(`train.classifier_fpr_budget`), and the anomaly threshold flags 0.1% of benign
+validation flows (`anomaly.benign_flag_rate`).
+
+An alert reaches the analyst when **either** model objects, so the budget is
+judged on the full system, not the classifier alone. `reports/metrics.json`
+carries both: `main` is the classifier, `system` is what analysts see (with its
+split into classifier and detector-only alerts), and the model card leads with
+`system`. On synthetic data the previous setting (classifier 0.5%, detector 1%
+on top) gave 109 false alerts per 10,000 benign flows, over the budget of 50;
+the 0.4% + 0.1% split gives 44.7, at macro-F1 0.916 and 95% LOFO recall on
+PortScan (99.7% before).
+
+`budget_trade_off` shows the same models at other splits of the 0.5% budget
+between the two cut-offs (both chosen on validation, nothing retrained), with
+false alerts, macro-F1, never-trained families alerted and LOFO recall for each.
+The team chose 0.4% + 0.1% on 30 Sep 2026 from this table; the model card prints it.
 
 ## What we do not report
 

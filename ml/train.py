@@ -9,12 +9,13 @@ import joblib
 import numpy as np
 import pandas as pd
 import yaml
+from sklearn.metrics import f1_score
 
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
 from ml.data.load import load_processed
 from ml.data.split import add_blocks, make_splits, downsample_benign
 from ml.drift.monitor import reference_stats
-from ml.evaluate import lofo, metrics, naive
+from ml.evaluate import lofo, metrics, naive, system
 from ml.evaluate.thresholds import pick_threshold
 from ml.features.select import feature_columns, matrix
 from ml.models import classifier as clf_mod
@@ -152,7 +153,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     # --- threshold from the false-positive budget -------------------------
     val_score, _ = clf_mod.attack_score(model, matrix(val, features))
-    thr = pick_threshold(val["family"] != "Benign", val_score, cfg["train"]["fpr_budget"])
+    thr = pick_threshold(val["family"] != "Benign", val_score, system.classifier_budget(cfg))
     print(f"threshold {thr['threshold']:.4f} at FPR {thr.get('fpr_at_threshold')}")
 
     # --- anomaly detector, benign traffic only ----------------------------
@@ -205,6 +206,15 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
                                   attack_score >= thr["threshold"],
                                   proba, model.classes_),
     }
+
+    # --- what the analyst sees: classifier OR detector ---------------------
+    # `main` above is the classifier alone. combine.decide also alerts on every
+    # flow the detector flags, so the FPR budget is judged on the union.
+    budget = cfg["train"]["fpr_budget"]
+    det_test = det.score(Xt)
+    test_benign = (known_test["family"] == "Benign").to_numpy()
+    report["system"] = system.summary(test_benign, attack_score >= thr["threshold"],
+                                      det.is_anomalous(det_test), budget)
 
     base_proba = base.predict_proba(Xt)
     base_score, _ = clf_mod.attack_score(base, Xt)
@@ -266,9 +276,46 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
               f"time block with training"
               + ("" if nc["inflated"] else "; no inflation measured"))
 
+    budget_splits = system.splits((system.classifier_budget(cfg), cfg["anomaly"]["benign_flag_rate"]))
     if not skip_lofo:
         print("running leave-one-family-out experiments...")
-        report["lofo"] = lofo.run_all(train, val, test, features, LOFO_FAMILIES, cfg)
+        report["lofo"] = lofo.run_all(train, val, test, features, LOFO_FAMILIES, cfg,
+                                      budget_splits)
+
+    # --- one budget, split between the two models --------------------------
+    # Only the two cut-offs move (both chosen on validation); nothing is retrained.
+    # Which row to run is a decision for the team; the configured one is first.
+    val_is_attack = val["family"] != "Benign"
+    val_benign = ~val_is_attack.to_numpy()
+    val_det = det.score(matrix(val, features))
+    if len(novel):
+        n_score, _ = clf_mod.attack_score(model, Xn)
+        n_det = det.score(Xn)
+    trade_off = []
+    for i, split in enumerate(budget_splits):
+        t_clf, t_det = system.thresholds_for(split, val_is_attack, val_score, det)
+        val_alert = (val_score >= t_clf) | (val_det >= t_det)
+        s = system.summary(test_benign, attack_score >= t_clf, det_test >= t_det, budget)
+        row = {
+            "classifier_budget": split[0],
+            "detector_flag_rate": split[1],
+            "configured": i == 0,
+            "val_false_alerts_per_10k": round(float(val_alert[val_benign].mean()) * 10000, 1),
+            "test_false_alerts_per_10k": s["false_alerts_per_10k_benign_flows"],
+            "within_budget": s["within_budget"],
+            "macro_f1": round(float(f1_score(known_test["family"],
+                                             np.where(attack_score >= t_clf, fam, "Benign"),
+                                             average="macro", zero_division=0)), 4),
+            "known_attack_flows_alerted": s["attack_flows_alerted"],
+        }
+        if len(novel):
+            row["novel_flows_alerted"] = round(float(((n_score >= t_clf) | (n_det >= t_det)).mean()), 4)
+        if report.get("lofo"):
+            row["lofo_caught_by_full_system"] = {
+                r["family"]: r["budget_splits"][i]["caught_by_full_system"]
+                for r in report["lofo"] if "budget_splits" in r}
+        trade_off.append(row)
+    report["budget_trade_off"] = trade_off
 
     # --- artefacts --------------------------------------------------------
     out = Path(cfg["paths"]["model_dir"])
@@ -281,6 +328,8 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     json.dump({"attack_threshold": thr["threshold"],
                "anomaly_threshold": det.threshold,
                "fpr_budget": cfg["train"]["fpr_budget"],
+               "classifier_fpr_budget": system.classifier_budget(cfg),
+               "detector_flag_rate": cfg["anomaly"]["benign_flag_rate"],
                # baseline for the drift monitor's alert-rate rule (see above)
                "benign_unexplained_alert_rate": round(unexplained_rate, 5)},
               open(out / "thresholds.json", "w"), indent=2)
@@ -300,9 +349,11 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     name = "metrics.json" if not holdout else f"metrics-without-{holdout.lower()}.json"
     json.dump(report, open(rep_dir / name, "w"), indent=2)
 
-    print(f"macro-F1 {report['main']['macro_f1']} | "
-          f"false alerts per 10k benign flows "
-          f"{report['main']['false_alerts_per_10k_benign_flows']} | "
+    sysr = report["system"]
+    print(f"macro-F1 {report['main']['macro_f1']} | false alerts per 10k benign flows: "
+          f"full system {sysr['false_alerts_per_10k_benign_flows']} "
+          f"(classifier {sysr['from_classifier_per_10k']} + detector only "
+          f"{sysr['from_detector_only_per_10k']}; budget {sysr['budget_per_10k']:g}) | "
           f"{time.time() - started:.1f}s")
     print(f"wrote {out}/ and {rep_dir}/{name}")
     return report

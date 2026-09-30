@@ -65,6 +65,14 @@ def export_feedback(families):
         db.close()
 
 
+def false_alerts_per_10k(report):
+    """What analysts would see: the full system (classifier or detector). Reports
+    written before that was measured carry only the classifier's figure."""
+    if "system" in report:
+        return report["system"]["false_alerts_per_10k_benign_flows"]
+    return report["main"]["false_alerts_per_10k_benign_flows"]
+
+
 def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
     import pandas as pd
     import yaml
@@ -110,8 +118,7 @@ def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
         return
     budget = cfg["train"]["fpr_budget"] * 10000
     f1_1, f1_2 = v1["main"]["macro_f1"], v2["main"]["macro_f1"]
-    fa_1 = v1["main"]["false_alerts_per_10k_benign_flows"]
-    fa_2 = v2["main"]["false_alerts_per_10k_benign_flows"]
+    fa_1, fa_2 = false_alerts_per_10k(v1), false_alerts_per_10k(v2)
     print("\npromotion check (same test set):")
     print(f"  v1  macro-F1 {f1_1}  false alerts/10k {fa_1}")
     print(f"  v2  macro-F1 {f1_2}  false alerts/10k {fa_2}  (budget {budget:g})")
