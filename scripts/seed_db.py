@@ -76,6 +76,8 @@ def seed(count: int = 50, scenario: str = "known") -> None:
                 analyst_label=a["analyst_label"],
                 analyst_note=a["analyst_note"],
                 model_version=a["model_version"],
+                # so seeded alerts can be triaged into training rows too
+                features=a.get("features"),
             ))
         db.commit()
         print(f"seeded {len(alerts)} alerts from {len(flows)} flows (scenario={scenario!r})")

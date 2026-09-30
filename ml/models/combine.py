@@ -5,16 +5,6 @@ FAMILY_WEIGHT = {
     "BruteForce": 0.8, "Unknown": 0.8, "PortScan": 0.5,
 }
 
-MITRE = {
-    "DoS": ("Impact", "T1499 Endpoint Denial of Service"),
-    "DDoS": ("Impact", "T1498 Network Denial of Service"),
-    "PortScan": ("Discovery", "T1046 Network Service Discovery"),
-    "BruteForce": ("Credential Access", "T1110 Brute Force"),
-    "WebAttack": ("Initial Access", "T1190 Exploit Public-Facing Application"),
-    "Bot": ("Command and Control", "T1071 Application Layer Protocol"),
-    "Unknown": ("Unmapped", "Analyst to classify"),
-}
-
 ACTION = {
     "DoS": "Investigate the destination service; consider rate limiting",
     "DDoS": "Check upstream traffic volume; engage DDoS mitigation",
@@ -74,14 +64,12 @@ def decide(attack_score, family, confidence, anomaly_score, anomaly_pct,
     also_abnormal = bool(known and is_anomalous)
 
     score, level = severity(conf, anomaly_pct, shown)
-    tactic, technique = MITRE.get(shown, MITRE["Unknown"])
     out = {
         "prediction": {"family": shown, "confidence": round(float(conf), 3)},
         "anomaly_score": round(float(anomaly_score), 3),
         "is_novel": novel,
         "also_abnormal": also_abnormal,
         "severity": {"score": score, "level": level},
-        "mitre": {"tactic": tactic, "technique": technique},
         "recommended_action": ACTION.get(shown, ACTION["Unknown"]),
     }
     if mislabelled:

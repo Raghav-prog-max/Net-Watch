@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Literal, Optional, Any
 from datetime import datetime
 
 class FlowData(BaseModel):
@@ -76,7 +76,13 @@ class ScoreResponse(BaseModel):
 class AlertCreate(AlertBase):
     pass
 
+# Handbook status flow: open -> acknowledged -> escalated or false_positive -> resolved.
+# Any other value is refused (422); transitions are not enforced, an analyst may
+# mark a false positive straight from open.
+AlertStatus = Literal["open", "acknowledged", "escalated", "false_positive", "resolved"]
+
+
 class Feedback(BaseModel):
-    status: Optional[str] = None
+    status: Optional[AlertStatus] = None
     analyst_label: Optional[str] = None
     analyst_note: Optional[str] = None

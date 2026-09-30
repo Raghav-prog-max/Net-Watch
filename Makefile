@@ -11,7 +11,7 @@ PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK
 UVICORN := $(PYTHON) -m uvicorn
 PIP     := $(PYTHON) -m pip
 
-.PHONY: venv setup synthetic data train evaluate card dashboard-snapshot api demo seed retrain test quick holdout eda nslkdd clean
+.PHONY: venv setup synthetic data train evaluate card api demo seed retrain test quick holdout eda nslkdd clean
 
 venv:           ## create the virtual environment
 	$(PY_FALLBACK) -m venv .venv
@@ -36,9 +36,6 @@ card:           ## regenerate docs/model_card.md from reports/metrics.json
 evaluate:       ## regenerate model card + evaluation report (run after make train)
 	$(PYTHON) -m ml.evaluate.model_card
 	$(PYTHON) -m ml.evaluate.report
-
-dashboard-snapshot: ## copy reports/metrics.json into the dashboard offline fallback
-	$(PYTHON) scripts/dashboard_snapshot.py
 
 quick:          ## train without leave-one-family-out experiments
 	$(PYTHON) -m ml.train --config ml/config.yaml --skip-lofo
