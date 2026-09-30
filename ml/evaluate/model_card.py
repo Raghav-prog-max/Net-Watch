@@ -252,9 +252,9 @@ def render():
     w("")
     w("Observed on the test set, most severe first.")
     w("")
-    if sysr and not sysr["within_budget"]:
+    if sys_m and not sys_m.get("within_budget", True):
         w(f"- **The system is over its false-alert budget.** Analysts would see "
-          f"{sysr['false_alerts_per_10k_benign_flows']:.1f} false alerts per 10,000 benign flows "
+          f"{sys_m['false_alerts_per_10k_benign_flows']:.1f} false alerts per 10,000 benign flows "
           f"against a budget of {budget * 10000:g}, because the anomaly detector's flags come "
           "on top of the classifier's. The table above shows splits of the budget that stay "
           "within it.")

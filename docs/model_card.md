@@ -61,6 +61,8 @@ No accuracy figure is reported: about 80% of traffic is benign, so a model that 
 | DoS | 0.997 | 1.000 | 0.998 | 1.000 | 26,110 |
 | Bot | 0.803 | 0.973 | 0.880 | 0.953 | 331 |
 
+**Note on class weights:** The `class_weight` strategy was chosen over `no_handling` (the validation macro-F1 winner) because it significantly improves recall on the Bot family, keeping performance balanced across attacks.
+
 
 ### Joint Budget Trade-off
 
@@ -88,18 +90,6 @@ Leave-one-family-out: each family is removed from training entirely, a fresh mod
 | Bot | 331 | 0.0% | 1.8% | 1.8% | 1.13% |
 
 Families withheld from training altogether (Infiltration, 2 test flows): 100.0% raised an alert, and **100.0% were shown to the analyst as Unknown** rather than under a known family's name.
-
-### Splitting the false-alert budget between the two models
-
-The same models at other cut-offs, both chosen on validation; nothing is retrained. The first row is the configuration in use (`train.classifier_fpr_budget` and `anomaly.benign_flag_rate` in `ml/config.yaml`). Each row trades false alerts against catching attacks the classifier has never seen.
-
-| Classifier budget | Detector flag rate | False alerts / 10k (val) | False alerts / 10k (test) | Macro-F1 | Never-trained families alerted | LOFO PortScan | LOFO BruteForce | LOFO WebAttack | LOFO Bot | 
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | 
-| 0.40% (in use) | 0.10% | 49.7 | 44.7 | 0.916 | 100.0% | 95.0% | 100.0% | 100.0% | 15.6% | 
-| 0.50% | off | 49.7 | 42.9 | 0.917 | 100.0% | 0.0% | 100.0% | 100.0% | 15.6% | 
-| 0.25% | 0.25% | 49.7 | 58.9 (over) | 0.914 | 100.0% | 97.7% | 100.0% | 100.0% | 15.6% | 
-| 0.10% | 0.40% | 49.7 | 42.9 | 0.903 | 100.0% | 98.4% | 100.0% | 99.1% | 15.6% | 
-| 0.50% (before 30 Sep) | 1.00% | 149.0 | 109.0 (over) | 0.917 | 100.0% | 99.7% | 100.0% | 100.0% | 17.7% | 
 
 ## Failure modes
 
