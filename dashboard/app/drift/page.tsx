@@ -16,13 +16,19 @@ import { getDrift } from "@/lib/api";
 import type { DriftStatus } from "@/lib/types";
 
 interface HistoryPoint {
-  sample: string;
+  sample: string;       // x-axis label: flows scored when the snapshot was taken
+  flows: number;
+  time: string;
+  feature: string | null;
   psi: number;
+}
+
+function formatFlows(n: number): string {
+  return n >= 1000 ? `${Number((n / 1000).toFixed(1))}k` : String(n);
 }
 
 export default function DriftMonitorPage() {
   const [drift, setDrift] = useState<DriftStatus | null>(null);
-  const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,15 +39,6 @@ export default function DriftMonitorPage() {
           if (!mounted) return;
           setError(null);
           setDrift(d);
-          const top = d.top_features?.[0]?.psi;
-          if (top !== undefined) {
-            const label = new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            });
-            setHistory((prev) => [...prev, { sample: label, psi: Number(top.toFixed(4)) }].slice(-30));
-          }
         })
         .catch((e) => {
           if (!mounted) return;
@@ -62,6 +59,19 @@ export default function DriftMonitorPage() {
   const warnBand = drift?.bands?.warning ?? 0.1;
   const driftBand = drift?.bands?.drift ?? 0.25;
   const topFeatures = drift?.top_features ?? [];
+  // The API keeps the history, so the chart shows the whole run however late the
+  // page is opened. Snapshots taken while warming up have no PSI and are skipped.
+  const history: HistoryPoint[] = (drift?.history ?? []).flatMap((h) =>
+    h.max_psi === null
+      ? []
+      : [{
+          sample: formatFlows(h.flows_scored),
+          flows: h.flows_scored,
+          time: new Date(h.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          feature: h.top_feature,
+          psi: h.max_psi,
+        }]
+  );
 
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "28px" }}>
@@ -198,7 +208,7 @@ export default function DriftMonitorPage() {
               Highest Feature PSI Over Time
             </div>
             <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-              Dashed reference lines mark Warning ({warnBand.toFixed(2)}) and Critical Drift ({driftBand.toFixed(2)}) thresholds
+              One bar per API snapshot, labelled by flows scored. Dashed reference lines mark Warning ({warnBand.toFixed(2)}) and Critical Drift ({driftBand.toFixed(2)}) thresholds
             </div>
           </div>
         </div>
@@ -219,7 +229,9 @@ export default function DriftMonitorPage() {
             >
               {!drift
                 ? "Backend API unreachable. Start `make api` to monitor live distribution PSI."
-                : `Warming up reference window (${drift.flows_seen} / 500 benign flows observed)...`}
+                : drift.status === "warming_up"
+                ? `Warming up reference window (${drift.flows_seen} / 500 benign flows observed)...`
+                : "Waiting for the API's first drift snapshot..."}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -277,11 +289,16 @@ export default function DriftMonitorPage() {
                         }}
                       >
                         <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-                          {pt.sample}
+                          {pt.flows.toLocaleString()} flows scored · {pt.time}
                         </div>
                         <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF", marginTop: "2px" }}>
                           Max PSI: {pt.psi.toFixed(4)}
                         </div>
+                        {pt.feature && (
+                          <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)", marginTop: "2px" }}>
+                            {pt.feature}
+                          </div>
+                        )}
                       </div>
                     );
                   }}
