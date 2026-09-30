@@ -1,14 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import StatCard from "@/components/StatCard";
 import MainThreatChart from "@/components/MainThreatChart";
 import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
-import { ApiUnreachable, getDrift, getModelMetrics, getModelRegistryInfo, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, getModelRegistryInfo, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
+
+interface AlertCounts {
+  total: number;
+  critical: number;
+  open: number;
+  novel: number;
+}
+
+function share(part: number, whole: number): string {
+  return whole > 0 ? `${Math.round((100 * part) / whole)}% of total` : "no alerts yet";
+}
 
 export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -18,6 +29,28 @@ export default function DashboardPage() {
   const [triageError, setTriageError] = useState<string | null>(null);
   const [apiDown, setApiDown] = useState(false);
   const [fpTotal, setFpTotal] = useState<number | null>(null);
+  // Totals over the whole alert store. The alert list below holds only the latest
+  // 100, so counting it would cap every card at 100.
+  const [counts, setCounts] = useState<AlertCounts | null>(null);
+
+  const refreshCounts = useCallback(() => {
+    // novel alerts are exactly the ones shown as "Unknown" (ml/models/combine.py)
+    Promise.all([
+      countAlerts(),
+      countAlerts({ severity: "Critical" }),
+      countAlerts({ status: "open" }),
+      countAlerts({ family: "Unknown" }),
+    ])
+      .then(([total, critical, open, novel]) => setCounts({ total, critical, open, novel }))
+      .catch(() => setCounts(null));
+  }, []);
+
+  // polled rather than bumped per websocket alert: a replay sends ~60 alerts/s
+  useEffect(() => {
+    refreshCounts();
+    const interval = setInterval(refreshCounts, 5000);
+    return () => clearInterval(interval);
+  }, [refreshCounts]);
 
   useEffect(() => {
     listAlerts({ limit: "100" })
@@ -37,6 +70,7 @@ export default function DashboardPage() {
     try {
       const updated = await triage(id, status, status === "false_positive" ? "Analyst FP" : undefined);
       setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      refreshCounts();
       if (selectedAlert?.id === id) {
         setSelectedAlert(updated);
       }
@@ -47,9 +81,7 @@ export default function DashboardPage() {
     }
   }
 
-  const criticalCount = alerts.filter((a) => a.severity.level === "Critical").length;
-  const openCount = alerts.filter((a) => a.status === "open").length;
-  const novelCount = alerts.filter((a) => a.is_novel).length;
+  const shown = (n: number | undefined) => (n === undefined ? "–" : n.toLocaleString());
 
   return (
     <div style={{
@@ -87,12 +119,12 @@ export default function DashboardPage() {
           {/* Card 1: Critical Threats Active */}
           <StatCard
             label="Critical Threats Active"
-            value={criticalCount}
-            subtext="Requires immediate containment protocols"
+            value={shown(counts?.critical)}
+            subtext="Critical-severity alerts in the alert store"
             bgColor="#0E0E12"
-            badge="ACTION REQ"
-            trendIcon="trending_up"
-            trendText="+14% / hr"
+            badge={counts && counts.critical > 0 ? "ACTION REQ" : undefined}
+            trendIcon="percent"
+            trendText={counts ? share(counts.critical, counts.total) : undefined}
             onClick={() => {
               const crit = alerts.find((a) => a.severity.level === "Critical");
               if (crit) setSelectedAlert(crit);
@@ -102,23 +134,22 @@ export default function DashboardPage() {
           {/* Card 2: Awaiting Triage */}
           <StatCard
             label="Awaiting Triage"
-            value={openCount}
-            subtext="Mean inspection time: 4.2 mins / cluster"
+            value={shown(counts?.open)}
+            subtext="Open alerts · nothing is auto-blocked"
             bgColor="#0E0E12"
-            badge="NOMINAL"
-            trendIcon="trending_down"
-            trendText="-5% backlog"
+            trendIcon="task_alt"
+            trendText={counts ? `${(counts.total - counts.open).toLocaleString()} triaged` : undefined}
           />
 
           {/* Card 3: Unknown Novel Hits */}
           <StatCard
             label="Unknown (Never Seen)"
-            value={novelCount}
-            subtext="Unsupervised autoencoder anomaly hits"
+            value={shown(counts?.novel)}
+            subtext="Alerts matching no known attack family"
             bgColor="#0E0E12"
             badge="ZERO-DAY"
             trendIcon="blur_on"
-            trendText={`${novelCount} Novel Sig`}
+            trendText={counts ? share(counts.novel, counts.total) : undefined}
           />
         </div>
 
