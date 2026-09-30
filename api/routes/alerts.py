@@ -55,7 +55,8 @@ def get_alerts(
             "status": a.status,
             "analyst_label": a.analyst_label,
             "analyst_note": a.analyst_note,
-            "model_version": a.model_version
+            "model_version": a.model_version,
+            "flow_count": getattr(a, "flow_count", 1)
         }
         alert_list.append(alert_dict)
 
@@ -86,7 +87,8 @@ def get_alert(id: str, db: Session = Depends(get_db)):
         "status": alert.status,
         "analyst_label": alert.analyst_label,
         "analyst_note": alert.analyst_note,
-        "model_version": alert.model_version
+        "model_version": alert.model_version,
+        "flow_count": getattr(alert, "flow_count", 1)
     }
 
 @router.patch("/alerts/{id}", response_model=Alert)
@@ -119,5 +121,6 @@ def update_alert(id: str, feedback: Feedback, db: Session = Depends(get_db)):
         "status": alert.status,
         "analyst_label": alert.analyst_label,
         "analyst_note": alert.analyst_note,
-        "model_version": alert.model_version
+        "model_version": alert.model_version,
+        "flow_count": getattr(alert, "flow_count", 1)
     }

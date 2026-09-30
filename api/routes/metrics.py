@@ -69,9 +69,9 @@ VERSION_HISTORY = [
             "and added a 5-seed naive random split benchmark beside the 5-minute time-block split."
         ),
         "highlights": [
-            {"label": "Held-Out PortScan LOFO", "before": "0.0%", "after": "99.7%"},
-            {"label": "Unseen Attacks Alerted", "before": "51.5%", "after": "100.0%"},
-            {"label": "Unseen Shown as Unknown", "before": "90.7%", "after": "93.2%"},
+            {"label": "Held-Out PortScan LOFO", "before": "0.0% (historical synthetic)", "after": "99.7%"},
+            {"label": "Unseen Attacks Alerted", "before": "51.5% (historical synthetic)", "after": "100.0%"},
+            {"label": "Unseen Shown as Unknown", "before": "90.7% (historical synthetic)", "after": "93.2%"},
             {"label": "SHAP Batch Scoring", "before": "Per-row", "after": "~6x faster"},
         ],
         "changelog": [
@@ -128,9 +128,9 @@ VERSION_HISTORY = [
             "from anomaly detector corroboration so novel attacks are surfaced as Unknown instead of confident wrong labels."
         ),
         "highlights": [
-            {"label": "Heartbleed Shown as Unknown", "before": "0.0%", "after": "100.0%"},
-            {"label": "Novel Families Unknown Rate", "before": "0.0%", "after": "90.7%"},
-            {"label": "Known-Family Relabel Cost", "before": "0.50%", "after": "0.80%"},
+            {"label": "Heartbleed Shown as Unknown", "before": "0.0% (historical synthetic)", "after": "100.0% (historical synthetic)"},
+            {"label": "Novel Families Unknown Rate", "before": "0.0% (historical synthetic)", "after": "90.7% (historical synthetic)"},
+            {"label": "Known-Family Relabel Cost", "before": "0.50% (historical synthetic)", "after": "0.80% (historical synthetic)"},
             {"label": "Family Keep Budget", "after": "99.0% quantile"},
         ],
         "changelog": [

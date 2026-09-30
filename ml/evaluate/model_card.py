@@ -143,12 +143,17 @@ def render():
     # ------------------------------------------------------------------ performance
     w("## Performance")
     w("")
-    w(f"Macro-F1 **{main['macro_f1']:.3f}** across benign and {len(attacks)} attack families. "
-      f"The alert threshold ({thr['attack_threshold']:.4f}) was chosen on validation to stay "
-      f"within a false-positive budget of {pct(budget)}; on the test set it produced "
-      f"**{main['false_alerts_per_10k_benign_flows']:.1f} false alerts per 10,000 benign "
-      f"flows** ({pct(realised, 2)})"
-      + (", slightly over budget." if realised > budget else ", within budget."))
+    sys_m = m.get("system", main)
+    sys_realised = sys_m.get("false_positive_rate", realised)
+    w(f"End-to-end System Macro-F1 **{sys_m['macro_f1']:.3f}** across benign and {len(attacks)} attack families. "
+      f"Measured as a full system (classifier + anomaly detector), it produced "
+      f"**{sys_m.get('false_alerts_per_10k_benign_flows', main['false_alerts_per_10k_benign_flows']):.1f} false alerts per 10,000 benign "
+      f"flows** ({pct(sys_realised, 2)})."
+      f" This is " + ("over the 0.5% budget." if sys_realised > budget else "within budget."))
+    w("")
+    w(f"As a component, the classifier alone scored Macro-F1 {main['macro_f1']:.3f} and produced "
+      f"{main['false_alerts_per_10k_benign_flows']:.1f} false alerts/10k ({pct(realised, 2)}), "
+      f"meeting its isolated budget constraint of {pct(budget)} at threshold {thr['attack_threshold']:.4f}.")
     w("")
     w("No accuracy figure is reported: about 80% of traffic is benign, so a model that "
       "never alerts would score about 80%.")
@@ -160,6 +165,22 @@ def render():
         w(f"| {c} | {v['precision']:.3f} | {v['recall']:.3f} | {v['f1-score']:.3f} | "
           f"{auc.get(c, {}).get('pr_auc', float('nan')):.3f} | {int(v['support']):,} |")
     w("")
+    trade_off = m.get("joint_budget_trade_off")
+    if trade_off:
+        w("")
+        w("### Joint Budget Trade-off")
+        w("")
+        w("To keep the full system within the false-alert budget, the classifier threshold and detector flag rate must be balanced.")
+        w("")
+        w("| Detector flag rate | Classifier threshold | Classifier TPR | Novel recall |")
+        w("| --- | --- | --- | --- |")
+        for t in trade_off:
+            c_thr = f"{t['classifier_threshold']:.4f}" if t['classifier_threshold'] is not None else "—"
+            c_tpr = pct(t['classifier_tpr_on_val'], 2) if t['classifier_tpr_on_val'] is not None else "—"
+            n_rec = pct(t['novel_recall'], 2) if t['novel_recall'] is not None else "—"
+            w(f"| {pct(t['detector_flag_rate'], 2)} | {c_thr} | {c_tpr} | {n_rec} |")
+        w("")
+
 
     lofo = m.get("lofo")
     w("### Attacks it was never trained on")

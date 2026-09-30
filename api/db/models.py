@@ -1,7 +1,7 @@
 from .session import Base, SQLALCHEMY_AVAILABLE
 
 if SQLALCHEMY_AVAILABLE:
-    from sqlalchemy import Column, String, Float, Boolean, DateTime, JSON
+    from sqlalchemy import Column, String, Float, Boolean, DateTime, JSON, Integer
 
     class AlertModel(Base):
         __tablename__ = "alerts"
@@ -20,6 +20,7 @@ if SQLALCHEMY_AVAILABLE:
         analyst_label = Column(String, nullable=True)
         analyst_note = Column(String, nullable=True)
         model_version = Column(String)
+        flow_count = Column(Integer, default=1)
         # the model inputs that produced the alert: what scripts/retrain.py needs
         # to turn an analyst's label into a training row. Not returned by the API.
         features = Column(JSON, nullable=True)
@@ -49,6 +50,7 @@ else:
             analyst_label=None,
             analyst_note=None,
             model_version="v1",
+            flow_count=1,
             features=None,
         ):
             self.id = id
@@ -65,4 +67,5 @@ else:
             self.analyst_label = analyst_label
             self.analyst_note = analyst_note
             self.model_version = model_version
+            self.flow_count = flow_count
             self.features = features

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from sklearn.metrics import f1_score
+
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
 from ml.data.load import load_processed
 from ml.data.split import add_blocks, make_splits, downsample_benign
@@ -195,15 +197,32 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     fam, _ = clf_mod.predicted_family(model, proba)
     y_pred = np.where(attack_score >= thr["threshold"], fam, "Benign")
 
+    sys_is_anomalous = det.is_anomalous(det.score(Xt))
+    sys_ood = nov.is_out_of_family(nov.distance(Xt, fam), fam)
+    sys_known = attack_score >= thr["threshold"]
+    sys_alerted = sys_known | sys_is_anomalous
+    sys_mislabelled = sys_known & sys_ood
+    sys_shown = np.where(sys_known & ~sys_mislabelled, fam, "Unknown")
+    sys_y_pred = np.where(sys_alerted, sys_shown, "Benign")
+
+    main_summary = metrics.summarise(known_test["family"], y_pred,
+                                     attack_score >= thr["threshold"],
+                                     proba, model.classes_)
+
+    sys_fpr = metrics.false_positive_rate(known_test["family"], sys_alerted)
+
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "classifier": kind,
         "features": len(features),
         "rows": {"train": len(train), "val": len(val), "test": len(test)},
         "threshold": thr,
-        "main": metrics.summarise(known_test["family"], y_pred,
-                                  attack_score >= thr["threshold"],
-                                  proba, model.classes_),
+        "main": main_summary,
+        "system": {
+            "false_positive_rate": round(sys_fpr, 5),
+            "false_alerts_per_10k_benign_flows": round(sys_fpr * 10000, 1),
+            "macro_f1": round(float(f1_score(known_test["family"], sys_y_pred, average="macro", zero_division=0)), 4)
+        }
     }
 
     base_proba = base.predict_proba(Xt)
@@ -269,6 +288,52 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     if not skip_lofo:
         print("running leave-one-family-out experiments...")
         report["lofo"] = lofo.run_all(train, val, test, features, LOFO_FAMILIES, cfg)
+
+    # --- joint budget trade-off experiment --------------------------------
+    print("running joint budget trade-off experiment...")
+    trade_off = []
+    bv_scores = det.score(matrix(val[val["family"] == "Benign"], features))
+    nv_scores = det.score(Xn) if 'Xn' in locals() else None
+    
+    budget = cfg["train"]["fpr_budget"]
+    for d_rate in [0.0, 0.001, 0.002, 0.003, 0.004, 0.005, 0.01]:
+        d_thr = np.quantile(bv_scores, 1.0 - d_rate) if d_rate > 0 else float('inf')
+        val_det_flags = det.score(matrix(val, features)) >= d_thr
+        
+        val_benign_mask = val["family"] == "Benign"
+        val_is_attack = val["family"] != "Benign"
+        
+        max_c_alerts = int(budget * val_benign_mask.sum())
+        det_alerts_on_benign = int((val_det_flags & val_benign_mask).sum())
+        allowed_c_alerts = max_c_alerts - det_alerts_on_benign
+        
+        if allowed_c_alerts < 0:
+            c_thr = float('inf')
+            c_tpr = 0.0
+        else:
+            benign_not_flagged_scores = val_score[val_benign_mask & ~val_det_flags]
+            if allowed_c_alerts >= len(benign_not_flagged_scores):
+                c_thr = -float('inf')
+            elif allowed_c_alerts == 0:
+                c_thr = float('inf')
+            else:
+                c_thr = sorted(benign_not_flagged_scores, reverse=True)[allowed_c_alerts - 1]
+            c_tpr = float((val_score[val_is_attack] >= c_thr).mean()) if val_is_attack.sum() > 0 else 0.0
+            
+        n_rec = 0.0
+        if nv_scores is not None:
+            n_flags = nv_scores >= d_thr
+            n_known_ = locals().get('n_attack', np.zeros_like(nv_scores)) >= c_thr
+            n_rec = float((n_flags | n_known_).mean())
+            
+        trade_off.append({
+            "detector_flag_rate": d_rate,
+            "classifier_threshold": round(float(c_thr), 4) if c_thr not in [float('inf'), -float('inf')] else None,
+            "classifier_tpr_on_val": round(c_tpr, 4),
+            "novel_recall": round(n_rec, 4) if nv_scores is not None else None
+        })
+        
+    report["joint_budget_trade_off"] = trade_off
 
     # --- artefacts --------------------------------------------------------
     out = Path(cfg["paths"]["model_dir"])
