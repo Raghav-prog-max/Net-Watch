@@ -17,6 +17,7 @@ import numpy as np
 
 from ml.models.novelty import FamilyNovelty
 from ml.models.combine import decide
+from api.services.mitre import get_mitre_dict
 
 RNG = np.random.default_rng(11)
 THR = 0.9869          # a realistic budget-derived attack threshold
@@ -158,7 +159,7 @@ def test_confident_out_of_family_flow_becomes_unknown():
     assert a["prediction"]["family"] == "Unknown"
     assert a["is_novel"] is True
     assert a["rejected_label"]["family"] == "DDoS", "analyst cannot see what was rejected"
-    assert a["mitre"]["tactic"] == "Unmapped"
+    assert get_mitre_dict(a["prediction"]["family"])["tactic"] == "Unmapped"
 
 
 def test_rejection_does_not_need_the_detector_to_agree():

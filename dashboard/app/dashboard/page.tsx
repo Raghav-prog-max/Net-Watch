@@ -1,15 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import StatCard from "@/components/StatCard";
 import MainThreatChart from "@/components/MainThreatChart";
 import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
-import SocTopBar from "@/components/SocTopBar";
-import { ApiUnreachable, getDrift, getModelMetrics, getModelRegistryInfo, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, getModelRegistryInfo, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
+
+interface AlertCounts {
+  total: number;
+  critical: number;
+  open: number;
+  novel: number;
+}
+
+function share(part: number, whole: number): string {
+  return whole > 0 ? `${Math.round((100 * part) / whole)}% of total` : "no alerts yet";
+}
 
 export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -19,6 +29,28 @@ export default function DashboardPage() {
   const [triageError, setTriageError] = useState<string | null>(null);
   const [apiDown, setApiDown] = useState(false);
   const [fpTotal, setFpTotal] = useState<number | null>(null);
+  // Totals over the whole alert store. The alert list below holds only the latest
+  // 100, so counting it would cap every card at 100.
+  const [counts, setCounts] = useState<AlertCounts | null>(null);
+
+  const refreshCounts = useCallback(() => {
+    // novel alerts are exactly the ones shown as "Unknown" (ml/models/combine.py)
+    Promise.all([
+      countAlerts(),
+      countAlerts({ severity: "Critical" }),
+      countAlerts({ status: "open" }),
+      countAlerts({ family: "Unknown" }),
+    ])
+      .then(([total, critical, open, novel]) => setCounts({ total, critical, open, novel }))
+      .catch(() => setCounts(null));
+  }, []);
+
+  // polled rather than bumped per websocket alert: a replay sends ~60 alerts/s
+  useEffect(() => {
+    refreshCounts();
+    const interval = setInterval(refreshCounts, 5000);
+    return () => clearInterval(interval);
+  }, [refreshCounts]);
 
   useEffect(() => {
     listAlerts({ limit: "100" })
@@ -38,6 +70,7 @@ export default function DashboardPage() {
     try {
       const updated = await triage(id, status, status === "false_positive" ? "Analyst FP" : undefined);
       setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      refreshCounts();
       if (selectedAlert?.id === id) {
         setSelectedAlert(updated);
       }
@@ -48,108 +81,106 @@ export default function DashboardPage() {
     }
   }
 
-  const criticalCount = alerts.filter((a) => a.severity.level === "Critical").length;
-  const openCount = alerts.filter((a) => a.status === "open").length;
-  const novelCount = alerts.filter((a) => a.is_novel).length;
+  const shown = (n: number | undefined) => (n === undefined ? "–" : n.toLocaleString());
 
   return (
-    <div style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 28px 60px" }}>
-      {/* Top greeting bar */}
-      <SocTopBar />
-
-      {apiDown && (
-        <div role="alert" style={{
-          padding: "10px 18px", backgroundColor: "rgba(244, 169, 62, 0.12)",
-          border: "1px solid rgba(244, 169, 62, 0.35)", borderRadius: "14px",
-          color: "var(--nw-card-1)", fontSize: "13px", marginBottom: "16px",
-        }}>
-          ▲ The API is not reachable on :8000, so nothing below is live. Start it with <code>make api</code>.
-        </div>
-      )}
-
-      {triageError && (
-        <div role="alert" style={{
-            padding: "10px 18px",
-            backgroundColor: "rgba(244, 169, 62, 0.12)",
-            border: "1px solid rgba(244, 169, 62, 0.35)",
-            borderRadius: "14px",
-            color: "var(--nw-card-1)",
-            fontSize: "13px",
-            marginBottom: "16px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
+    <div style={{
+      display: "flex",
+      width: "100%",
+      flex: 1,
+    }}>
+      {/* ── LEFT/CENTER WORKSPACE ─────────────────────────────── */}
+      <div style={{ flex: 1, padding: "24px", display: "flex", flexDirection: "column", gap: "24px", maxWidth: "calc(100vw - 240px - 380px)" }} className="workspace-container">
+        
+        {apiDown && (
+          <div role="alert" style={{
+            padding: "12px 20px", backgroundColor: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.2)", borderRadius: "12px",
+            color: "#FFFFFF", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px"
           }}>
-          <span>▲</span> {triageError}
-        </div>
-      )}
-
-      {/* Main 2-column layout (center wide column + right rail) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 340px",
-          gap: "24px",
-          alignItems: "start",
-        }}
-        className="dashboard-columns-grid"
-      >
-        {/* ── LEFT/CENTER COLUMN: STATS + CHART + LOWER CARDS ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
-          {/* Row of 3 colorful stat cards */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "20px",
-            }}
-            className="stat-cards-grid"
-          >
-            {/* Card 1: Amber (#F4A93E) - Critical Alerts */}
-            <StatCard
-              label="Critical Threats Active"
-              value={criticalCount}
-              subtext={`of ${alerts.length} alerts loaded · Sev ≥ 85`}
-              bgColor="var(--nw-card-1)"
-              onClick={() => {
-                const crit = alerts.find((a) => a.severity.level === "Critical");
-                if (crit) setSelectedAlert(crit);
-              }}
-            />
-
-            {/* Card 2: Soft Purple (#A78BFA) - Awaiting triage */}
-            <StatCard
-              label="Awaiting Triage"
-              value={openCount}
-              subtext="open alerts · nothing is auto-blocked"
-              bgColor="var(--nw-card-2)"
-            />
-
-            {/* Card 3: Lime Green (#C7DB6E) - Never-seen traffic */}
-            <StatCard
-              label="Unknown (Never Seen)"
-              value={novelCount}
-              subtext="alerts matching no known attack family"
-              bgColor="var(--nw-card-3)"
-            />
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>warning</span>
+            The API is not reachable on :8000. Start it with <code>make api</code> to see live data.
           </div>
+        )}
 
-          {/* Main Chart Card */}
-          <MainThreatChart alerts={alerts} />
+        {triageError && (
+          <div role="alert" style={{
+            padding: "12px 20px", backgroundColor: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.2)", borderRadius: "12px",
+            color: "#FFFFFF", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px"
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>error</span>
+            {triageError}
+          </div>
+        )}
 
-          {/* Two lower detail breakdown cards */}
-          <LowerDetailCards alerts={alerts} report={report} drift={drift} falsePositivesTotal={fpTotal} />
-        </div>
+        {/* Top KPI Metric Cards (3 Columns) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }} className="stat-cards-grid">
+          {/* Card 1: Critical Threats Active */}
+          <StatCard
+            label="Critical Threats Active"
+            value={shown(counts?.critical)}
+            subtext="Critical-severity alerts in the alert store"
+            bgColor="#0E0E12"
+            badge={counts && counts.critical > 0 ? "ACTION REQ" : undefined}
+            trendIcon="percent"
+            trendText={counts ? share(counts.critical, counts.total) : undefined}
+            onClick={() => {
+              const crit = alerts.find((a) => a.severity.level === "Critical");
+              if (crit) setSelectedAlert(crit);
+            }}
+          />
 
-        {/* ── RIGHT COLUMN: SCROLLABLE ALERT CARDS STACK ─────── */}
-        <div style={{ position: "sticky", top: "20px" }}>
-          <AlertRail
-            alerts={alerts}
-            onSelectAlert={(al) => setSelectedAlert(al)}
-            onTriage={handleTriage}
+          {/* Card 2: Awaiting Triage */}
+          <StatCard
+            label="Awaiting Triage"
+            value={shown(counts?.open)}
+            subtext="Open alerts · nothing is auto-blocked"
+            bgColor="#0E0E12"
+            trendIcon="task_alt"
+            trendText={counts ? `${(counts.total - counts.open).toLocaleString()} triaged` : undefined}
+          />
+
+          {/* Card 3: Unknown Novel Hits */}
+          <StatCard
+            label="Unknown (Never Seen)"
+            value={shown(counts?.novel)}
+            subtext="Alerts matching no known attack family"
+            bgColor="#0E0E12"
+            badge="ZERO-DAY"
+            trendIcon="blur_on"
+            trendText={counts ? share(counts.novel, counts.total) : undefined}
           />
         </div>
+
+        {/* Main Threat Chart */}
+        <MainThreatChart alerts={alerts} />
+
+        {/* Lower Detail Cards */}
+        <LowerDetailCards alerts={alerts} report={report} drift={drift} falsePositivesTotal={fpTotal} />
       </div>
+
+      {/* ── RIGHT RAIL (Alert Feed) ────────────────────────────── */}
+      <aside
+        style={{
+          width: "380px",
+          backgroundColor: "#0E0E12",
+          borderLeft: "1px solid rgba(255, 255, 255, 0.06)",
+          display: "flex",
+          flexDirection: "column",
+          height: "calc(100vh - 64px)", /* 100vh minus TopBar */
+          position: "sticky",
+          top: "64px",
+          flexShrink: 0,
+        }}
+        className="alert-rail-container"
+      >
+        <AlertRail
+          alerts={alerts}
+          onSelectAlert={(al) => setSelectedAlert(al)}
+          onTriage={handleTriage}
+        />
+      </aside>
 
       {/* Modal Inspector for Alert details */}
       <AlertModal
@@ -159,9 +190,20 @@ export default function DashboardPage() {
       />
 
       <style jsx global>{`
-        @media (max-width: 1200px) {
-          .dashboard-columns-grid {
-            grid-template-columns: 1fr !important;
+        @media (max-width: 1300px) {
+          .alert-rail-container {
+            width: 320px !important;
+          }
+          .workspace-container {
+            max-width: calc(100vw - 240px - 320px) !important;
+          }
+        }
+        @media (max-width: 1024px) {
+          .alert-rail-container {
+            display: none !important;
+          }
+          .workspace-container {
+            max-width: 100% !important;
           }
         }
         @media (max-width: 800px) {

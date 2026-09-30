@@ -218,7 +218,7 @@ def main(data_dir: str, trees: int, out: str) -> int:
             print("Failed to find KDDTrain+.txt and KDDTest+.txt after downloading.")
             return 2
 
-    seed = yaml.safe_load(open(ROOT / "ml" / "config.yaml"))["seed"]
+    seed = yaml.safe_load(open(ROOT / "ml" / "config.yaml"))["split"]["random_state"]
     train, test = load(train_path), load(test_path)
     classes = [c for c in CLASSES if c in set(train["family"])]
     fit, hold = train_test_split(train, test_size=0.2, stratify=train["family"], random_state=seed)

@@ -1,25 +1,20 @@
 # =============================================================================
 # NetWatch – central configuration
-# All scripts import this file via ml/utils/config.py
+#
+# One key per setting, and every key here is read by the code named in its
+# section. A setting that is not listed is not configurable here:
+#   label map, training and LOFO families  -> ml/data/labels.py
+#   LightGBM hyper-parameters, class weights -> ml/models/classifier.py
 # =============================================================================
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths (ml/prepare.py, ml/train.py, replay/replayer.py, scripts/*) ─────────
 paths:
-  raw_data:        data/raw
-  processed_data:  data/processed
-  splits:          data/splits
-  models:          models
-  reports:         reports
-  logs:            logs
-  # Read by the pipeline today (ml/prepare.py, ml/train.py, replay/replayer.py,
-  # ml/evaluate/model_card.py). The keys above are read only by
-  # scripts/download_data.py until the pipeline moves over to them.
-  raw_dir:         data/raw
-  processed:       data/processed/flows.pkl
-  model_dir:       models/v1
-  reports_dir:     reports
+  raw_dir:     data/raw
+  processed:   data/processed/flows.pkl
+  model_dir:   models/v1
+  reports_dir: reports
 
-# ── Kaggle dataset ────────────────────────────────────────────────────────────
+# ── Kaggle dataset (scripts/download_data.py) ─────────────────────────────────
 kaggle:
   dataset: "shadman1028/cicids2017-official-flow-feature-csv-files"      # <owner>/<dataset-slug> on Kaggle
   expected_files:                        # presence check before download
@@ -32,91 +27,48 @@ kaggle:
     - "Friday-WorkingHours-Morning.pcap_ISCX.csv"
     - "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv"
 
-# ── Label map: raw CSV label → canonical family ───────────────────────────────
-labels:
-  Benign:    [" BENIGN", "BENIGN"]
-  DoS:       ["DoS Hulk", "DoS GoldenEye", "DoS slowloris", "DoS Slowhttptest",
-               "DoS Hulk", "DoS GoldenEye"]
-  DDoS:      ["DDoS", "DDOS attack-HOIC", "DDOS attack-LOIC-UDP"]
-  PortScan:  ["PortScan"]
-  BruteForce: ["FTP-Patator", "SSH-Patator"]
-  WebAttack: ["Web Attack \u2013 Brute Force", "Web Attack \u2013 XSS",
-               "Web Attack \u2013 Sql Injection",
-               "Web Attack  Brute Force", "Web Attack  XSS",
-               "Web Attack  Sql Injection"]
-  Bot:       ["Bot"]
-  # Held-out / novel – removed from train+val, kept in test for anomaly eval
-  _novel:    ["Infiltration", "Heartbleed"]
-
-# Families that participate in LOFO evaluation
-lofo_families: [PortScan, BruteForce, WebAttack, Bot]
-
-# ── Random seeds ─────────────────────────────────────────────────────────────
-seed: 42
-
-# ── Split sizes ───────────────────────────────────────────────────────────────
+# ── Splits (ml/data/split.py via ml/train.py) ─────────────────────────────────
 split:
-  test_size:  0.30     # of full data
-  val_size:   0.50     # of rest after test removed
-  time_floor: "5min"   # block granularity
-  # read by ml/data/split.py via ml/train.py
-  block_minutes: 5     # same block as time_floor above
-  random_state:  42    # same as seed above
+  test_size:     0.30   # held out, then halved into validation and test (15% each)
+  block_minutes: 5      # time-block size; no block appears in two splits
+  random_state:  42     # the project's one seed (splits, models, NSL-KDD check)
 
-# ── Training (read by ml/train.py and ml/evaluate/lofo.py) ───────────────────
+# ── Training (ml/train.py, ml/evaluate/lofo.py, ml/evaluate/naive.py) ─────────
 train:
-  classifier: auto        # auto | lightgbm | hist | rf
+  classifier: auto        # auto | lightgbm | rf
   benign_downsample: 0.20 # keep this fraction of benign rows in TRAIN only
-  fpr_budget: 0.005       # same budget as the top-level fpr_budget below
+  fpr_budget: 0.005       # false alerts of the WHOLE system (classifier or detector):
+                          # at most 50 per 10,000 benign flows
+  # The classifier's share of that budget; the detector's share is anomaly.benign_flag_rate.
+  # Chosen from the trade-off table in the model card (team decision, 30 Sep 2026):
+  # 0.4% + 0.1% stays within 0.5% and keeps the detector catching unseen families.
+  classifier_fpr_budget: 0.004
 
-# ── Imbalance strategy (baseline | class_weight | undersample | smote) ────────
+# Reported as the chosen strategy next to the imbalance study (ml/train.py). The
+# class weights themselves are set in ml/models/classifier.py.
 imbalance_strategy: class_weight
 
-# ── Classifier ────────────────────────────────────────────────────────────────
+# ── Random Forest baseline (ml/train.py) ──────────────────────────────────────
 classifier:
   random_forest:
     n_estimators: 300
-    class_weight: balanced_subsample
-    n_jobs: -1
-  lightgbm:
-    n_estimators: 500
-    learning_rate: 0.05
-    num_leaves: 63
-    class_weight: balanced
-    n_jobs: -1
-    verbose: -1
 
-# ── Anomaly detector ─────────────────────────────────────────────────────────
+# ── Anomaly detector and label check (ml/train.py, ml/evaluate/lofo.py) ───────
 anomaly:
   n_estimators: 200
-  contamination: auto
-  # Threshold set so ~1% of benign val is flagged
-  benign_fpr_target: 0.01
-  # read by ml/train.py and ml/evaluate/lofo.py
   max_samples: 50000
-  benign_flag_rate: 0.01  # same target as benign_fpr_target above
+  benign_flag_rate: 0.001   # flags 0.1% of benign validation traffic (its budget share)
+  family_keep_rate: 0.99    # out-of-family check keeps 99% of each family's own flows
 
-# ── Threshold selection ───────────────────────────────────────────────────────
-fpr_budget: 0.005     # ≤ 50 false alerts per 10,000 benign flows
-
-# ── Drift monitoring ─────────────────────────────────────────────────────────
+# ── Drift monitoring (api/services/scorer.py, ml/train.py, ml/evaluate/model_card.py) ──
 drift:
-  window_size: 5000   # flows per PSI window
-  n_bins: 10
-  psi_warning: 0.10
-  psi_drift:   0.25
-  alert_rate_warning_multiplier: 1.5
-  alert_rate_drift_multiplier:   2.0
-  top_features_ks: 15
-  # read by ml/train.py (reference bins) and ml/evaluate/model_card.py
-  bins: 10              # same as n_bins above
-  window: 5000          # same as window_size above
-  warn_psi: 0.10        # same as psi_warning above
-  drift_psi: 0.25       # same as psi_drift above
-
-# ── SHAP ──────────────────────────────────────────────────────────────────────
-shap:
-  top_n: 6            # features returned per alert
-
-# ── Model versioning ──────────────────────────────────────────────────────────
-model_version: v1
+  window: 5000              # recent benign-looking flows the PSI is computed over
+  bins: 10                  # quantile bins from benign validation traffic
+  warn_psi: 0.10            # Warning: any feature above
+  drift_psi: 0.25           # Drift: three or more features above
+  alert_rate_warning_multiplier: 1.5   # Unknown-alert rate vs its training baseline
+  alert_rate_drift_multiplier:   2.0   # (alone it can only raise Warning)
+  top_features_ks: 15       # KS test on the classifier's most important features
+  history_every: 1000       # flows between drift snapshots kept for /metrics/drift
+  history_keep: 100         # snapshots kept
+  fp_share_alerts: 500      # most recent alerts the false-positive share is measured on

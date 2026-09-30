@@ -47,6 +47,15 @@ export async function listAlerts(params: Record<string, string> = {}): Promise<A
   return data.items.map(normalizeAlert);
 }
 
+/** How many stored alerts match `filter` (the API's `total`), not just the ones loaded. */
+export async function countAlerts(filter: Record<string, string> = {}): Promise<number> {
+  const query = new URLSearchParams({ ...filter, size: "1" });
+  const res = await get(`/alerts?${query}`);
+  if (!res.ok) throw new Error(`GET /alerts ${res.status}`);
+  const data: { total: number } = await res.json();
+  return data.total;
+}
+
 export async function getAlert(id: string): Promise<Alert> {
   const res = await get(`/alerts/${id}`);
   if (!res.ok) throw new Error(`GET /alerts/${id} ${res.status}`);

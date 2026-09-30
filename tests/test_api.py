@@ -296,3 +296,95 @@ def test_active_release_figures_follow_the_report(tmp_path, monkeypatch):
     assert got["Unseen Attacks Alerted"] == "50.0%"
     assert got["Unseen Shown as Unknown"] == "25.0%"
     assert "not separate models" in body["version_history_note"]
+
+
+# ── audit gaps 13-16: status values, SQL filters, WebSocket, one MITRE map ──────
+import asyncio
+from datetime import datetime, timedelta
+
+from api.routes.ws import ConnectionManager
+from api.services.mitre import get_mitre_dict
+from ml.models.combine import decide
+
+
+def _insert(family, level, n, minutes=0):
+    db = _TestSession()
+    ids = []
+    for i in range(n):
+        aid = f"alt_{uuid.uuid4().hex[:10]}"
+        db.add(AlertModel(
+            id=aid, timestamp=datetime(2026, 9, 30, 10, 0) + timedelta(minutes=minutes + i),
+            flow={}, prediction={"family": family, "confidence": 0.9},
+            anomaly_score=0.5, is_novel=False, severity={"score": 50, "level": level},
+            explanation=[], mitre=get_mitre_dict(family), recommended_action="x",
+            status="open", model_version="test"))
+        ids.append(aid)
+    db.commit(); db.close()
+    return ids
+
+
+def test_unknown_status_is_refused_and_nothing_changes():
+    aid = _insert("DoS", "High", 1)[0]
+    res = client.patch(f"/alerts/{aid}", json={"status": "totally_made_up"})
+    assert res.status_code == 422
+    assert client.get(f"/alerts/{aid}").json()["status"] == "open"
+
+
+@pytest.mark.parametrize("status", ["open", "acknowledged", "escalated", "false_positive", "resolved"])
+def test_every_handbook_status_is_accepted(status):
+    aid = _insert("DoS", "High", 1)[0]
+    assert client.patch(f"/alerts/{aid}", json={"status": status}).json()["status"] == status
+
+
+def test_filters_count_and_page_in_the_database():
+    fam = f"Fam{uuid.uuid4().hex[:6]}"                 # unique, so other tests' rows don't count
+    low = _insert(fam, "Low", 7)
+    _insert(fam, "Critical", 3, minutes=100)
+    all_rows = client.get(f"/alerts?family={fam}&size=100").json()
+    assert all_rows["total"] == 10
+    only_low = client.get(f"/alerts?family={fam}&severity=Low&size=100").json()
+    assert only_low["total"] == 7 and {a["id"] for a in only_low["items"]} == set(low)
+    p1 = client.get(f"/alerts?family={fam}&page=1&size=4").json()
+    p3 = client.get(f"/alerts?family={fam}&page=3&size=4").json()
+    assert p1["total"] == p3["total"] == 10
+    assert len(p1["items"]) == 4 and len(p3["items"]) == 2
+    assert p1["items"][0]["severity"]["level"] == "Critical"      # newest first
+
+
+def test_broadcast_drops_a_connection_that_fails():
+    class Dead:
+        async def send_json(self, m): raise RuntimeError("closed")
+    class Alive:
+        def __init__(self): self.got = []
+        async def send_json(self, m): self.got.append(m)
+    mgr, dead, alive = ConnectionManager(), Dead(), Alive()
+    mgr.active_connections += [dead, alive]
+    asyncio.run(mgr.broadcast({"id": 1}))
+    asyncio.run(mgr.broadcast({"id": 2}))
+    assert mgr.active_connections == [alive] and len(alive.got) == 2
+    mgr.disconnect(dead)                                           # already gone: no error
+
+
+def test_one_mitre_map():
+    # decide() no longer maps families; the scorer attaches api/services/mitre.py
+    out = decide(0.99, "DoS", 0.99, 0.2, 0.2, False, 0.5)
+    assert "mitre" not in out
+    assert get_mitre_dict("DoS")["technique_id"] == "T1499"      # endpoint DoS (Hulk, slowloris)
+    assert get_mitre_dict("DDoS")["technique_id"] == "T1498"     # network flood
+
+
+def test_drift_reports_the_analyst_false_positive_share():
+    from api.services.drift_service import false_positive_share
+    ids = _insert(f"Fam{uuid.uuid4().hex[:6]}", "High", 4, minutes=10_000)   # the newest alerts
+    client.patch(f"/alerts/{ids[0]}", json={"status": "false_positive"})
+    db = _TestSession()
+    fp = false_positive_share(db, last_n=4)
+    db.close()
+    assert fp == {"share": 0.25, "false_positives": 1, "alerts": 4}
+    class Drifting(StubScorer):
+        def drift(self):
+            return {"status": "stable", "history": []}
+    app.dependency_overrides[scorer_dependency] = lambda: Drifting()
+    body = client.get("/metrics/drift").json()
+    assert set(body["fp_share"]) == {"share", "false_positives", "alerts"}
+    assert body["history"] == []

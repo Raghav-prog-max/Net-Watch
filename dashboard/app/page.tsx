@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
+import { SplineSceneBasic } from "@/components/ui/demo";
+
 
 // Count-up animated number hook
 function useCountUp(end: number, duration: number = 1400, trigger: boolean = false) {
@@ -97,231 +99,23 @@ export default function LandingPage() {
         overflowX: "hidden",
       }}
     >
-      {/* ── TOP NAVIGATION BAR ─────────────────────────────────── */}
-      <header
-        style={{
-          maxWidth: "1280px",
-          margin: "0 auto",
-          padding: "24px 28px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          position: "relative",
-          zIndex: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div
-            style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "12px",
-              backgroundColor: "var(--nw-accent-purple)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#FFFFFF",
-              fontWeight: 800,
-              fontSize: "18px",
-              boxShadow: "0 4px 14px rgba(139, 95, 191, 0.4)",
-            }}
-          >
-            N
-          </div>
-          <div>
-            <span style={{ fontSize: "18px", fontWeight: 800, letterSpacing: "-0.01em" }}>
-              NetWatch
-            </span>
-            <span
-              style={{
-                fontSize: "11px",
-                marginLeft: "8px",
-                color: "var(--nw-card-2)",
-                backgroundColor: "rgba(167, 139, 250, 0.15)",
-                padding: "2px 8px",
-                borderRadius: "9999px",
-                fontWeight: 600,
-              }}
-            >
-              AI SOC v1.0
-            </span>
-          </div>
-        </div>
 
-        <nav style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-          <a href="#stats" style={{ color: "var(--nw-text-muted)", fontSize: "13px", fontWeight: 500 }}>
-            Metrics
-          </a>
-          <a href="#how-it-works" style={{ color: "var(--nw-text-muted)", fontSize: "13px", fontWeight: 500 }}>
-            Architecture
-          </a>
-          <a href="#trust" style={{ color: "var(--nw-text-muted)", fontSize: "13px", fontWeight: 500 }}>
-            Why No Auto-Block
-          </a>
-          <Link
-            href="/dashboard"
-            className="nw-btn-pill nw-btn-purple"
-            style={{ padding: "9px 20px" }}
-          >
-            Launch Dashboard →
-          </Link>
-        </nav>
-      </header>
 
       {/* ── HERO SECTION ───────────────────────────────────────── */}
       <section
         style={{
-          maxWidth: "1280px",
-          margin: "0 auto",
-          padding: "60px 28px 90px",
+          width: "100%",
+          height: "100vh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          textAlign: "center",
           position: "relative",
           zIndex: 10,
         }}
       >
-        {/* Soft pill badge */}
-        <div
-          className="reveal-init stagger-1 nw-pill nw-pill-purple"
-          style={{ marginBottom: "22px", padding: "6px 16px", fontSize: "12px" }}
-        >
-          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "var(--nw-card-2)" }} />
-          DUAL-ENGINE NETWORK INTRUSION DETECTION
-        </div>
-
-        {/* Hero Headline */}
-        <h1
-          className="reveal-init stagger-2"
-          style={{
-            fontSize: "clamp(34px, 5.5vw, 62px)",
-            fontWeight: 800,
-            lineHeight: 1.12,
-            letterSpacing: "-0.03em",
-            maxWidth: "920px",
-            margin: "0 0 20px",
-          }}
-        >
-          Real-time AI network intrusion detection with explainable alerts.
-        </h1>
-
-        {/* Hero Subhead */}
-        <p
-          className="reveal-init stagger-3"
-          style={{
-            fontSize: "clamp(16px, 2vw, 19px)",
-            color: "var(--nw-text-muted)",
-            maxWidth: "720px",
-            lineHeight: 1.6,
-            margin: "0 0 36px",
-          }}
-        >
-          Pairing LightGBM attack classification with an unsupervised benign Isolation Forest.
-          Surfaces instant TreeSHAP attribution and MITRE ATT&amp;CK context for human SOC triage —
-          and it never blocks traffic on its own: every alert goes to a human analyst.
-        </p>
-
-        {/* Hero CTA buttons */}
-        <div
-          className="reveal-init stagger-4"
-          style={{
-            display: "flex",
-            gap: "14px",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            marginBottom: "60px",
-          }}
-        >
-          <Link
-            href="/dashboard"
-            className="nw-btn-pill nw-btn-purple"
-            style={{ padding: "14px 32px", fontSize: "14px", fontWeight: 700 }}
-          >
-            View Dashboard →
-          </Link>
-          <Link
-            href="/evaluation"
-            className="nw-btn-pill nw-btn-dark"
-            style={{ padding: "14px 26px", fontSize: "14px" }}
-          >
-            Inspect Honest Time-Split Proof
-          </Link>
-        </div>
-
-        {/* Visual Mini-Preview Card */}
-        <div
-          className="reveal-init stagger-4"
-          style={{
-            width: "100%",
-            maxWidth: "1000px",
-            backgroundColor: "var(--nw-bg-panel)",
-            borderRadius: "24px",
-            padding: "24px",
-            border: "1px solid rgba(255, 255, 255, 0.06)",
-            boxShadow: "0 24px 70px rgba(0, 0, 0, 0.5)",
-            textAlign: "left",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#FF5F56" }} />
-              <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#FFBD2E" }} />
-              <span style={{ width: "11px", height: "11px", borderRadius: "50%", backgroundColor: "#27C93F" }} />
-            </div>
-            <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-              HONEST EVALUATION // 5-MIN TIME-BLOCK SPLIT
-            </div>
-            <span className="nw-pill nw-pill-lime">{dataLabel.toUpperCase()}</span>
-          </div>
-
-          {/* Mini 3-stat row */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "14px",
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: "var(--nw-card-1)",
-                borderRadius: "16px",
-                padding: "16px",
-                color: "#111114",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>MACRO-F1</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? report.main.macro_f1.toFixed(3) : "—"}</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>every attack family weighted equally</div>
-            </div>
-
-            <div
-              style={{
-                backgroundColor: "var(--nw-card-2)",
-                borderRadius: "16px",
-                padding: "16px",
-                color: "#111114",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>FALSE ALERTS / 10K</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? falsePer10k : "—"}</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>budget: {report ? `≤ ${budgetPer10k}` : "—"} per 10k normal flows</div>
-            </div>
-
-            <div
-              style={{
-                backgroundColor: "var(--nw-card-3)",
-                borderRadius: "16px",
-                padding: "16px",
-                color: "#111114",
-              }}
-            >
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase" }}>NEVER-SEEN → UNKNOWN</div>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{report ? `${unknownPct.toFixed(1)}%` : "—"}</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>{report ? report.novel_families.families.join(" & ") : "—"}</div>
-            </div>
-          </div>
+        {/* ── SPLINE 3D INTERACTIVE HERO ─────────────────────── */}
+        <div className="reveal-init stagger-2 w-full h-full">
+          <SplineSceneBasic />
         </div>
       </section>
 

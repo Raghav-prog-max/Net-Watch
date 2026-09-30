@@ -14,6 +14,7 @@ except ImportError:
 
 from ..db.models import AlertModel
 from ..db.session import get_db
+from ..services.drift_service import compute_drift
 from ..services.scorer import MODEL_DIR, ROOT
 from .score import scorer_dependency
 
@@ -48,12 +49,11 @@ def get_model_metrics():
 
 
 @router.get("/metrics/drift")
-def get_drift(scorer=Depends(scorer_dependency)):
-    """PSI of recent benign-looking traffic against the training reference."""
-    drift = _config().get("drift", {})
-    out = scorer.drift()
-    out["bands"] = {"warning": drift.get("warn_psi", 0.10), "drift": drift.get("drift_psi", 0.25)}
-    return out
+def get_drift(scorer=Depends(scorer_dependency), db: Session = Depends(get_db)):
+    """Drift status now and over time: PSI and KS of recent benign-looking traffic
+    against the training reference, alert rates, family mix, the analyst
+    false-positive share (api/services/drift_service.py)."""
+    return compute_drift(scorer, db)
 
 
 VERSION_HISTORY = [

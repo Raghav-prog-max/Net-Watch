@@ -7,91 +7,23 @@ export default function SocSidebar() {
   const pathname = usePathname();
 
   const navItems = [
-    {
-      href: "/dashboard",
-      label: "Dashboard",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="7" height="9" rx="1"></rect>
-          <rect x="14" y="3" width="7" height="5" rx="1"></rect>
-          <rect x="14" y="12" width="7" height="9" rx="1"></rect>
-          <rect x="3" y="16" width="7" height="5" rx="1"></rect>
-        </svg>
-      ),
-    },
-    {
-      href: "/alerts",
-      label: "Alerts",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-          <line x1="12" y1="9" x2="12" y2="13"></line>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-      ),
-    },
-    {
-      href: "/evaluation",
-      label: "Evaluation",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="18" y1="20" x2="18" y2="10"></line>
-          <line x1="12" y1="20" x2="12" y2="4"></line>
-          <line x1="6" y1="20" x2="6" y2="14"></line>
-        </svg>
-      ),
-    },
-    {
-      href: "/drift",
-      label: "Drift",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-        </svg>
-      ),
-    },
-    {
-      href: "/models",
-      label: "Models",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-          <polyline points="2 17 12 22 22 17"></polyline>
-          <polyline points="2 12 12 17 22 12"></polyline>
-        </svg>
-      ),
-    },
+    { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { href: "/alerts", label: "Alerts", icon: "notifications_active", badge: true },
+    { href: "/evaluation", label: "Evaluation", icon: "fact_check" },
+    { href: "/drift", label: "Drift", icon: "timeline" },
+    { href: "/models", label: "Models", icon: "model_training" },
   ];
 
   const bottomItems = [
-    {
-      href: "/",
-      label: "Landing Page",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-          <polyline points="9 22 9 12 15 12 15 22"></polyline>
-        </svg>
-      ),
-    },
-    {
-      href: "#",
-      label: "Log out",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-          <polyline points="16 17 21 12 16 7"></polyline>
-          <line x1="21" y1="12" x2="9" y2="12"></line>
-        </svg>
-      ),
-    },
+    { href: "/", label: "Landing Page", icon: "public" },
+    { href: "#", label: "Log out", icon: "logout" },
   ];
 
   return (
     <aside
       style={{
-        width: "210px",
-        backgroundColor: "var(--nw-bg-panel)",
+        width: "240px",
+        backgroundColor: "#0E0E12",
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
@@ -100,51 +32,52 @@ export default function SocSidebar() {
         position: "sticky",
         top: 0,
         overflowY: "auto",
-        padding: "24px 0",
-        borderRight: "1px solid rgba(255, 255, 255, 0.04)",
+        padding: "16px 0",
+        borderRight: "1px solid rgba(255, 255, 255, 0.06)",
       }}
     >
-      {/* ── TOP: LOGO & NAV ────────────────────────────────────── */}
+      {/* ── TOP: LOGO & NAV ──────────────────────── */}
       <div>
-        {/* Brand logo top-left */}
+        {/* Brand Header */}
         <Link
           href="/"
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "10px",
-            padding: "0 22px",
-            marginBottom: "36px",
+            gap: "12px",
+            padding: "0 20px 20px",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
           }}
         >
           <div
             style={{
               width: "32px",
               height: "32px",
-              borderRadius: "10px",
-              backgroundColor: "var(--nw-accent-purple)",
+              borderRadius: "8px",
+              backgroundColor: "#FFFFFF",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#FFFFFF",
+              color: "#000000",
               fontWeight: 800,
               fontSize: "16px",
+              boxShadow: "0 2px 8px rgba(255, 255, 255, 0.1)",
             }}
           >
             N
           </div>
           <div>
-            <div style={{ fontSize: "16px", fontWeight: 800, letterSpacing: "-0.01em", color: "#FFFFFF" }}>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.01em" }}>
               NetWatch
             </div>
-            <div style={{ fontSize: "10px", color: "var(--nw-text-muted)", letterSpacing: "0.04em" }}>
+            <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "#8E909B", letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 600 }}>
               AI SEC-OPS
             </div>
           </div>
         </Link>
 
-        {/* Nav items */}
-        <nav style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        {/* Nav Items */}
+        <nav style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "16px" }}>
           {navItems.map((item) => {
             const isActive =
               item.href === "/alerts"
@@ -158,103 +91,95 @@ export default function SocSidebar() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "14px",
-                  padding: "11px 22px",
-                  fontSize: "13px",
-                  fontWeight: isActive ? 700 : 500,
-                  color: isActive ? "#FFFFFF" : "var(--nw-text-muted)",
-                  backgroundColor: isActive ? "rgba(139, 95, 191, 0.12)" : "transparent",
-                  borderLeft: isActive ? "3px solid var(--nw-accent-purple)" : "3px solid transparent",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  padding: "10px 20px",
+                  fontSize: "12px",
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? "#FFFFFF" : "#8E909B",
+                  backgroundColor: isActive ? "#141418" : "transparent",
+                  borderLeft: isActive ? "2px solid #FFFFFF" : "2px solid transparent",
                   transition: "all 0.15s ease",
+                  letterSpacing: "0.02em",
                 }}
               >
-                <span style={{ color: isActive ? "var(--nw-card-2)" : "inherit" }}>
-                  {item.icon}
-                </span>
-                <span>{item.label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: "19px",
+                      color: isActive ? "#FFFFFF" : "inherit",
+                      fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                    }}
+                  >
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span style={{
+                    padding: "2px 8px",
+                    fontSize: "10px",
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                    borderRadius: "9999px",
+                    backgroundColor: "#1A1A20",
+                    color: "#E1E4EA",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                  }}>
+                    •
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
       </div>
 
-      {/* ── BOTTOM: PROMO / CTA CARD & FOOTER LINKS ───────────── */}
+      {/* ── BOTTOM: PROMO & FOOTER LINKS ────────── */}
       <div style={{ padding: "0 16px" }}>
-        {/* Purple gradient promo / CTA block (repurposed for Escalate to SOC lead) */}
+        {/* Escalate Incident Card */}
         <div
           style={{
-            background: "linear-gradient(145deg, #8B5FBF 0%, #633B94 100%)",
-            borderRadius: "18px",
-            padding: "18px 16px",
-            color: "#FFFFFF",
-            marginBottom: "20px",
-            position: "relative",
-            overflow: "hidden",
-            boxShadow: "0 8px 24px rgba(139, 95, 191, 0.25)",
+            padding: "16px",
+            borderRadius: "12px",
+            backgroundColor: "#141418",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            marginBottom: "16px",
           }}
         >
-          {/* Subtle decoration circle */}
-          <div
-            style={{
-              position: "absolute",
-              top: "-15px",
-              right: "-15px",
-              width: "60px",
-              height: "60px",
-              borderRadius: "50%",
-              backgroundColor: "rgba(255, 255, 255, 0.1)",
-            }}
-          />
-
-          <div
-            style={{
-              width: "28px",
-              height: "28px",
-              borderRadius: "8px",
-              backgroundColor: "rgba(255, 255, 255, 0.2)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: "10px",
-            }}
-          >
-            🛡️
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "#FFFFFF" }}>crisis_alert</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "#E1E4EA", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
+              Escalate Incident
+            </span>
           </div>
-
-          <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: "4px" }}>
-            Escalate Incident
-          </div>
-          <div style={{ fontSize: "11px", opacity: 0.85, lineHeight: 1.4, marginBottom: "12px" }}>
-            Open an alert and press Escalate: that is what records the decision.
-          </div>
-
-          {/* A link, not a button: nothing here notifies anyone, and a "Lead
-              Alerted" confirmation would tell the analyst otherwise. */}
+          <p style={{ fontSize: "11px", color: "#8E909B", lineHeight: 1.5, marginBottom: "12px", margin: "0 0 12px" }}>
+            High confidence threat requires Tier-3 intervention.
+          </p>
           <Link
             href="/alerts"
             style={{
               display: "block",
               textAlign: "center",
-              textDecoration: "none",
               width: "100%",
-              padding: "7px 12px",
+              padding: "8px 12px",
               backgroundColor: "#FFFFFF",
-              color: "#633B94",
+              color: "#000000",
               borderRadius: "9999px",
-              border: "none",
               fontSize: "11px",
               fontWeight: 700,
-              cursor: "pointer",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-              transition: "transform 0.15s ease",
+              letterSpacing: "-0.01em",
+              boxShadow: "0 2px 6px rgba(255, 255, 255, 0.08)",
+              transition: "all 0.15s ease",
             }}
           >
             Review Alerts to Escalate →
           </Link>
         </div>
 
-        {/* Bottom items */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        {/* Footer Links */}
+        <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", flexDirection: "column", gap: "4px" }}>
           {bottomItems.map((item) => (
             <Link
               key={item.label}
@@ -262,15 +187,14 @@ export default function SocSidebar() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "12px",
-                padding: "8px 12px",
+                gap: "10px",
+                padding: "6px 12px",
                 fontSize: "12px",
-                color: "var(--nw-text-muted)",
-                borderRadius: "10px",
-                transition: "all 0.15s ease",
+                color: "#8E909B",
+                transition: "color 0.15s ease",
               }}
             >
-              <span>{item.icon}</span>
+              <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>{item.icon}</span>
               <span>{item.label}</span>
             </Link>
           ))}

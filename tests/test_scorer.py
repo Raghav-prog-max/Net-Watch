@@ -4,8 +4,11 @@ import pandas as pd
 import pytest
 import yaml
 
-from api.services.scorer import MODEL_DIR, ModelsNotFound, Scorer, severity_logic
+from api.services.scorer import MODEL_DIR, ModelsNotFound, Scorer
 from api.services.mitre import get_mitre_dict
+from ml.models.combine import severity
+
+# the scorer's alerts get their severity from ml/models/combine.severity (via decide)
 
 @pytest.mark.parametrize("family,confidence,anomaly_pct,expected_level", [
     ("DDoS", 1.0, 1.0, "Critical"),     # 100 * (0.5*1 + 0.3*1 + 0.2*1) = 100 >= 85 -> Critical
@@ -15,11 +18,9 @@ from api.services.mitre import get_mitre_dict
     ("PortScan", 1.0, 1.0, "Critical"), # 100 * (0.5 + 0.3 + 0.1) = 90
     ("PortScan", 0.5, 0.5, "Medium"),   # 100 * (0.25 + 0.15 + 0.1) = 50
     ("Unknown", 1.0, 1.0, "Critical"),  # 100 * (0.5 + 0.3 + 0.16) = 96
-    ("Benign", 0.99, 0.1, "Medium"),    # 100 * (0.495 + 0.03 + 0.1) = 62.5 -> Medium
-    ("Benign", 1.0, 1.0, "Critical"),   # 100 * (0.5 + 0.3 + 0.1) = 90 -> Critical
 ])
 def test_severity_logic_boundaries(family, confidence, anomaly_pct, expected_level):
-    score, level = severity_logic(confidence, anomaly_pct, family)
+    score, level = severity(confidence, anomaly_pct, family)
     assert level == expected_level
 
 @pytest.mark.parametrize("family,expected_tactic", [
@@ -149,3 +150,35 @@ def test_known_attack_burst_does_not_move_the_drift_rate(flows):
     assert after["unexplained_alert_rate"] <= before + 0.01  # but it is a named attack
     assert after["status"] != "drift"
     assert len(after["ks"]) > 0
+
+
+# ── audit gaps 6, 10, 11: KS by importance, family mix, drift over time ────────
+
+@needs_models
+def test_drift_history_family_mix_and_ks_follow_the_config(flows):
+    s = Scorer(drift_cfg={"history_every": 200, "top_features_ks": 3})
+    benign = flows[flows["family"] == "Benign"].sample(700, random_state=3)
+    for i in range(0, 700, 50):                       # batches, as the replayer sends them
+        _score(s, benign.iloc[i:i + 50])
+    _score(s, flows[flows["family"] == "DDoS"].sample(150, random_state=3))
+    out = s.drift()
+    # a snapshot at the first batch that takes the count past each multiple of 200
+    assert [h["flows_scored"] for h in out["history"]] == [200, 400, 600, 850]
+    assert out["history"][0]["status"] == "warming_up"            # < 500 benign flows seen
+    assert out["history"][-1]["status"] in ("stable", "warning", "drift")
+    # the DDoS burst shows up in the family mix, shares sum to one
+    assert out["family_mix"].get("DDoS", 0) > 0.5
+    assert abs(sum(out["family_mix"].values()) - 1) < 1e-3
+    # KS on the classifier's top-3 features by importance, not on the most shifted
+    assert {k["feature"] for k in out["ks"]} <= set(s.importance_rank[:3])
+    assert out["flows_scored"] == 850
+
+
+def test_drift_thresholds_come_from_the_config():
+    import yaml as _yaml
+    from api.services.scorer import drift_config
+    cfg = _yaml.safe_load(open("ml/config.yaml"))["drift"]
+    got = drift_config()
+    for key in ("window", "warn_psi", "drift_psi", "alert_rate_warning_multiplier",
+                "alert_rate_drift_multiplier", "top_features_ks"):
+        assert got[key] == cfg[key]

@@ -36,8 +36,12 @@ def window_psi(X_window, features, ref):
     return out
 
 
-def ks_test(X_window, features, ref, top_n=15):
-    """KS statistic for each feature vs. training reference (top top_n by PSI).
+def ks_test(X_window, features, ref, top_n=15, rank=None):
+    """KS statistic per feature vs. the training reference, largest first.
+
+    `rank` = feature names, most important first (the classifier's
+    importances): only its first `top_n` are tested, as the handbook asks.
+    Without it every feature is tested and the `top_n` most shifted returned.
 
     Uses scipy.stats.ks_2samp when available; falls back to an empirical-CDF
     comparison so the monitor never crashes in minimal environments.
@@ -49,9 +53,10 @@ def ks_test(X_window, features, ref, top_n=15):
         _scipy = False
 
     X = np.asarray(X_window, dtype="float64")
+    tested = set(rank[:top_n]) if rank is not None else None
     results = {}
     for i, name in enumerate(features):
-        if name not in ref:
+        if name not in ref or (tested is not None and name not in tested):
             continue
         edges = np.asarray(ref[name]["edges"], dtype="float64")
         counts = np.asarray(ref[name]["counts"], dtype="float64")

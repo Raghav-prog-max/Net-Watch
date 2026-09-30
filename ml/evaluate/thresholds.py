@@ -16,6 +16,7 @@ def pick_threshold(
     y_is_attack: np.ndarray,
     attack_score: np.ndarray,
     fpr_budget: float = 0.005,
+    verbose: bool = True,
 ) -> dict[str, float]:
     """
     Choose the decision threshold that maximises TPR while keeping FPR ≤ fpr_budget.
@@ -36,7 +37,8 @@ def pick_threshold(
     chosen_tpr = float(tpr[best_idx])
     chosen_fpr = float(fpr[best_idx])
 
-    print(f"[thresholds] Chosen threshold={chosen_thr:.4f}  TPR={chosen_tpr:.3%}  FPR={chosen_fpr:.3%}")
+    if verbose:
+        print(f"[thresholds] Chosen threshold={chosen_thr:.4f}  TPR={chosen_tpr:.3%}  FPR={chosen_fpr:.3%}")
     
     return {
         "threshold": chosen_thr,
