@@ -153,7 +153,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     # --- threshold from the false-positive budget -------------------------
     val_score, _ = clf_mod.attack_score(model, matrix(val, features))
-    thr = pick_threshold(val["family"] != "Benign", val_score, cfg["train"]["fpr_budget"])
+    thr = pick_threshold(val["family"] != "Benign", val_score, system.classifier_budget(cfg))
     print(f"threshold {thr['threshold']:.4f} at FPR {thr.get('fpr_at_threshold')}")
 
     # --- anomaly detector, benign traffic only ----------------------------
@@ -276,7 +276,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
               f"time block with training"
               + ("" if nc["inflated"] else "; no inflation measured"))
 
-    budget_splits = system.splits((budget, cfg["anomaly"]["benign_flag_rate"]))
+    budget_splits = system.splits((system.classifier_budget(cfg), cfg["anomaly"]["benign_flag_rate"]))
     if not skip_lofo:
         print("running leave-one-family-out experiments...")
         report["lofo"] = lofo.run_all(train, val, test, features, LOFO_FAMILIES, cfg,
@@ -328,6 +328,8 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     json.dump({"attack_threshold": thr["threshold"],
                "anomaly_threshold": det.threshold,
                "fpr_budget": cfg["train"]["fpr_budget"],
+               "classifier_fpr_budget": system.classifier_budget(cfg),
+               "detector_flag_rate": cfg["anomaly"]["benign_flag_rate"],
                # baseline for the drift monitor's alert-rate rule (see above)
                "benign_unexplained_alert_rate": round(unexplained_rate, 5)},
               open(out / "thresholds.json", "w"), indent=2)

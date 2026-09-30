@@ -19,6 +19,15 @@ from ml.evaluate.thresholds import pick_threshold
 # (classifier FPR budget, detector benign flag rate) pairs for the trade-off
 # table, besides the configured pair. Each spends at most 0.5% in total.
 BUDGET_SPLITS = [(0.005, 0.0), (0.004, 0.001), (0.0025, 0.0025), (0.001, 0.004)]
+# The configuration before 30 Sep 2026, kept in the table for comparison: the
+# classifier alone used the whole budget and the detector's 1% came on top.
+PREVIOUS_SPLIT = (0.005, 0.01)
+
+
+def classifier_budget(cfg):
+    """The classifier's share of the false-alert budget. Configs from before the
+    split existed gave the classifier the whole budget."""
+    return cfg["train"].get("classifier_fpr_budget", cfg["train"]["fpr_budget"])
 
 
 def summary(is_benign, by_classifier, by_detector, budget):
@@ -53,7 +62,7 @@ def detector_threshold(detector, flag_rate):
 def splits(configured):
     """The configured (classifier budget, detector rate) pair first, then the others."""
     configured = tuple(float(v) for v in configured)
-    return [configured] + [s for s in BUDGET_SPLITS if s != configured]
+    return [configured] + [s for s in BUDGET_SPLITS + [PREVIOUS_SPLIT] if s != configured]
 
 
 def thresholds_for(split, val_is_attack, val_attack_score, detector):

@@ -31,7 +31,7 @@ def run_one(train, val, test, features, family, cfg, budget_splits=()):
     # run's own validation split, not from 0.5. The held-out family is absent from
     # va, which is the point -- you cannot tune against an attack you have not seen.
     va_score, _ = clf_mod.attack_score(model, matrix(va, features))
-    thr = pick_threshold(va["family"] != "Benign", va_score, cfg["train"]["fpr_budget"])
+    thr = pick_threshold(va["family"] != "Benign", va_score, system.classifier_budget(cfg))
 
     held = test[test["family"] == family]
     benign = test[test["family"] == "Benign"]

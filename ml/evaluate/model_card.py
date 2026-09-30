@@ -15,6 +15,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from ml.evaluate.system import PREVIOUS_SPLIT
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -153,11 +155,12 @@ def render():
           f"flows** ({pct(sysr['false_positive_rate'], 2)}) for the full system on the test set, "
           + (f"**over** the {pct(budget)} budget ({budget * 10000:g} per 10,000). "
              if over else f"within the {pct(budget)} budget ({budget * 10000:g} per 10,000). ")
-          + f"{sysr['from_classifier_per_10k']:.1f} come from the classifier, whose threshold "
-          f"({thr['attack_threshold']:.4f}) was chosen on validation to stay within the budget on "
-          f"its own; {sysr['from_detector_only_per_10k']:.1f} come from the anomaly detector "
-          f"alone, which is calibrated separately to flag "
-          f"{pct(cfg['anomaly']['benign_flag_rate'])} of benign validation traffic. "
+          + f"The budget is split between the two models, both cut-offs chosen on validation: "
+          f"{sysr['from_classifier_per_10k']:.1f} come from the classifier, whose threshold "
+          f"({thr['attack_threshold']:.4f}) keeps it within "
+          f"{pct(thr.get('classifier_fpr_budget', budget), 2)}; "
+          f"{sysr['from_detector_only_per_10k']:.1f} come from the anomaly detector alone, "
+          f"calibrated to flag {pct(cfg['anomaly']['benign_flag_rate'], 2)} of benign traffic. "
           "An alert from either model reaches the analyst.")
     else:
         w(f"The alert threshold ({thr['attack_threshold']:.4f}) was chosen on validation to "
@@ -213,8 +216,9 @@ def render():
         w("### Splitting the false-alert budget between the two models")
         w("")
         w("The same models at other cut-offs, both chosen on validation; nothing is retrained. "
-          "The first row is the configuration in use. Choosing a row is a decision for the "
-          "team: it trades false alerts against catching attacks the classifier has never seen.")
+          "The first row is the configuration in use (`train.classifier_fpr_budget` and "
+          "`anomaly.benign_flag_rate` in `ml/config.yaml`). Each row trades false alerts "
+          "against catching attacks the classifier has never seen.")
         w("")
         lofo_fams = list(trade[0].get("lofo_caught_by_full_system", {}))
         w("| Classifier budget | Detector flag rate | False alerts / 10k (val) | "
@@ -222,7 +226,8 @@ def render():
           + "".join(f"LOFO {f} | " for f in lofo_fams))
         w("| ---: | ---: | ---: | ---: | ---: | ---: | " + "---: | " * len(lofo_fams))
         for r in trade:
-            mark = " (in use)" if r["configured"] else ""
+            previous = (r["classifier_budget"], r["detector_flag_rate"]) == PREVIOUS_SPLIT
+            mark = " (in use)" if r["configured"] else " (before 30 Sep)" if previous else ""
             nov_a = pct(r["novel_flows_alerted"]) if "novel_flows_alerted" in r else "—"
             det_rate = pct(r["detector_flag_rate"], 2) if r["detector_flag_rate"] else "off"
             w(f"| {pct(r['classifier_budget'], 2)}{mark} | {det_rate} | "
