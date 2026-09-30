@@ -99,93 +99,22 @@ export default function LandingPage() {
         overflowX: "hidden",
       }}
     >
-      {/* ── TOP NAVIGATION BAR ─────────────────────────────────── */}
-      <header
-        style={{
-          maxWidth: "1280px",
-          margin: "0 auto",
-          padding: "24px 28px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          position: "relative",
-          zIndex: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div
-            style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "12px",
-              backgroundColor: "var(--nw-accent-purple)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#FFFFFF",
-              fontWeight: 800,
-              fontSize: "18px",
-              boxShadow: "0 4px 14px rgba(139, 95, 191, 0.4)",
-            }}
-          >
-            N
-          </div>
-          <div>
-            <span style={{ fontSize: "18px", fontWeight: 800, letterSpacing: "-0.01em" }}>
-              NetWatch
-            </span>
-            <span
-              style={{
-                fontSize: "11px",
-                marginLeft: "8px",
-                color: "var(--nw-card-2)",
-                backgroundColor: "rgba(167, 139, 250, 0.15)",
-                padding: "2px 8px",
-                borderRadius: "9999px",
-                fontWeight: 600,
-              }}
-            >
-              AI SOC v1.0
-            </span>
-          </div>
-        </div>
 
-        <nav style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-          <a href="#stats" style={{ color: "var(--nw-text-muted)", fontSize: "13px", fontWeight: 500 }}>
-            Metrics
-          </a>
-          <a href="#how-it-works" style={{ color: "var(--nw-text-muted)", fontSize: "13px", fontWeight: 500 }}>
-            Architecture
-          </a>
-          <a href="#trust" style={{ color: "var(--nw-text-muted)", fontSize: "13px", fontWeight: 500 }}>
-            Why No Auto-Block
-          </a>
-          <Link
-            href="/dashboard"
-            className="nw-btn-pill nw-btn-purple"
-            style={{ padding: "9px 20px" }}
-          >
-            Launch Dashboard →
-          </Link>
-        </nav>
-      </header>
 
       {/* ── HERO SECTION ───────────────────────────────────────── */}
       <section
         style={{
-          maxWidth: "1280px",
-          margin: "0 auto",
-          padding: "60px 28px 90px",
+          width: "100%",
+          height: "100vh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          textAlign: "center",
           position: "relative",
           zIndex: 10,
         }}
       >
         {/* ── SPLINE 3D INTERACTIVE HERO ─────────────────────── */}
-        <div className="reveal-init stagger-2 w-full mt-4">
+        <div className="reveal-init stagger-2 w-full h-full">
           <SplineSceneBasic />
         </div>
       </section>
