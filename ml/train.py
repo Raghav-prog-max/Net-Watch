@@ -11,6 +11,8 @@ import pandas as pd
 import yaml
 from sklearn.metrics import f1_score
 
+from sklearn.metrics import f1_score
+
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
 from ml.data.load import load_processed
 from ml.data.split import add_blocks, make_splits, downsample_benign
@@ -44,9 +46,11 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
     y_train_enc = le.transform(train_df["family"].values)
     y_val_enc = le.transform(val_df["family"].values)
     
+    from imblearn.pipeline import Pipeline
+    
     strategies = []
-    strategies.append(("no_handling", X_train, y_train_enc))
-    strategies.append(("class_weight", X_train, y_train_enc))
+    strategies.append(("no_handling", None))
+    strategies.append(("class_weight", None))
     
     # Benign undersampling
     try:
@@ -61,27 +65,34 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
                 sampling_strategy[encoded_fam] = count
         
         rus = RandomUnderSampler(sampling_strategy=sampling_strategy, random_state=random_state)
-        X_us, y_us = rus.fit_resample(X_train, y_train_enc)
-        strategies.append(("undersample", X_us, y_us))
+        strategies.append(("undersample", rus))
     except Exception as e:
         print(f"Undersample failed: {e}")
 
     # SMOTE
     smote = SMOTE(random_state=random_state, k_neighbors=3)
-    X_sm, y_sm = smote.fit_resample(X_train, y_train_enc)
-    strategies.append(("smote", X_sm, y_sm))
+    strategies.append(("smote", smote))
 
     results = []
-    for name, X_tr, y_tr in strategies:
+    for name, sampler in strategies:
         cw = "balanced" if name == "class_weight" else None
         model = lgb.LGBMClassifier(
             n_estimators=200, learning_rate=0.05, num_leaves=31,
             class_weight=cw, n_jobs=-1, verbose=-1, random_state=random_state
         )
-        model.fit(X_tr, y_tr, eval_X=X_val, eval_y=y_val_enc,
-                  callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
         
-        y_pred = model.predict(X_val)
+        if sampler is not None:
+            pipeline = Pipeline([('sampler', sampler), ('model', model)])
+            pipeline.fit(X_train, y_train_enc, 
+                         model__eval_set=[(X_val, y_val_enc)],
+                         model__callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
+            y_pred = pipeline.predict(X_val)
+        else:
+            model.fit(X_train, y_train_enc, 
+                      eval_set=[(X_val, y_val_enc)],
+                      callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
+            y_pred = model.predict(X_val)
+            
         macro = float(f1_score(y_val_enc, y_pred, average="macro", zero_division=0))
         from sklearn.metrics import recall_score
         rec = recall_score(y_val_enc, y_pred, labels=range(len(le.classes_)), average=None,
@@ -111,9 +122,26 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
         is_fb = df["feedback"].fillna(False).astype(bool)
         feedback, df = df[is_fb].drop(columns="feedback"), df[~is_fb].drop(columns="feedback")
     df = df[df["family"].isin(TRAIN_FAMILIES + ["Infiltration", "Heartbleed"])]
+    
+    # Hold out Monday for drift evaluation (Benign traffic only)
+    drift = None
+    if "day" in df.columns:
+        is_drift = df["day"] == "Monday"
+        drift = df[is_drift].reset_index(drop=True)
+        df = df[~is_drift].reset_index(drop=True)
+
     df = add_blocks(df, cfg["split"]["block_minutes"])
 
     train, val, test = make_splits(df, cfg["split"]["test_size"], cfg["split"]["random_state"])
+    
+    splits_dir = Path(cfg["paths"].get("splits", "data/splits"))
+    splits_dir.mkdir(parents=True, exist_ok=True)
+    train.to_pickle(splits_dir / "train.pkl")
+    val.to_pickle(splits_dir / "val.pkl")
+    test.to_pickle(splits_dir / "test.pkl")
+    if drift is not None and not drift.empty:
+        drift.to_pickle(splits_dir / "drift.pkl")
+
     features = feature_columns(train)
 
     # Rare families are never trained on. They exist to test the anomaly detector.
@@ -196,15 +224,32 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     fam, _ = clf_mod.predicted_family(model, proba)
     y_pred = np.where(attack_score >= thr["threshold"], fam, "Benign")
 
+    sys_is_anomalous = det.is_anomalous(det.score(Xt))
+    sys_ood = nov.is_out_of_family(nov.distance(Xt, fam), fam)
+    sys_known = attack_score >= thr["threshold"]
+    sys_alerted = sys_known | sys_is_anomalous
+    sys_mislabelled = sys_known & sys_ood
+    sys_shown = np.where(sys_known & ~sys_mislabelled, fam, "Unknown")
+    sys_y_pred = np.where(sys_alerted, sys_shown, "Benign")
+
+    main_summary = metrics.summarise(known_test["family"], y_pred,
+                                     attack_score >= thr["threshold"],
+                                     proba, model.classes_)
+
+    sys_fpr = metrics.false_positive_rate(known_test["family"], sys_alerted)
+
     report = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "classifier": kind,
         "features": len(features),
         "rows": {"train": len(train), "val": len(val), "test": len(test)},
         "threshold": thr,
-        "main": metrics.summarise(known_test["family"], y_pred,
-                                  attack_score >= thr["threshold"],
-                                  proba, model.classes_),
+        "main": main_summary,
+        "system": {
+            "false_positive_rate": round(sys_fpr, 5),
+            "false_alerts_per_10k_benign_flows": round(sys_fpr * 10000, 1),
+            "macro_f1": round(float(f1_score(known_test["family"], sys_y_pred, average="macro", zero_division=0)), 4)
+        }
     }
 
     # --- what the analyst sees: classifier OR detector ---------------------
@@ -213,8 +258,10 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     budget = cfg["train"]["fpr_budget"]
     det_test = det.score(Xt)
     test_benign = (known_test["family"] == "Benign").to_numpy()
-    report["system"] = system.summary(test_benign, attack_score >= thr["threshold"],
+    sys_summary = system.summary(test_benign, attack_score >= thr["threshold"],
                                       det.is_anomalous(det_test), budget)
+    sys_summary["macro_f1"] = report["system"]["macro_f1"]
+    report["system"] = sys_summary
 
     base_proba = base.predict_proba(Xt)
     base_score, _ = clf_mod.attack_score(base, Xt)
@@ -316,6 +363,52 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
                 for r in report["lofo"] if "budget_splits" in r}
         trade_off.append(row)
     report["budget_trade_off"] = trade_off
+
+    # --- joint budget trade-off experiment --------------------------------
+    print("running joint budget trade-off experiment...")
+    trade_off = []
+    bv_scores = det.score(matrix(val[val["family"] == "Benign"], features))
+    nv_scores = det.score(Xn) if 'Xn' in locals() else None
+    
+    budget = cfg["train"]["fpr_budget"]
+    for d_rate in [0.0, 0.001, 0.002, 0.003, 0.004, 0.005, 0.01]:
+        d_thr = np.quantile(bv_scores, 1.0 - d_rate) if d_rate > 0 else float('inf')
+        val_det_flags = det.score(matrix(val, features)) >= d_thr
+        
+        val_benign_mask = val["family"] == "Benign"
+        val_is_attack = val["family"] != "Benign"
+        
+        max_c_alerts = int(budget * val_benign_mask.sum())
+        det_alerts_on_benign = int((val_det_flags & val_benign_mask).sum())
+        allowed_c_alerts = max_c_alerts - det_alerts_on_benign
+        
+        if allowed_c_alerts < 0:
+            c_thr = float('inf')
+            c_tpr = 0.0
+        else:
+            benign_not_flagged_scores = val_score[val_benign_mask & ~val_det_flags]
+            if allowed_c_alerts >= len(benign_not_flagged_scores):
+                c_thr = -float('inf')
+            elif allowed_c_alerts == 0:
+                c_thr = float('inf')
+            else:
+                c_thr = sorted(benign_not_flagged_scores, reverse=True)[allowed_c_alerts - 1]
+            c_tpr = float((val_score[val_is_attack] >= c_thr).mean()) if val_is_attack.sum() > 0 else 0.0
+            
+        n_rec = 0.0
+        if nv_scores is not None:
+            n_flags = nv_scores >= d_thr
+            n_known_ = locals().get('n_attack', np.zeros_like(nv_scores)) >= c_thr
+            n_rec = float((n_flags | n_known_).mean())
+            
+        trade_off.append({
+            "detector_flag_rate": d_rate,
+            "classifier_threshold": round(float(c_thr), 4) if c_thr not in [float('inf'), -float('inf')] else None,
+            "classifier_tpr_on_val": round(c_tpr, 4),
+            "novel_recall": round(n_rec, 4) if nv_scores is not None else None
+        })
+        
+    report["joint_budget_trade_off"] = trade_off
 
     # --- artefacts --------------------------------------------------------
     out = Path(cfg["paths"]["model_dir"])

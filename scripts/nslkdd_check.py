@@ -197,8 +197,26 @@ def main(data_dir: str, trees: int, out: str) -> int:
     data_dir = ROOT / data_dir
     train_path, test_path = find_file(data_dir, "KDDTrain+"), find_file(data_dir, "KDDTest+")
     if not (train_path and test_path):
-        print(f"NSL-KDD not found: put KDDTrain+.txt and KDDTest+.txt in {data_dir}")
-        return 2
+        print(f"NSL-KDD not found in {data_dir}. Downloading from Kaggle...")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        import subprocess
+        try:
+            kaggle_bin = ROOT / ".venv" / "Scripts" / "kaggle.exe"
+            subprocess.run([str(kaggle_bin), "datasets", "download", "hassan06/nslkdd", "-p", str(data_dir), "--unzip"], check=True)
+        except Exception as e:
+            print(f"Failed to download NSL-KDD from Kaggle: {e}")
+            return 2
+        # It extracts into a subfolder `nsl-kdd`, let's flatten it.
+        import glob
+        import shutil
+        for f in glob.glob(str(data_dir / "nsl-kdd" / "*.txt")):
+            dest = data_dir / Path(f).name
+            if not dest.exists():
+                shutil.move(f, str(data_dir))
+        train_path, test_path = find_file(data_dir, "KDDTrain+"), find_file(data_dir, "KDDTest+")
+        if not (train_path and test_path):
+            print("Failed to find KDDTrain+.txt and KDDTest+.txt after downloading.")
+            return 2
 
     seed = yaml.safe_load(open(ROOT / "ml" / "config.yaml"))["split"]["random_state"]
     train, test = load(train_path), load(test_path)

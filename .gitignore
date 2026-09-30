@@ -1,5 +1,6 @@
 data/raw/*
 data/processed/*
+data/splits/*
 data/alerts.db
 models/v*/
 reports/*
@@ -23,3 +24,4 @@ venv/
 .DS_Store
 netwatch.db
 .pytest_cache/
+.env

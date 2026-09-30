@@ -74,12 +74,12 @@ def download() -> None:
     # Import here so the module can be imported without kaggle installed
     try:
         import kaggle  # noqa: F401 – triggers auth
-        from kaggle.api.kaggle_api_extended import KaggleApiExtended
+        from kaggle.api.kaggle_api_extended import KaggleApi
     except ImportError:
-        print("[download_data] ❌  kaggle package not installed. Run: pip install kaggle")
+        print("[download_data] X  kaggle package not installed. Run: pip install kaggle")
         sys.exit(1)
 
-    api = KaggleApiExtended()
+    api = KaggleApi()
     api.authenticate()
 
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)

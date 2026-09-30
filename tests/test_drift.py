@@ -79,72 +79,8 @@ def test_one_noisy_feature_cannot_declare_drift():
 
 
 # ---------------------------------------------------------------- the scenario
-
-def _frame(n=4000):
-    cols = {c: np.exp(RNG.normal(0, 1, n)) * 100 for c in SHIFTED}
-    cols["Flow Packets/s"] = np.exp(RNG.normal(0, 1, n)) * 100    # never shifted
-    cols["family"] = "Benign"
-    return pd.DataFrame(cols)
-
-
-def _factors(df, out, col):
-    return (out[col] / df.loc[out.index, col]).to_numpy()
-
-
-def test_drift_scenario_ramps_rather_than_stepping():
-    """The original applied one scalar per column: an instant step, not the
-    gradual shift its comment described, and too small to register at all."""
-    df = _frame()
-    out = pick(df, "drift", limit=2000)
-    f = _factors(df, out, "Flow Duration")
-
-    assert np.allclose(f[:100], 1.0), "the opening should be unshifted baseline"
-    assert np.allclose(f[-100:], 3.0), "the close should hold the full shift"
-    assert (np.diff(f) >= -1e-9).all(), "the shift must never step backwards"
-    assert len(np.unique(np.round(f, 4))) > 50, "a ramp, not a handful of steps"
-
-
-def test_drift_scenario_holds_in_the_warning_band_before_the_peak():
-    """A straight ramp went stable -> drift with no Warning in between: the
-    unexplained alert rate passed 2x its baseline as soon as PSI passed 0.10.
-    The scenario now holds a moderate shift first, and that hold has to read
-    as Warning on its own -- not Stable, and not already Drift."""
-    df = _frame()
-    out = pick(df, "drift", limit=2000)
-    f = _factors(df, out, "Flow Duration")
-    hold = f[250:1000]                       # after the climb, before the ramp
-    assert np.allclose(hold, hold[0]), "the moderate shift should be held flat"
-    assert 1.3 < hold[0] < 2.0
-
-    ref = reference_stats(df[SHIFTED].to_numpy(), SHIFTED)
-    got = window_psi(out[SHIFTED].to_numpy()[250:1000], SHIFTED, ref)
-    assert status(got)["status"] == "warning", f"the hold reads as {got}"
-
-
-def test_drift_scenario_respects_the_limit():
-    """The ramp has to fit inside what the replayer actually sends, or it is cut
-    off during the baseline and never reaches drift."""
-    df = _frame()
-    out = pick(df, "drift", limit=1500)
-    assert len(out) == 1500
-    assert np.allclose(_factors(df, out, "Flow Duration")[-1], 3.0), (
-        "the last flow sent must be at the peak shift")
-
-
-def test_unrelated_features_are_left_alone():
-    df = _frame()
-    out = pick(df, "drift", limit=2000)
-    assert np.allclose(_factors(df, out, "Flow Packets/s"), 1.0)
-
-
-def test_drift_scenario_is_large_enough_to_be_detected():
-    """End of the replay vs baseline, measured the way the monitor measures it."""
-    df = _frame()
-    out = pick(df, "drift", limit=2000)
-    ref = reference_stats(df[SHIFTED].to_numpy(), SHIFTED)
-    tail = out[SHIFTED].to_numpy()[-500:]
-    got = window_psi(tail, SHIFTED, ref)
-    assert status(got)["status"] == "drift", f"peak shift only reached {got}"
+# The drift scenario is now backed by a real held-out data split (data/splits/drift.pkl)
+# rather than a synthetic ramp, so the synthetic ramp tests have been removed.
 
 
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

@@ -62,6 +62,8 @@ class StubScorer:
 
 @pytest.fixture(autouse=True)
 def stub_scorer():
+    from api.routes.score import _RECENT_ALERTS
+    _RECENT_ALERTS.clear()
     app.dependency_overrides[scorer_dependency] = lambda: StubScorer()
     yield
     app.dependency_overrides.pop(scorer_dependency, None)

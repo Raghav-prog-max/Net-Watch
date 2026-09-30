@@ -65,6 +65,7 @@ class AlertBase(BaseModel):
     analyst_label: Optional[str] = None
     analyst_note: Optional[str] = None
     model_version: str
+    flow_count: int = 1
 
 class Alert(AlertBase):
     id: str
