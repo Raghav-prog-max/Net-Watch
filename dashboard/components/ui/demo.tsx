@@ -3,8 +3,27 @@
 import { SplineScene } from "@/components/ui/splite";
 import { Card } from "@/components/ui/card"
 import { Spotlight } from "@/components/ui/spotlight"
- 
+import { useEffect, useState } from "react"
+
+// Tailwind's `md` breakpoint. Below it the scene's column is display:none, and a
+// mounted Spline canvas would keep rendering into a 0x0 surface (WebGPU errors).
+const MD_QUERY = "(min-width: 768px)"
+
+function useIsMdUp() {
+  const [isMdUp, setIsMdUp] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia(MD_QUERY)
+    setIsMdUp(mql.matches)
+    const onChange = (e: MediaQueryListEvent) => setIsMdUp(e.matches)
+    mql.addEventListener("change", onChange)
+    return () => mql.removeEventListener("change", onChange)
+  }, [])
+  return isMdUp
+}
+
 export function SplineSceneBasic() {
+  const isMdUp = useIsMdUp()
+
   return (
     <div className="w-full h-full bg-black/[0.96] relative overflow-hidden">
       <Spotlight
@@ -30,10 +49,12 @@ export function SplineSceneBasic() {
 
         {/* Right content */}
         <div className="flex-1 relative hidden md:block">
-          <SplineScene 
-            scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-            className="w-full h-full"
-          />
+          {isMdUp && (
+            <SplineScene
+              scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+              className="w-full h-full"
+            />
+          )}
         </div>
       </div>
     </div>
