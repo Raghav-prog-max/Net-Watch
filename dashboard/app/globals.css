@@ -1,24 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+@import "tailwindcss";
 
 :root {
-  /* Mandated Color Palette */
-  --nw-bg-page: #0E0E12;         /* outer ambient background, subtle purple-black gradient/glow */
-  --nw-bg-panel: #17171B;        /* sidebar, header bar, right-rail cards, chart card — all near-black */
-  --nw-card-1: #F4A93E;          /* first stat card — amber/orange */
-  --nw-card-2: #A78BFA;          /* second stat card — soft purple */
-  --nw-card-3: #C7DB6E;          /* third stat card — lime/olive green */
-  --nw-accent-purple: #8B5FBF;   /* promo/CTA block, active nav indicator */
-  --nw-text-primary: #F5F5F7;
-  --nw-text-muted: #8A8A93;
-  --nw-line: #26262C;            /* hairline dividers inside dark panels */
+  /* ─── Stitch Monochromatic Palette ──────────────────────── */
+  --nw-bg-page: #050508;
+  --nw-bg-panel: #0E0E12;
+  --nw-bg-card: #141418;
+  --nw-bg-elevated: #1A1A20;
+  --nw-bg-highest: #23232A;
+  --nw-bg-bright: #2C2C35;
+
+  /* Semantic colors (monochromatic) */
+  --nw-card-1: #FFFFFF;
+  --nw-card-2: #E1E4EA;
+  --nw-card-3: #8E909B;
+  --nw-accent-purple: #8B5FBF;
+  --nw-text-primary: #FFFFFF;
+  --nw-text-secondary: #E1E4EA;
+  --nw-text-muted: #8E909B;
+  --nw-text-dim: #656773;
+  --nw-line: rgba(255, 255, 255, 0.08);
 
   /* Supporting accents */
-  --nw-card-circle: #111114;     /* dark circle button sitting on stat cards */
+  --nw-card-circle: #111114;
   --nw-bg-card-hover: #1E1E24;
   --nw-glow-purple: rgba(139, 95, 191, 0.12);
 
   /* Typography */
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 }
 
@@ -36,15 +45,7 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-}
-
-/* Subtle ambient purple-black glow in background */
-body {
-  background:
-    radial-gradient(ellipse 60% 40% at 75% 8%, rgba(139, 95, 191, 0.10) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 30% at 20% 90%, rgba(167, 139, 250, 0.04) 0%, transparent 50%),
-    var(--nw-bg-page);
-  background-attachment: fixed;
+  overflow-x: hidden;
 }
 
 a {
@@ -57,52 +58,56 @@ a {
   font-family: var(--font-mono);
 }
 
-/* Rounded Cards */
-.nw-card-dark {
-  background-color: var(--nw-bg-panel);
-  border-radius: 20px;
-  padding: 22px;
-  transition: background-color 0.2s ease, transform 0.2s ease;
-}
+/* ─── Hairline Borders (Stitch pattern) ────────────────── */
+.hairline-border-r { border-right: 1px solid rgba(255, 255, 255, 0.06); }
+.hairline-border-b { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.hairline-border-t { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.hairline-border-l { border-left: 1px solid rgba(255, 255, 255, 0.06); }
 
-.nw-card-dark:hover {
-  background-color: var(--nw-bg-card-hover);
-}
-
-/* Rounded Pill Badges */
+/* ─── Monochromatic Pill Badges ─────────────────────────── */
 .nw-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
-.nw-pill-amber {
-  background-color: rgba(244, 169, 62, 0.15);
-  color: #F4A93E;
+.nw-pill-critical {
+  background-color: #FFFFFF;
+  color: #000000;
 }
 
-.nw-pill-purple {
-  background-color: rgba(167, 139, 250, 0.15);
-  color: #A78BFA;
+.nw-pill-high {
+  background-color: var(--nw-bg-elevated);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.nw-pill-lime {
-  background-color: rgba(199, 219, 110, 0.15);
-  color: #C7DB6E;
+.nw-pill-novel {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.nw-pill-muted {
-  background-color: rgba(138, 138, 147, 0.15);
-  color: var(--nw-text-muted);
+.nw-pill-nominal {
+  background-color: var(--nw-bg-elevated);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Rounded Action Buttons */
+/* Legacy pill classes for compatibility */
+.nw-pill-amber { background-color: #FFFFFF; color: #000000; }
+.nw-pill-purple { background-color: var(--nw-bg-elevated); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.2); }
+.nw-pill-lime { background-color: rgba(255, 255, 255, 0.1); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.2); }
+.nw-pill-muted { background-color: rgba(138, 138, 147, 0.15); color: var(--nw-text-muted); }
+
+/* ─── Monochromatic Action Buttons ──────────────────────── */
 .nw-btn-pill {
   display: inline-flex;
   align-items: center;
@@ -115,84 +120,107 @@ a {
   cursor: pointer;
   border: none;
   outline: none;
-  transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .nw-btn-pill:hover {
-  opacity: 0.92;
   transform: translateY(-1px);
 }
 
-.nw-btn-purple {
-  background-color: var(--nw-accent-purple);
+.nw-btn-primary {
+  background-color: #FFFFFF;
+  color: #000000;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
+}
+
+.nw-btn-primary:hover {
+  background-color: #E1E4EA;
+}
+
+.nw-btn-secondary {
+  background-color: var(--nw-bg-elevated);
+  color: var(--nw-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nw-btn-secondary:hover {
   color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
-.nw-btn-amber {
-  background-color: var(--nw-card-1);
-  color: #111114;
+.nw-btn-outline {
+  background-color: var(--nw-bg-panel);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.nw-btn-lime {
-  background-color: var(--nw-card-3);
-  color: #111114;
+.nw-btn-outline:hover {
+  background-color: #FFFFFF;
+  color: #000000;
 }
 
-.nw-btn-soft-purple {
-  background-color: var(--nw-card-2);
-  color: #111114;
+.nw-btn-ghost {
+  background-color: var(--nw-bg-highest);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.nw-btn-dark {
-  background-color: rgba(255, 255, 255, 0.08);
-  color: var(--nw-text-primary);
+.nw-btn-ghost:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
-.nw-btn-dark:hover {
-  background-color: rgba(255, 255, 255, 0.14);
-}
+/* Legacy button classes */
+.nw-btn-purple { background-color: #FFFFFF; color: #000000; }
+.nw-btn-amber { background-color: var(--nw-bg-panel); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.15); }
+.nw-btn-lime { background-color: #FFFFFF; color: #000000; }
+.nw-btn-soft-purple { background-color: var(--nw-bg-highest); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.2); }
+.nw-btn-dark { background-color: var(--nw-bg-elevated); color: var(--nw-text-muted); border: 1px solid rgba(255, 255, 255, 0.1); }
+.nw-btn-dark:hover { color: #FFFFFF; }
 
-/* Scrollbar customization */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #26262C;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3A3A42;
-}
+/* ─── Scrollbar (Stitch monochromatic) ──────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 
-/* Scroll-triggered reveal animations for landing page */
+.custom-scroll::-webkit-scrollbar { width: 4px; }
+.custom-scroll::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+.custom-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 9999px; }
+
+/* ─── Glow Pulse Animation (Stitch) ─────────────────────── */
+@keyframes glowPulseMono {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6)); }
+  50% { filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)); }
+}
+.glow-pulse-mono { animation: glowPulseMono 2s ease-in-out infinite; }
+
+/* ─── Scroll-triggered reveal animations ────────────────── */
 .reveal-init {
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.reveal-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
+.reveal-visible { opacity: 1; transform: translateY(0); }
 .stagger-1 { transition-delay: 50ms; }
 .stagger-2 { transition-delay: 120ms; }
 .stagger-3 { transition-delay: 190ms; }
 .stagger-4 { transition-delay: 260ms; }
 
 @media (prefers-reduced-motion: reduce) {
-  .reveal-init {
-    opacity: 0;
-    transform: none !important;
-    transition: opacity 0.2s ease !important;
-  }
-  .reveal-visible {
-    opacity: 1;
-    transform: none !important;
-  }
+  .reveal-init { opacity: 0; transform: none !important; transition: opacity 0.2s ease !important; }
+  .reveal-visible { opacity: 1; transform: none !important; }
 }
+
+/* Spline lazy-load spinner */
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

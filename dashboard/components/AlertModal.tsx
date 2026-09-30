@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { Alert } from "@/lib/types";
 
 interface AlertModalProps {
@@ -12,6 +11,8 @@ interface AlertModalProps {
 export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps) {
   if (!alert) return null;
 
+  const isCritical = alert.severity.level === "Critical";
+
   return (
     <div
       style={{
@@ -20,204 +21,303 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(6px)",
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        backdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
-        padding: "20px",
+        padding: "16px",
       }}
       onClick={onClose}
     >
       <div
         style={{
-          backgroundColor: "#17171B",
-          borderRadius: "24px",
+          backgroundColor: "#0E0E12",
+          borderRadius: "16px",
           width: "100%",
-          maxWidth: "600px",
+          maxWidth: "720px",
           maxHeight: "90vh",
-          overflowY: "auto",
-          padding: "28px",
-          position: "relative",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
           boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
-          border: "1px solid #26262C",
+          border: "1px solid rgba(255, 255, 255, 0.15)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-              <span
-                className={`nw-pill ${
-                  alert.severity.level === "Critical"
-                    ? "nw-pill-amber"
-                    : alert.severity.level === "High"
-                    ? "nw-pill-purple"
-                    : "nw-pill-lime"
-                }`}
-              >
+        {/* ── HEADER ──────────────────────────── */}
+        <div style={{
+          padding: "24px",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+          backgroundColor: "#141418",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{
+                padding: "2px 10px",
+                borderRadius: "4px",
+                fontSize: "10px",
+                fontFamily: "var(--font-mono)",
+                fontWeight: 700,
+                backgroundColor: isCritical ? "#FFFFFF" : "#1A1A20",
+                color: isCritical ? "#000000" : "#FFFFFF",
+                border: isCritical ? "none" : "1px solid rgba(255, 255, 255, 0.15)",
+              }}>
                 {alert.severity.level.toUpperCase()} · SCORE {alert.severity.score}
               </span>
-              <span style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-                {(alert.prediction.confidence * 100).toFixed(1)}% CONFIDENCE
+              <span style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#FFFFFF",
+                backgroundColor: "#1A1A20",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                padding: "2px 10px",
+                borderRadius: "4px",
+              }}>
+                {(alert.prediction.confidence * 100).toFixed(1)}% Confidence
+              </span>
+              <span style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
+                #{alert.id.slice(0, 8)}
               </span>
             </div>
-            <h2 style={{ fontSize: "20px", fontWeight: 800, margin: "0 0 4px", color: "var(--nw-text-primary)" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#FFFFFF", margin: 0, letterSpacing: "-0.02em" }}>
               {alert.prediction.family} {alert.is_novel && "· Novel Zero-Day"}
             </h2>
-            <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-              Flow ID: <span className="mono">{alert.id}</span> · {alert.timestamp}
-            </div>
+            <span style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
+              {alert.timestamp}
+            </span>
           </div>
-
           <button
             onClick={onClose}
             style={{
               width: "32px",
               height: "32px",
               borderRadius: "50%",
-              backgroundColor: "rgba(255, 255, 255, 0.08)",
-              border: "none",
-              color: "#FFFFFF",
+              backgroundColor: "transparent",
+              border: "1px solid transparent",
+              color: "#8E909B",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "14px",
+              transition: "all 0.15s ease",
             }}
           >
-            ✕
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>close</span>
           </button>
         </div>
 
-        {/* Source / Destination banner */}
-        <div
-          style={{
-            backgroundColor: "#111114",
-            borderRadius: "14px",
-            padding: "12px 16px",
-            marginBottom: "20px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+        {/* ── BODY ────────────────────────────── */}
+        <div style={{
+          padding: "24px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "20px",
+          maxHeight: "720px",
+          overflowY: "auto",
+          backgroundColor: "#0E0E12",
+        }} className="custom-scroll">
+
+          {/* Network Telemetry Banner */}
+          <div style={{
+            padding: "14px",
+            borderRadius: "12px",
+            backgroundColor: "#050508",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
             fontFamily: "var(--font-mono)",
             fontSize: "12px",
-          }}
-        >
-          <div>
-            <span style={{ color: "var(--nw-text-muted)" }}>SRC: </span>
-            <span style={{ color: "#FFFFFF" }}>{alert.flow.src_ip ?? "—"}</span>
-          </div>
-          <span style={{ color: "var(--nw-card-2)" }}>→</span>
-          <div>
-            <span style={{ color: "var(--nw-text-muted)" }}>DST: </span>
-            <span style={{ color: "#FFFFFF" }}>{alert.flow.dst_ip ?? "—"}:{alert.flow.dst_port ?? "—"}</span>
-          </div>
-          <div>
-            <span style={{ color: "var(--nw-text-muted)" }}>PROTO: </span>
-            <span style={{ color: "var(--nw-card-3)" }}>{alert.flow.protocol ?? "—"}</span>
-          </div>
-        </div>
-
-        {/* MITRE Playbook Box */}
-        <div
-          style={{
-            backgroundColor: "rgba(167, 139, 250, 0.08)",
-            borderRadius: "16px",
-            padding: "14px 18px",
-            marginBottom: "20px",
-            border: "1px solid rgba(167, 139, 250, 0.15)",
-          }}
-        >
-          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--nw-card-2)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-            MITRE ATT&amp;CK // {alert.mitre.tactic}
-          </div>
-          <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--nw-text-primary)", margin: "4px 0" }}>
-            {alert.mitre.technique}
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-            {alert.recommended_action}
-          </div>
-        </div>
-
-        {/* SHAP Feature Attribution Bars */}
-        <div style={{ marginBottom: "22px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--nw-text-muted)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "10px" }}>
-            Why Model Flagged Flow (SHAP Attribution)
+            color: "#E1E4EA",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "#FFFFFF" }}>router</span>
+              <span style={{ letterSpacing: "-0.01em" }}>
+                SRC: {alert.flow.src_ip ?? "—"} → DST: {alert.flow.dst_ip ?? "—"}:{alert.flow.dst_port ?? "—"} | PROTO: {alert.flow.protocol ?? "—"}
+              </span>
+            </div>
+            <span style={{
+              padding: "2px 8px",
+              fontSize: "9px",
+              borderRadius: "4px",
+              backgroundColor: "#FFFFFF",
+              color: "#000000",
+              fontFamily: "var(--font-mono)",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+            }}>
+              LIVE
+            </span>
           </div>
 
+          {/* MITRE ATT&CK Box */}
+          <div style={{
+            padding: "16px",
+            borderRadius: "12px",
+            backgroundColor: "#141418",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-mono)", color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "#FFFFFF" }}>security</span>
+              <span>MITRE ATT&amp;CK Mapping</span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#E1E4EA", lineHeight: 1.6 }}>
+              <strong style={{ color: "#FFFFFF", fontWeight: 600 }}>Tactic:</strong> {alert.mitre.tactic} · <strong style={{ color: "#FFFFFF", fontWeight: 600 }}>Technique:</strong> {alert.mitre.technique}
+            </div>
+            <p style={{
+              fontSize: "12px",
+              color: "#8E909B",
+              backgroundColor: "#0E0E12",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              lineHeight: 1.6,
+              margin: 0,
+            }}>
+              <strong style={{ color: "#E1E4EA", fontWeight: 500 }}>Automated Recommendation:</strong> {alert.recommended_action}
+            </p>
+          </div>
+
+          {/* SHAP Feature Attribution */}
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {alert.explanation.map((item) => {
-              const absImpact = Math.abs(item.impact);
-              const maxImp = Math.max(...alert.explanation.map((e) => Math.abs(e.impact)), 0.01);
-              const pct = Math.min(100, Math.max(8, (absImpact / maxImp) * 100));
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <h4 style={{ fontSize: "12px", fontWeight: 700, color: "#FFFFFF", letterSpacing: "0.02em", textTransform: "uppercase", fontFamily: "var(--font-mono)", margin: 0 }}>
+                  SHAP Feature Attribution
+                </h4>
+                <p style={{ fontSize: "11px", color: "#8E909B", margin: "2px 0 0" }}>Model explainability weights</p>
+              </div>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#656773" }}>Local Impact (Φ)</span>
+            </div>
 
-              return (
-                <div key={item.feature} style={{ backgroundColor: "#111114", borderRadius: "12px", padding: "8px 12px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}>
-                    <span style={{ fontWeight: 600, color: "var(--nw-text-primary)" }}>{item.feature}</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--nw-card-2)" }}>
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              backgroundColor: "#141418",
+              padding: "16px",
+              borderRadius: "12px",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+            }}>
+              {alert.explanation.map((item) => {
+                const absImpact = Math.abs(item.impact);
+                const maxImp = Math.max(...alert.explanation.map((e) => Math.abs(e.impact)), 0.01);
+                const pct = Math.min(100, Math.max(8, (absImpact / maxImp) * 100));
+
+                // Monochromatic bar gradient based on intensity
+                const barColor = pct > 70 ? "#FFFFFF" : pct > 50 ? "#C4C6CB" : pct > 30 ? "#8E909B" : pct > 15 ? "#656773" : "#35353F";
+                const textColor = pct > 50 ? "#FFFFFF" : pct > 30 ? "#E1E4EA" : "#8E909B";
+
+                return (
+                  <div key={item.feature} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: "12px" }}>
+                    <span style={{ width: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: textColor }}>{item.feature}</span>
+                    <div style={{ flex: 1, margin: "0 16px", backgroundColor: "#050508", height: "8px", borderRadius: "9999px", overflow: "hidden", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+                      <div style={{ backgroundColor: barColor, height: "100%", borderRadius: "9999px", width: `${pct}%`, transition: "width 0.3s ease" }} />
+                    </div>
+                    <span style={{ width: "56px", textAlign: "right", fontWeight: 700, color: textColor }}>
                       {item.impact > 0 ? "+" : ""}{item.impact.toFixed(3)}
                     </span>
                   </div>
-                  <div style={{ height: "4px", backgroundColor: "rgba(255, 255, 255, 0.08)", borderRadius: "9999px", overflow: "hidden" }}>
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${pct}%`,
-                        backgroundColor: item.impact > 0 ? "var(--nw-card-1)" : "var(--nw-card-3)",
-                        borderRadius: "9999px",
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Action Triage Buttons */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", borderTop: "1px solid #26262C", paddingTop: "18px" }}>
+        {/* ── FOOTER: TRIAGE BUTTONS ──────────── */}
+        <div style={{
+          padding: "16px 24px",
+          borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+          backgroundColor: "#141418",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
           <button
-            onClick={() => {
-              onTriage(alert.id, "false_positive");
-              onClose();
+            onClick={() => { onTriage(alert.id, "false_positive"); onClose(); }}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "9999px",
+              backgroundColor: "#0E0E12",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              color: "#FFFFFF",
+              fontSize: "12px",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
             }}
-            className="nw-btn-pill nw-btn-amber"
-            title="Mark as false positive to feed the v2 retraining dataset"
           >
             Mark False Positive
           </button>
-          <button
-            onClick={() => {
-              onTriage(alert.id, "acknowledged");
-              onClose();
-            }}
-            className="nw-btn-pill nw-btn-dark"
-          >
-            Acknowledge
-          </button>
-          <button
-            onClick={() => {
-              onTriage(alert.id, "escalated");
-              onClose();
-            }}
-            className="nw-btn-pill nw-btn-soft-purple"
-          >
-            Escalate to IR
-          </button>
-          <button
-            onClick={() => {
-              onTriage(alert.id, "resolved");
-              onClose();
-            }}
-            className="nw-btn-pill nw-btn-lime"
-            style={{ marginLeft: "auto" }}
-          >
-            Resolve
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              onClick={() => { onTriage(alert.id, "acknowledged"); onClose(); }}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "9999px",
+                backgroundColor: "#1A1A20",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                color: "#8E909B",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Acknowledge
+            </button>
+            <button
+              onClick={() => { onTriage(alert.id, "escalated"); onClose(); }}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "9999px",
+                backgroundColor: "#23232A",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                color: "#FFFFFF",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>emergency</span>
+              Escalate to IR
+            </button>
+            <button
+              onClick={() => { onTriage(alert.id, "resolved"); onClose(); }}
+              style={{
+                padding: "8px 20px",
+                borderRadius: "9999px",
+                backgroundColor: "#FFFFFF",
+                color: "#000000",
+                border: "none",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                boxShadow: "0 2px 8px rgba(255, 255, 255, 0.1)",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>check_circle</span>
+              Resolve Incident
+            </button>
+          </div>
         </div>
       </div>
     </div>
