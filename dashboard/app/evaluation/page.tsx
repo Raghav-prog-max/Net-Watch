@@ -72,6 +72,9 @@ export default function EvaluationPage() {
   const m = report.main;
   const naive = report.naive_comparison;
   const budgetPer10k = Math.round(report.threshold.fpr_budget * 10000);
+  // what analysts see: classifier OR detector; `main` is the classifier alone
+  const sys = report.system;
+  const falsePer10k = sys ? sys.false_alerts_per_10k_benign_flows : m.false_alerts_per_10k_benign_flows;
   const novel = report.novel_families;
   const novelShown = novel.shown_as_unknown ?? novel.caught_by_anomaly_detector;
 
@@ -136,9 +139,13 @@ export default function EvaluationPage() {
             False Alerts / 10k Flows
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-1)", margin: "4px 0" }}>
-            {m.false_alerts_per_10k_benign_flows}
+            {falsePer10k}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Budget: &le; {budgetPer10k}/10k flows</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+            {sys
+              ? `Full system${sys.within_budget ? "" : ", over budget"}: classifier ${sys.from_classifier_per_10k} + detector ${sys.from_detector_only_per_10k}. Budget ≤ ${budgetPer10k}/10k`
+              : `Classifier only. Budget ≤ ${budgetPer10k}/10k flows`}
+          </div>
         </div>
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
@@ -249,7 +256,7 @@ export default function EvaluationPage() {
               {m.macro_f1} Macro-F1 <span style={{ fontSize: "12px", color: "var(--nw-card-2)" }}>(HONEST)</span>
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
-              False Alerts: <strong style={{ color: "var(--nw-card-1)" }}>{m.false_alerts_per_10k_benign_flows} / 10k flows</strong>. Calibrated to genuine analyst capacity. The test suite fails if any block appears in two splits.
+              False Alerts: <strong style={{ color: "var(--nw-card-1)" }}>{falsePer10k} / 10k flows</strong>{sys ? " (classifier and detector together)" : ""}. The test suite fails if any block appears in two splits.
             </div>
           </div>
         </div>

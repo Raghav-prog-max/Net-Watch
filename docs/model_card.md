@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-29T19:42:31Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-09-30T09:50:24Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 > **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
 
@@ -46,7 +46,9 @@ Surfacing suspicious traffic to a SOC analyst, who decides what happens next. Ea
 
 ## Performance
 
-Macro-F1 **0.917** across benign and 6 attack families. The alert threshold (0.9865) was chosen on validation to stay within a false-positive budget of 0.5%; on the test set it produced **42.9 false alerts per 10,000 benign flows** (0.43%), within budget.
+Macro-F1 **0.917** across benign and 6 attack families.
+
+**False alerts: 109.0 per 10,000 benign flows** (1.09%) for the full system on the test set, **over** the 0.5% budget (50 per 10,000). 42.9 come from the classifier, whose threshold (0.9865) was chosen on validation to stay within the budget on its own; 66.1 come from the anomaly detector alone, which is calibrated separately to flag 1.0% of benign validation traffic. An alert from either model reaches the analyst.
 
 No accuracy figure is reported: about 80% of traffic is benign, so a model that never alerts would score about 80%.
 
@@ -73,10 +75,23 @@ Leave-one-family-out: each family is removed from training entirely, a fresh mod
 
 Families withheld from training altogether (Heartbleed, Infiltration, 103 test flows): 100.0% raised an alert, and **93.2% were shown to the analyst as Unknown** rather than under a known family's name.
 
+### Splitting the false-alert budget between the two models
+
+The same models at other cut-offs, both chosen on validation; nothing is retrained. The first row is the configuration in use. Choosing a row is a decision for the team: it trades false alerts against catching attacks the classifier has never seen.
+
+| Classifier budget | Detector flag rate | False alerts / 10k (val) | False alerts / 10k (test) | Macro-F1 | Never-trained families alerted | LOFO PortScan | LOFO BruteForce | LOFO WebAttack | LOFO Bot | 
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | 
+| 0.50% (in use) | 1.00% | 149.0 | 109.0 (over) | 0.917 | 100.0% | 99.7% | 100.0% | 100.0% | 17.7% | 
+| 0.50% | off | 49.7 | 42.9 | 0.917 | 100.0% | 0.0% | 100.0% | 100.0% | 15.6% | 
+| 0.40% | 0.10% | 49.7 | 44.7 | 0.916 | 100.0% | 95.0% | 100.0% | 100.0% | 15.6% | 
+| 0.25% | 0.25% | 49.7 | 58.9 (over) | 0.914 | 100.0% | 97.7% | 100.0% | 100.0% | 15.6% | 
+| 0.10% | 0.40% | 49.7 | 42.9 | 0.903 | 100.0% | 98.4% | 100.0% | 99.1% | 15.6% | 
+
 ## Failure modes
 
 Observed on the test set, most severe first.
 
+- **The system is over its false-alert budget.** Analysts would see 109.0 false alerts per 10,000 benign flows against a budget of 50, because the anomaly detector's flags come on top of the classifier's. The table above shows splits of the budget that stay within it.
 - **Novel attacks that look like normal traffic are missed.** Held out of training, Bot is caught only 17.7% of the time: it sits close enough to benign traffic that neither model separates it.
 - **Bot is also the weakest known family**, at 0.801 recall.
 - **DDoS and DoS are confused with each other.** 124 DDoS flows were labelled DoS, and 109 the other way.
@@ -119,7 +134,9 @@ The Population Stability Index is computed per feature over a window of 5,000 fl
 
 At Drift the dashboard recommends retraining. A person approves it; nothing retrains on its own.
 
-**Not yet built** — the handbook specifies these as well: a KS test on the top 15 features; alert-rate rules (Warning above 1.5x baseline, Drift above 2x); tracking the share of alerts analysts mark as false positives; and v2 retraining, promoted only if macro-F1 improves and the false-positive rate stays within budget.
+A KS test runs on 15 features, and the rate of Unknown alerts is compared with its benign-validation baseline: Warning above 1.5x, Drift above 2.0x only when PSI has moved too. Retraining (`make retrain`) adds analyst labels and is promoted only by a person, if macro-F1 improves and the full system stays within the false-alert budget.
+
+**Not yet built:** tracking the share of alerts analysts mark as false positives.
 
 ## Reproducing these numbers
 

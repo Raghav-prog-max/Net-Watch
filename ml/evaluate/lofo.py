@@ -9,10 +9,11 @@ from ml.features.select import matrix
 from ml.models import classifier as clf_mod
 from ml.models.anomaly import AnomalyDetector
 from ml.data.split import lofo_split, downsample_benign
+from ml.evaluate import system
 from ml.evaluate.thresholds import pick_threshold
 
 
-def run_one(train, val, test, features, family, cfg):
+def run_one(train, val, test, features, family, cfg, budget_splits=()):
     tr, va = lofo_split(train, val, family)
     tr = downsample_benign(tr, cfg["train"]["benign_downsample"])
 
@@ -37,15 +38,26 @@ def run_one(train, val, test, features, family, cfg):
     if len(held) == 0:
         return {"family": family, "note": "no test rows for this family"}
 
-    def caught(rows):
+    def scores(rows):
         X = matrix(rows, features)
-        score, _ = clf_mod.attack_score(model, X)
-        by_clf = score >= thr["threshold"]
-        by_anom = det.is_anomalous(det.score(X))
-        return by_clf, by_anom
+        return clf_mod.attack_score(model, X)[0], det.score(X)
 
-    h_clf, h_anom = caught(held)
-    b_clf, b_anom = caught(benign)
+    h_score, h_det = scores(held)
+    b_score, b_det = scores(benign)
+    h_clf, h_anom = h_score >= thr["threshold"], det.is_anomalous(h_det)
+    b_clf, b_anom = b_score >= thr["threshold"], det.is_anomalous(b_det)
+
+    # the same experiment at other splits of the FPR budget (ml/evaluate/system.py):
+    # no retraining, only the two cut-offs move, both chosen on this run's validation
+    at_splits = []
+    for split in budget_splits:
+        t_clf, t_det = system.thresholds_for(split, va["family"] != "Benign", va_score, det)
+        at_splits.append({
+            "classifier_budget": split[0], "detector_flag_rate": split[1],
+            "caught_by_full_system": round(float(((h_score >= t_clf) | (h_det >= t_det)).mean()), 4),
+            "benign_fpr": round(float(((b_score >= t_clf) | (b_det >= t_det)).mean()), 5),
+        })
+
     return {
         "family": family,
         "test_flows": int(len(held)),
@@ -54,8 +66,9 @@ def run_one(train, val, test, features, family, cfg):
         "caught_by_anomaly_detector_alone": round(float(h_anom.mean()), 4),
         "caught_by_full_system": round(float((h_clf | h_anom).mean()), 4),
         "benign_fpr": round(float((b_clf | b_anom).mean()), 5),
+        "budget_splits": at_splits,
     }
 
 
-def run_all(train, val, test, features, families, cfg):
-    return [run_one(train, val, test, features, f, cfg) for f in families]
+def run_all(train, val, test, features, families, cfg, budget_splits=()):
+    return [run_one(train, val, test, features, f, cfg, budget_splits) for f in families]

@@ -54,6 +54,18 @@ consistent with an FPR budget of 0.5% (50 false alerts per 10,000 benign
 flows). The anomaly threshold is set so ~1% of benign validation flows are
 flagged.
 
+An alert reaches the analyst when **either** model objects, so the budget is
+judged on the full system, not the classifier alone. `reports/metrics.json`
+carries both: `main` is the classifier, `system` is what analysts see (with its
+split into classifier and detector-only alerts), and the model card leads with
+`system`. On synthetic data the configured split (classifier 0.5%, detector 1%)
+gives 109 false alerts per 10,000 benign flows, over the budget of 50.
+
+`budget_trade_off` shows the same models at other splits of the 0.5% budget
+between the two cut-offs (both chosen on validation, nothing retrained), with
+false alerts, macro-F1, never-trained families alerted and LOFO recall for each.
+Choosing the split is a team decision; the model card prints the table.
+
 ## What we do not report
 
 No bare accuracy figure is reported anywhere, including the pitch deck.

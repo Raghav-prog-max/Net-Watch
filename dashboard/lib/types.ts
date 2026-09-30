@@ -74,6 +74,18 @@ export interface EvaluationReport {
     fpr_budget: number;
   };
   main: SummaryMetrics;
+  // What analysts see: an alert from the classifier OR the anomaly detector.
+  // `main` above is the classifier alone. Absent in reports from before 30 Sep 2026.
+  system?: {
+    benign_flows: number;
+    false_positive_rate: number;
+    false_alerts_per_10k_benign_flows: number;
+    from_classifier_per_10k: number;
+    from_detector_only_per_10k: number;
+    attack_flows_alerted: number | null;
+    budget_per_10k: number;
+    within_budget: boolean;
+  };
   random_forest_baseline?: SummaryMetrics;
   naive_comparison?: {
     split?: string;

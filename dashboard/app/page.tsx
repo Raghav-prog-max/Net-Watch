@@ -78,7 +78,9 @@ export default function LandingPage() {
   const unknownPct = report
     ? (report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100
     : 0;
-  const falsePer10k = report?.main.false_alerts_per_10k_benign_flows ?? 0;
+  // the full system (classifier or detector), which is what an analyst sees
+  const falsePer10k =
+    report?.system?.false_alerts_per_10k_benign_flows ?? report?.main.false_alerts_per_10k_benign_flows ?? 0;
   const budgetPer10k = report ? Math.round(report.threshold.fpr_budget * 10000) : 0;
   const dataLabel = !report
     ? "evaluation report unavailable"
@@ -402,7 +404,8 @@ export default function LandingPage() {
               {report ? falsePer10k : "—"}
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
-              The alert threshold is set from a budget of {report ? budgetPer10k : "—"} per 10k, not left at 0.5.
+              Classifier and anomaly detector together, against a budget of {report ? budgetPer10k : "—"} per 10k
+              {report?.system && !report.system.within_budget ? " (over budget)" : ""}.
             </div>
           </div>
 
