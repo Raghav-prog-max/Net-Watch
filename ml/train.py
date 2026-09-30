@@ -134,7 +134,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     train, val, test = make_splits(df, cfg["split"]["test_size"], cfg["split"]["random_state"])
     
-    splits_dir = Path(cfg["paths"]["splits"])
+    splits_dir = Path(cfg["paths"].get("splits", "data/splits"))
     splits_dir.mkdir(parents=True, exist_ok=True)
     train.to_pickle(splits_dir / "train.pkl")
     val.to_pickle(splits_dir / "val.pkl")
