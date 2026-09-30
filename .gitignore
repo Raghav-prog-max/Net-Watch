@@ -1,5 +1,6 @@
 data/raw/*
 data/processed/*
+data/splits/*
 data/alerts.db
 models/v*/
 reports/*

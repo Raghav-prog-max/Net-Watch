@@ -45,9 +45,11 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
     y_train_enc = le.transform(train_df["family"].values)
     y_val_enc = le.transform(val_df["family"].values)
     
+    from imblearn.pipeline import Pipeline
+    
     strategies = []
-    strategies.append(("no_handling", X_train, y_train_enc))
-    strategies.append(("class_weight", X_train, y_train_enc))
+    strategies.append(("no_handling", None))
+    strategies.append(("class_weight", None))
     
     # Benign undersampling
     try:
@@ -62,27 +64,34 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
                 sampling_strategy[encoded_fam] = count
         
         rus = RandomUnderSampler(sampling_strategy=sampling_strategy, random_state=random_state)
-        X_us, y_us = rus.fit_resample(X_train, y_train_enc)
-        strategies.append(("undersample", X_us, y_us))
+        strategies.append(("undersample", rus))
     except Exception as e:
         print(f"Undersample failed: {e}")
 
     # SMOTE
     smote = SMOTE(random_state=random_state, k_neighbors=3)
-    X_sm, y_sm = smote.fit_resample(X_train, y_train_enc)
-    strategies.append(("smote", X_sm, y_sm))
+    strategies.append(("smote", smote))
 
     results = []
-    for name, X_tr, y_tr in strategies:
+    for name, sampler in strategies:
         cw = "balanced" if name == "class_weight" else None
         model = lgb.LGBMClassifier(
             n_estimators=200, learning_rate=0.05, num_leaves=31,
             class_weight=cw, n_jobs=-1, verbose=-1, random_state=random_state
         )
-        model.fit(X_tr, y_tr, eval_X=X_val, eval_y=y_val_enc,
-                  callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
         
-        y_pred = model.predict(X_val)
+        if sampler is not None:
+            pipeline = Pipeline([('sampler', sampler), ('model', model)])
+            pipeline.fit(X_train, y_train_enc, 
+                         model__eval_set=[(X_val, y_val_enc)],
+                         model__callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
+            y_pred = pipeline.predict(X_val)
+        else:
+            model.fit(X_train, y_train_enc, 
+                      eval_set=[(X_val, y_val_enc)],
+                      callbacks=[lgb.early_stopping(20, verbose=False), lgb.log_evaluation(-1)])
+            y_pred = model.predict(X_val)
+            
         macro = float(f1_score(y_val_enc, y_pred, average="macro", zero_division=0))
         from sklearn.metrics import recall_score
         rec = recall_score(y_val_enc, y_pred, labels=range(len(le.classes_)), average=None,

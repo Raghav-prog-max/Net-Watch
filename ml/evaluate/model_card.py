@@ -165,6 +165,12 @@ def render():
         w(f"| {c} | {v['precision']:.3f} | {v['recall']:.3f} | {v['f1-score']:.3f} | "
           f"{auc.get(c, {}).get('pr_auc', float('nan')):.3f} | {int(v['support']):,} |")
     w("")
+    imb = m.get("imbalance_study")
+    if imb and imb.get("chosen") == "class_weight":
+        w("**Note on class weights:** The `class_weight` strategy was chosen over `no_handling` "
+          "(the validation macro-F1 winner) because it significantly improves recall on the "
+          "Bot family, keeping performance balanced across attacks.")
+        w("")
     trade_off = m.get("joint_budget_trade_off")
     if trade_off:
         w("")
