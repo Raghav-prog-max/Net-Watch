@@ -25,24 +25,6 @@ from .mitre import get_mitre_dict
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", str(ROOT / "models" / "v1"))
 
-FAMILY_WEIGHT = {
-    "DDoS": 1.0, "Bot": 1.0, "WebAttack": 0.9, "DoS": 0.85,
-    "BruteForce": 0.8, "Unknown": 0.8, "PortScan": 0.5
-}
-
-def severity_logic(confidence: float, anomaly_pct: float, family: str):
-    weight = FAMILY_WEIGHT.get(family, 0.5)
-    s = 100 * (0.5 * confidence + 0.3 * anomaly_pct + 0.2 * weight)
-    if s >= 85:
-        level = "Critical"
-    elif s >= 65:
-        level = "High"
-    elif s >= 40:
-        level = "Medium"
-    else:
-        level = "Low"
-    return round(s), level
-
 
 class ModelsNotFound(RuntimeError):
     """No trained artefacts at the model directory; run `make train`."""

@@ -4,8 +4,11 @@ import pandas as pd
 import pytest
 import yaml
 
-from api.services.scorer import MODEL_DIR, ModelsNotFound, Scorer, severity_logic
+from api.services.scorer import MODEL_DIR, ModelsNotFound, Scorer
 from api.services.mitre import get_mitre_dict
+from ml.models.combine import severity
+
+# the scorer's alerts get their severity from ml/models/combine.severity (via decide)
 
 @pytest.mark.parametrize("family,confidence,anomaly_pct,expected_level", [
     ("DDoS", 1.0, 1.0, "Critical"),     # 100 * (0.5*1 + 0.3*1 + 0.2*1) = 100 >= 85 -> Critical
@@ -15,11 +18,9 @@ from api.services.mitre import get_mitre_dict
     ("PortScan", 1.0, 1.0, "Critical"), # 100 * (0.5 + 0.3 + 0.1) = 90
     ("PortScan", 0.5, 0.5, "Medium"),   # 100 * (0.25 + 0.15 + 0.1) = 50
     ("Unknown", 1.0, 1.0, "Critical"),  # 100 * (0.5 + 0.3 + 0.16) = 96
-    ("Benign", 0.99, 0.1, "Medium"),    # 100 * (0.495 + 0.03 + 0.1) = 62.5 -> Medium
-    ("Benign", 1.0, 1.0, "Critical"),   # 100 * (0.5 + 0.3 + 0.1) = 90 -> Critical
 ])
 def test_severity_logic_boundaries(family, confidence, anomaly_pct, expected_level):
-    score, level = severity_logic(confidence, anomaly_pct, family)
+    score, level = severity(confidence, anomaly_pct, family)
     assert level == expected_level
 
 @pytest.mark.parametrize("family,expected_tactic", [

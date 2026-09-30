@@ -3,7 +3,8 @@ api/services/mitre.py
 ──────────────────────
 MITRE ATT&CK mapping for NetWatch alert families.
 
-Verbatim mapping from the project spec.
+The one MITRE table in the project: the scorer attaches it to every alert
+(ml/models/combine.decide does not map families itself).
 The system NEVER auto-blocks; MITRE info is advisory context for analysts.
 
 Public API
@@ -27,16 +28,18 @@ class MitreInfo:
 
 # ── Mapping table (from spec) ─────────────────────────────────────────────────
 MITRE_MAP: dict[str, MitreInfo] = {
+    # CICIDS2017 "DoS" is Hulk, GoldenEye, slowloris and Slowhttptest: they exhaust
+    # the web server, not the link, so Endpoint DoS. "DDoS" (LOIC) floods the network.
     "DoS": MitreInfo(
         tactic="Impact",
-        technique="Network Denial of Service",
-        technique_id="T1498",
-        url="https://attack.mitre.org/techniques/T1498/",
+        technique="Endpoint Denial of Service",
+        technique_id="T1499",
+        url="https://attack.mitre.org/techniques/T1499/",
     ),
     "DDoS": MitreInfo(
         tactic="Impact",
-        technique="Network Denial of Service / Endpoint Denial of Service",
-        technique_id="T1498/T1499",
+        technique="Network Denial of Service",
+        technique_id="T1498",
         url="https://attack.mitre.org/techniques/T1498/",
     ),
     "PortScan": MitreInfo(
