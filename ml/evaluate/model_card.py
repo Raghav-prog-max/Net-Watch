@@ -367,7 +367,9 @@ def render():
       "(`make retrain`) adds analyst labels and is promoted only by a person, if macro-F1 "
       "improves and the full system stays within the false-alert budget.")
     w("")
-    w("**Not yet built:** tracking the share of alerts analysts mark as false positives.")
+    w("The drift report also carries the family mix of recent alerts, the share of recent "
+      "alerts analysts marked as false positives, and a snapshot history "
+      "(`GET /metrics/drift`; see `docs/drift_strategy.md`).")
     w("")
 
     # ------------------------------------------------------------------ reproduce

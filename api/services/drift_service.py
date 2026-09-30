@@ -1,28 +1,41 @@
-﻿"""api/services/drift_service.py
+"""api/services/drift_service.py
 
-Handbook names this file explicitly.  Drift logic lives in two places:
-  - ml/drift/monitor.py   : PSI calculation, status() rules
-  - api/services/scorer.py: the live window of recent flows
-
-This module is the single import point for the API layer so routes don't
-have to know which underlying module does the work.
+The drift report behind GET /metrics/drift (handbook: drift monitoring).
+It joins two sources:
+  - api/services/scorer.py : the live window of recent flows (PSI, KS, alert
+                             rate, family mix, history), rules in ml/drift/monitor.py
+  - the alert store        : the share of recent alerts analysts marked as
+                             false positives
 """
 from typing import Any, Dict
 
-from ml.drift.monitor import status as _status, window_psi as _window_psi
+from ..db.models import AlertModel
+from ..db.session import SQLALCHEMY_AVAILABLE
+from .scorer import drift_config
 
 
-def compute_drift(scorer) -> Dict[str, Any]:
-    """Return the current drift report from a live Scorer instance.
+def false_positive_share(db, last_n: int) -> Dict[str, Any]:
+    """Share of the most recent `last_n` alerts that analysts marked false_positive.
 
-    Parameters
-    ----------
-    scorer : api.services.scorer.Scorer
-        The live scorer that holds the recent-flow window.
-
-    Returns
-    -------
-    dict with keys: status, top_features, recommendation, alert_rate,
-                    flows_seen, and (if warming up) a note.
+    Reported, not part of the status rule: the handbook tracks it as a signal that
+    normal traffic has moved away from what the models learned. Untriaged alerts
+    count in the denominator, so it reads low while the queue is new.
     """
-    return scorer.drift()
+    rows = []
+    if db is not None:
+        q = db.query(AlertModel).order_by(AlertModel.timestamp.desc())
+        # the no-SQLAlchemy fallback store has no LIMIT
+        rows = q.limit(last_n).all() if SQLALCHEMY_AVAILABLE else q.all()[:last_n]
+    fps = sum(1 for r in rows if r.status == "false_positive")
+    return {"share": round(fps / len(rows), 4) if rows else None,
+            "false_positives": fps, "alerts": len(rows)}
+
+
+def compute_drift(scorer, db=None) -> Dict[str, Any]:
+    """The current drift report: status, PSI/KS, alert rates, family mix, history,
+    the analyst false-positive share, and the PSI bands used."""
+    c = getattr(scorer, "drift_cfg", None) or drift_config()
+    out = scorer.drift()
+    out["fp_share"] = false_positive_share(db, int(c.get("fp_share_alerts", 500)))
+    out["bands"] = {"warning": c["warn_psi"], "drift": c["drift_psi"]}
+    return out

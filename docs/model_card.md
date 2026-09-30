@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-30T09:58:46Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-09-30T10:27:06Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 > **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
 
@@ -135,7 +135,7 @@ At Drift the dashboard recommends retraining. A person approves it; nothing retr
 
 A KS test runs on 15 features, and the rate of Unknown alerts is compared with its benign-validation baseline: Warning above 1.5x, Drift above 2.0x only when PSI has moved too. Retraining (`make retrain`) adds analyst labels and is promoted only by a person, if macro-F1 improves and the full system stays within the false-alert budget.
 
-**Not yet built:** tracking the share of alerts analysts mark as false positives.
+The drift report also carries the family mix of recent alerts, the share of recent alerts analysts marked as false positives, and a snapshot history (`GET /metrics/drift`; see `docs/drift_strategy.md`).
 
 ## Reproducing these numbers
 

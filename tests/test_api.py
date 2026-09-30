@@ -369,3 +369,20 @@ def test_one_mitre_map():
     assert "mitre" not in out
     assert get_mitre_dict("DoS")["technique_id"] == "T1499"      # endpoint DoS (Hulk, slowloris)
     assert get_mitre_dict("DDoS")["technique_id"] == "T1498"     # network flood
+
+
+def test_drift_reports_the_analyst_false_positive_share():
+    from api.services.drift_service import false_positive_share
+    ids = _insert(f"Fam{uuid.uuid4().hex[:6]}", "High", 4, minutes=10_000)   # the newest alerts
+    client.patch(f"/alerts/{ids[0]}", json={"status": "false_positive"})
+    db = _TestSession()
+    fp = false_positive_share(db, last_n=4)
+    db.close()
+    assert fp == {"share": 0.25, "false_positives": 1, "alerts": 4}
+    class Drifting(StubScorer):
+        def drift(self):
+            return {"status": "stable", "history": []}
+    app.dependency_overrides[scorer_dependency] = lambda: Drifting()
+    body = client.get("/metrics/drift").json()
+    assert set(body["fp_share"]) == {"share", "false_positives", "alerts"}
+    assert body["history"] == []

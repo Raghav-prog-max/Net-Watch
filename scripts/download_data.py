@@ -35,7 +35,7 @@ with open(_REPO_ROOT / "ml" / "config.yaml", "r") as fh:
 # ── Kaggle dataset slug ────────────────────────────────────────────────────────
 KAGGLE_DATASET = cfg["kaggle"]["dataset"]
 EXPECTED_FILES = list(cfg["kaggle"]["expected_files"])
-RAW_DATA_DIR = _REPO_ROOT / cfg["paths"]["raw_data"]
+RAW_DATA_DIR = _REPO_ROOT / cfg["paths"]["raw_dir"]
 
 
 def _credentials_present() -> bool:
