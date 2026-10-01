@@ -6,7 +6,8 @@ Scenarios:
   normal  benign traffic only, to show the false-alert rate
   known   a DDoS and PortScan burst
   novel   families the classifier never trained on
-  drift   test traffic with shifted feature distributions
+  drift   the held-out drift day (data/splits/drift.pkl), or a synthetic
+          ramp of shifted benign traffic when there is no such split
   mixed   everything, in timestamp order
 """
 import argparse
@@ -29,6 +30,61 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ml.data.labels import TRAIN_FAMILIES
 from ml.features.select import feature_columns
 
+# Written by ml/train.py when the data has a Monday to hold out (CICIDS2017).
+# The synthetic data has no days, so there is no drift split to replay.
+DRIFT_SPLIT = Path("data/splits/drift.pkl")
+
+
+def synthetic_drift(df, limit=None):
+    """Benign traffic with a gradual, made-up shift, for when there is no held-out
+    drift day. The detector should stay mostly quiet while the drift monitor
+    notices the distribution move.
+
+    Phases, in stream order, so the status walks stable -> warning -> drift
+    within one replay: a short baseline, a quick climb to a moderate shift,
+    a hold there, then a ramp to the peak and a hold at it.
+
+    The peak is 3x because smaller shifts do not cross the standard PSI
+    bands this monitor uses. Flow features span orders of magnitude, so a
+    multiplier is a small move in log space: measured end to end, 1.3x gives
+    PSI ~0.08 (still "stable"), 1.6x ~0.23 ("warning"), 2x ~0.47 ("drift").
+
+    The hold at 1.45x is what makes Warning visible. Drift is declared when
+    PSI is at least Warning *and* the unexplained alert rate is >= 2x its
+    training baseline (docs/drift_strategy.md). That baseline is ~0.1%, and
+    shifted flows raise it, so a straight ramp crossed 2x at the same moment
+    PSI crossed 0.10 and the status went stable -> drift. With every flow at
+    1.4-1.45x, PSI sits at ~0.11-0.13 while the rate stays under 2x; at 1.5x
+    the rate reaches 2x within 3000 flows. Measured end to end at --limit
+    5000: stable, stable, warning, drift, drift (one snapshot per 1000).
+    """
+    out = df[df["family"] == "Benign"].sample(frac=0.5, random_state=3).copy()
+    # Truncate before building the ramp, not after: the replayer only sends
+    # --limit flows (5000 by default), and a ramp laid across all the sampled
+    # rows would be cut off during the hold phase and never reach drift.
+    if limit:
+        out = out.iloc[:limit]
+    # Phases are weighted toward the shifted levels on purpose. The drift window
+    # holds up to 5000 flows and a demo replay is no longer than that, so
+    # nothing ages out: the unshifted opening stays in the window and dilutes
+    # PSI for the whole run. It is kept short (5%, at least 100 flows) so the
+    # moderate hold can reach the warning band.
+    n, warn_level, peak = len(out), 1.45, 3.0
+    hold = max(100, n // 20)                # unshifted baseline
+    climb = hold + n // 20                  # quick climb to the moderate shift
+    plateau = n // 2                        # hold it: PSI in the warning band
+    ramp = plateau + n // 5                 # ramp to the peak, then hold it
+    factor = np.ones(n)
+    factor[hold:climb] = np.linspace(1.0, warn_level, climb - hold)
+    factor[climb:plateau] = warn_level
+    factor[plateau:ramp] = np.linspace(warn_level, peak, ramp - plateau)
+    factor[ramp:] = peak
+    shift_cols = [c for c in ("Flow Duration", "Flow IAT Mean", "Flow Bytes/s",
+                              "Total Fwd Packets") if c in out.columns]
+    for c in shift_cols:
+        out[c] = out[c].to_numpy() * factor
+    return out
+
 
 def pick(df, scenario, limit=None):
     if scenario == "normal":
@@ -38,18 +94,18 @@ def pick(df, scenario, limit=None):
     if scenario == "novel":
         return df[~df["family"].isin(TRAIN_FAMILIES)]
     if scenario == "drift":
-        # Return the held-out drift set
-        drift_path = Path("data/splits/drift.pkl")
-        if drift_path.exists():
-            out = pd.read_pickle(drift_path)
+        # Prefer the held-out drift day: real drift, not a made-up one
+        if DRIFT_SPLIT.exists():
+            out = pd.read_pickle(DRIFT_SPLIT)
             # Sample it so it fits the limit
             out = out.sample(frac=1.0, random_state=3).reset_index(drop=True)
             if limit:
                 out = out.iloc[:limit]
             return out
-        else:
-            print("Warning: data/splits/drift.pkl not found, returning empty dataframe.")
-            return df.iloc[:0]
+        # Without one (synthetic data) the scenario used to send nothing at all
+        print(f"{DRIFT_SPLIT} not found (no held-out drift day in this data); "
+              "replaying a synthetic drift ramp instead")
+        return synthetic_drift(df, limit)
     return df
 
 
