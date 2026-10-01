@@ -142,6 +142,21 @@ def test_grouped_alert_update_returns_a_valid_timestamp():
     stored = client.get(f"/alerts/{update['id']}").json()
     assert stored["flow_count"] == 2
 
+def test_every_flow_in_a_batch_is_counted_in_its_group():
+    """The replayer sends 20 flows per request. The first alert of a family
+    creates the group, but the session does not autoflush, so the rest of that
+    family in the same request could not find it and were skipped: a novel
+    replay counted 525 Unknown flows out of 544."""
+    batch = [flow("PortScan"), flow("PortScan"), flow("DoS"), flow("PortScan")]
+    res = client.post("/score", json={"flows": batch})
+    assert res.status_code == 200, res.text
+    alerts = {a["prediction"]["family"]: a for a in res.json()["alerts"]}
+    assert set(alerts) == {"PortScan", "DoS"}, "one alert per family"
+    assert alerts["PortScan"]["flow_count"] == 3
+    assert alerts["DoS"]["flow_count"] == 1
+    for family, n in (("PortScan", 3), ("DoS", 1)):
+        assert client.get(f"/alerts/{alerts[family]['id']}").json()["flow_count"] == n
+
 def test_rejected_label_survives_the_round_trip():
     class Rejecting(StubScorer):
         def score(self, flows, metas=None):
