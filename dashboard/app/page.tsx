@@ -270,7 +270,7 @@ export default function LandingPage() {
                   width: "36px",
                   height: "36px",
                   borderRadius: "12px",
-                  backgroundColor: "rgba(244, 169, 62, 0.15)",
+                  backgroundColor: "rgba(255, 255, 255, 0.15)",
                   color: "var(--nw-card-1)",
                   display: "flex",
                   alignItems: "center",
@@ -487,7 +487,7 @@ export default function LandingPage() {
 
               <div
                 style={{
-                  backgroundColor: "rgba(244, 169, 62, 0.08)",
+                  backgroundColor: "rgba(255, 255, 255, 0.08)",
                   borderRadius: "16px",
                   padding: "16px 20px",
                   borderLeft: "4px solid var(--nw-card-1)",
