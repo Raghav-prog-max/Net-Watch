@@ -117,6 +117,31 @@ def test_scored_alert_is_stored():
     alert_id = res.json()["alerts"][0]["id"]
     assert client.get(f"/alerts/{alert_id}").json()["prediction"]["family"] == "Bot"
 
+def test_grouped_alert_update_returns_a_valid_timestamp():
+    """A repeat of the same family within 60 s is folded into the first alert,
+    and re-sent once 5 s have passed. That update was built with
+    ts.isoformat() + "Z" on an aware datetime ("...+00:00Z"), which the
+    response model rejects, so POST /score returned 500 during every replay."""
+    times = iter(["2026-09-28T10:00:00Z", "2026-09-28T10:00:06Z"])
+
+    class Ticking(StubScorer):
+        def score(self, flows, metas=None):
+            out = super().score(flows, metas)
+            for a in out:
+                a["timestamp"] = next(times)
+            return out
+    app.dependency_overrides[scorer_dependency] = lambda: Ticking()
+
+    first = client.post("/score", json={"flows": [flow("PortScan")]})
+    again = client.post("/score", json={"flows": [flow("PortScan")]})
+    assert again.status_code == 200, again.text
+    update = again.json()["alerts"][0]
+    assert update["id"] == first.json()["alerts"][0]["id"]
+    assert update["flow_count"] == 2
+    assert update["timestamp"].startswith("2026-09-28T10:00:06")
+    stored = client.get(f"/alerts/{update['id']}").json()
+    assert stored["flow_count"] == 2
+
 def test_rejected_label_survives_the_round_trip():
     class Rejecting(StubScorer):
         def score(self, flows, metas=None):

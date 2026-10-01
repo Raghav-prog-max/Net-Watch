@@ -56,7 +56,9 @@ async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
                     update_data = dict(alert_data)
                     update_data["id"] = alert_id
                     update_data["flow_count"] = db_alert.flow_count
-                    update_data["timestamp"] = ts.isoformat() + "Z"
+                    # ts is timezone-aware: appending "Z" gave "...+00:00Z",
+                    # which the response model rejects (500 on every replay)
+                    update_data["timestamp"] = ts.isoformat().replace("+00:00", "Z")
                     returned_alerts.append(update_data)
             continue
 
