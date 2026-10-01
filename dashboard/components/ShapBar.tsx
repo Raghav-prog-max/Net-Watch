@@ -84,7 +84,7 @@ export default function ShapBar({ items }: { items: Explanation[] }) {
                       style={{
                         fontFamily: "var(--font-mono)",
                         fontWeight: 700,
-                        color: isPos ? "#F4A93E" : "#A78BFA",
+                        color: isPos ? "#FFFFFF" : "#A78BFA",
                         marginTop: "2px",
                       }}
                     >
@@ -99,7 +99,7 @@ export default function ShapBar({ items }: { items: Explanation[] }) {
               {data.map((entry) => (
                 <Cell
                   key={entry.feature}
-                  fill={entry.impact >= 0 ? "#F4A93E" : "#A78BFA"}
+                  fill={entry.impact >= 0 ? "#FFFFFF" : "#A78BFA"}
                 />
               ))}
             </Bar>

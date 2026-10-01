@@ -153,8 +153,8 @@ export default function AlertFeed() {
       {triageErrorMsg && (
         <div role="alert" style={{
             padding: "10px 18px",
-            backgroundColor: "rgba(244, 169, 62, 0.12)",
-            border: "1px solid rgba(244, 169, 62, 0.35)",
+            backgroundColor: "rgba(255, 255, 255, 0.12)",
+            border: "1px solid rgba(255, 255, 255, 0.35)",
             borderRadius: "14px",
             color: "var(--nw-card-1)",
             fontSize: "13px",
@@ -212,7 +212,7 @@ export default function AlertFeed() {
               fontSize: "12px",
               fontWeight: 600,
               cursor: "pointer",
-              backgroundColor: novelOnly ? "rgba(244, 169, 62, 0.15)" : "transparent",
+              backgroundColor: novelOnly ? "rgba(255, 255, 255, 0.15)" : "transparent",
               color: novelOnly ? "var(--nw-card-1)" : "var(--nw-text-muted)",
               transition: "all 0.15s ease",
             }}

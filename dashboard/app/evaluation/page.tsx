@@ -57,7 +57,7 @@ export default function EvaluationPage() {
             backgroundColor: "var(--nw-bg-panel)",
             borderRadius: "20px",
             padding: "24px",
-            border: "1px solid rgba(244, 169, 62, 0.3)",
+            border: "1px solid rgba(255, 255, 255, 0.3)",
             color: "var(--nw-card-1)",
             fontFamily: "var(--font-mono)",
             fontSize: "13px",
@@ -314,7 +314,7 @@ export default function EvaluationPage() {
               />
               <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
               <Bar dataKey="Precision" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="Recall" fill="#F4A93E" radius={[4, 4, 0, 0]} maxBarSize={22} />
+              <Bar dataKey="Recall" fill="#FFFFFF" radius={[4, 4, 0, 0]} maxBarSize={22} />
               <Bar dataKey="F1" fill="#C7DB6E" radius={[4, 4, 0, 0]} maxBarSize={22} />
             </BarChart>
           </ResponsiveContainer>
@@ -427,7 +427,7 @@ export default function EvaluationPage() {
                   />
                   <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
                   <Bar dataKey="Classifier Alone" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="Hybrid Ensemble" fill="#F4A93E" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="Hybrid Ensemble" fill="#FFFFFF" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -463,7 +463,7 @@ export default function EvaluationPage() {
                   </tr>
                 ))}
                 {report.novel_families && (
-                  <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)", backgroundColor: "rgba(244, 169, 62, 0.05)" }}>
+                  <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)", backgroundColor: "rgba(255, 255, 255, 0.05)" }}>
                     <td style={{ padding: "12px 14px", fontWeight: 600 }}>
                       {report.novel_families.families.join(" + ")}{" "}
                       <span style={{ color: "var(--nw-text-muted)", fontWeight: 400 }}>(never trained)</span>
@@ -526,7 +526,7 @@ export default function EvaluationPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-              {chart(pr, "Recall", "Precision", "#F4A93E")}
+              {chart(pr, "Recall", "Precision", "#FFFFFF")}
               {chart(roc, "False positive rate", "True positive rate", "#A78BFA")}
             </div>
           </div>

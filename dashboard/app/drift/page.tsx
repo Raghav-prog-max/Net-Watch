@@ -97,11 +97,11 @@ export default function DriftMonitorPage() {
       {isDrift && (
         <div
           style={{
-            backgroundColor: "rgba(244, 169, 62, 0.1)",
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
             borderRadius: "20px",
             padding: "20px 24px",
             marginBottom: "24px",
-            border: "1px solid rgba(244, 169, 62, 0.3)",
+            border: "1px solid rgba(255, 255, 255, 0.3)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -264,12 +264,12 @@ export default function DriftMonitorPage() {
                 />
                 <ReferenceLine
                   y={driftBand}
-                  stroke="#F4A93E"
+                  stroke="#FFFFFF"
                   strokeDasharray="4 4"
                   label={{
                     value: `DRIFT (${driftBand.toFixed(2)})`,
                     position: "insideTopRight",
-                    fill: "#F4A93E",
+                    fill: "#FFFFFF",
                     fontSize: 10,
                   }}
                 />
@@ -309,7 +309,7 @@ export default function DriftMonitorPage() {
                       key={idx}
                       fill={
                         entry.psi >= driftBand
-                          ? "#F4A93E"
+                          ? "#FFFFFF"
                           : entry.psi >= warnBand
                           ? "#A78BFA"
                           : "#C7DB6E"
@@ -376,7 +376,7 @@ export default function DriftMonitorPage() {
                   tickLine={false}
                 />
                 <ReferenceLine x={warnBand} stroke="#A78BFA" strokeDasharray="3 3" />
-                <ReferenceLine x={driftBand} stroke="#F4A93E" strokeDasharray="4 4" />
+                <ReferenceLine x={driftBand} stroke="#FFFFFF" strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
                   content={({ active, payload }) => {
@@ -406,7 +406,7 @@ export default function DriftMonitorPage() {
                       key={f.feature}
                       fill={
                         f.psi >= driftBand
-                          ? "#F4A93E"
+                          ? "#FFFFFF"
                           : f.psi >= warnBand
                           ? "#A78BFA"
                           : "#C7DB6E"
