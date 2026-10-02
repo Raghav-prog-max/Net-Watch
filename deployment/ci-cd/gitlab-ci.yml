@@ -1,0 +1,62 @@
+# ==============================================================================
+# NetWatch AI SOC — GitLab CI/CD Production Pipeline
+# ==============================================================================
+
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  API_IMAGE: "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA"
+  DASHBOARD_IMAGE: "$CI_REGISTRY_IMAGE/dashboard:$CI_COMMIT_SHA"
+
+test:python:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends libgomp1
+    - pip install -r requirements.txt
+  script:
+    - pytest tests/ -v
+
+test:dashboard:
+  stage: test
+  image: node:20-alpine
+  script:
+    - cd dashboard
+    - npm ci
+    - npm run typecheck
+    - npm run build
+
+build:docker:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - docker build -f deployment/docker/Dockerfile.api -t "$API_IMAGE" -t "$CI_REGISTRY_IMAGE/api:latest" .
+    - docker build -f deployment/docker/Dockerfile.dashboard -t "$DASHBOARD_IMAGE" -t "$CI_REGISTRY_IMAGE/dashboard:latest" .
+    - docker push "$API_IMAGE"
+    - docker push "$CI_REGISTRY_IMAGE/api:latest"
+    - docker push "$DASHBOARD_IMAGE"
+    - docker push "$CI_REGISTRY_IMAGE/dashboard:latest"
+  only:
+    - main
+    - tags
+
+deploy:k8s:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl set image deployment/netwatch-api api="$API_IMAGE" -n netwatch
+    - kubectl set image deployment/netwatch-dashboard dashboard="$DASHBOARD_IMAGE" -n netwatch
+    - kubectl rollout status deployment/netwatch-api -n netwatch
+  only:
+    - main
+    - tags
+  when: manual

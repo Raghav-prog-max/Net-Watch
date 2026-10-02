@@ -1,0 +1,26 @@
+# ==============================================================================
+# NetWatch AI SOC — Network Traffic Flow Replayer Container
+# ==============================================================================
+# Continuously or on-demand streams synthetic/eval flows to /score for live triage.
+# ==============================================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir requests pandas pyyaml
+
+COPY replay /app/replay
+COPY data /app/data
+COPY ml /app/ml
+
+ENV PYTHONUNBUFFERED=1 \
+    API_URL="http://api:8000" \
+    STREAM_DELAY=1.0
+
+CMD ["python", "-m", "replay.replayer", "--url", "http://api:8000/score", "--delay", "1.0"]

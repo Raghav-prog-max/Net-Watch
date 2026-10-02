@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: netwatch-api-service
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch-api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http-api
+  selector:
+    app.kubernetes.io/name: netwatch-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netwatch-dashboard-service
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch-dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http-web
+  selector:
+    app.kubernetes.io/name: netwatch-dashboard

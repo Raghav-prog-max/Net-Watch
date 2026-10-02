@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch
+    app.kubernetes.io/part-of: netwatch-soc
+    app.kubernetes.io/managed-by: kubectl
