@@ -32,7 +32,7 @@ export function SplineSceneBasic() {
       
       <div className="flex h-full">
         {/* Left content */}
-        <div className="flex-1 p-8 md:p-12 relative z-10 flex flex-col justify-center items-center text-center">
+        <div className="flex-1 lg:flex-[0.9] p-8 md:p-12 relative z-10 flex flex-col justify-center items-center text-center">
           <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-neutral-50 to-neutral-400" style={{ letterSpacing: '-0.03em', lineHeight: 1.05 }}>
             NetWatch AI SOC
           </h1>
@@ -48,7 +48,7 @@ export function SplineSceneBasic() {
         </div>
 
         {/* Right content */}
-        <div className="flex-1 relative hidden md:block">
+        <div className="flex-1 lg:flex-[1.1] relative hidden md:flex items-center justify-center w-full h-full">
           {isMdUp && (
             <SplineScene
               scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
