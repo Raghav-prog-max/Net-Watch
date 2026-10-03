@@ -36,10 +36,14 @@ analyst has reviewed and cleared the earlier Unknown alert.
 
 - The drift badge may already show **Warning** after step 2 (it did in the rehearsal): the
   alert-rate rule watches Unknown alerts, and attack traffic raises them.
-- PSI itself reaches Drift (above 0.25 on three features) after about 10,000 drifted flows, about a
-  minute at the API's full speed (rehearsal: ~180 flows/s). To show that, start
-  `python replay/replayer.py --scenario drift --rate 400 --limit 14000` at the start of step 5,
-  so it runs through step 6. The status can flip between Warning and Drift while it settles.
+- PSI itself reaches Drift (above 0.25 on three features) only at the end of a full drift replay:
+  all of the test split's benign flows (5,598 on the synthetic data), about 45 s at the API's full
+  speed. To show that, start `python replay/replayer.py --scenario drift --rate 400` at the start
+  of step 5, so it runs through step 6.
+- The drift step raises alerts too: about 7% of the shifted flows look abnormal to the detector,
+  since bigger packets over longer flows are unlike anything in training.
+- On CICIDS2017, `--scenario day` replays the held-out Monday unchanged: real drift, but nobody
+  has checked that it trips the monitor, so the demo uses `drift`.
 - Every alert in the rehearsal was Critical, including the two from normal traffic in step 1.
 - On CICIDS2017 the never-trained families are tiny (Infiltration and Heartbleed, a few dozen
   flows), so step 3 lasts about a second at `--rate 60`. Lower `--rate` to stretch it.
