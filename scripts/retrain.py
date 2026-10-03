@@ -1,7 +1,9 @@
-"""Retrain with analyst feedback as extra training data, then compare with v1.
+"""Retrain with analyst feedback as extra training data, then compare with the
+bundle the API serves (v1 until a promotion).
 
 Usage:
     python scripts/retrain.py [--config ml/config.yaml] [--out models/v2] [--skip-lofo]
+    python scripts/promote.py v2              # if the check below recommends it
 
 Workflow (handbook, "Retraining path")
 --------------------------------------
@@ -12,12 +14,13 @@ Workflow (handbook, "Retraining path")
    cannot be learned from and is skipped, with a count.
 3. Train v2 on the original data plus those rows. The rows go into training
    only (ml/train.py), so v2 is evaluated on exactly v1's test and LOFO sets.
-4. Print the promotion check: promote only if macro-F1 improves and false
-   alerts stay within the FPR budget.
+4. Print the promotion check against the active bundle (ml/registry.py):
+   promote only if macro-F1 improves and false alerts stay within the FPR budget.
 
-Promotion is NOT automated: a person reviews the comparison and copies
-models/v2 over models/v1. v1's reports/metrics.json is left untouched; v2's
-report goes to reports/v2/.
+Promotion is NOT automated: a person reviews the comparison and runs
+scripts/promote.py, which points models/ACTIVE at the new bundle. Nothing is
+copied over v1: every bundle stays on disk to roll back to. v2's report goes to
+reports/v2/; v1's reports/metrics.json is left untouched.
 """
 from __future__ import annotations
 
@@ -28,6 +31,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from ml import registry
+from ml.registry import false_alerts_per_10k  # noqa: F401  (tests import it from here)
 
 
 def training_label(status, analyst_label, families):
@@ -69,14 +75,6 @@ def export_feedback(families):
         db.close()
 
 
-def false_alerts_per_10k(report):
-    """What analysts would see: the full system (classifier or detector). Reports
-    written before that was measured carry only the classifier's figure."""
-    if "system" in report:
-        return report["system"]["false_alerts_per_10k_benign_flows"]
-    return report["main"]["false_alerts_per_10k_benign_flows"]
-
-
 def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
     import pandas as pd
     import yaml
@@ -84,12 +82,19 @@ def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
     from ml.data.labels import TRAIN_FAMILIES
     from ml.train import main as train_main
 
+    # compared with what the API serves now; never written over, so it can be
+    # rolled back to
+    current = registry.active_version()
+    out_name = Path(out_dir).name
+    if out_name in ("v1", current):
+        raise SystemExit(f"{out_dir} is {'the bundle `make train` writes' if out_name == 'v1' else 'the active bundle'}: "
+                         "retraining into it would leave nothing to roll back to. Pass a new --out.")
     cfg = yaml.safe_load(open(ROOT / config_path))
     processed = ROOT / cfg["paths"]["processed"]
     if not processed.exists():
         raise SystemExit("run `make data` first")
-    v1_report_path = ROOT / cfg["paths"]["reports_dir"] / "metrics.json"
-    v1 = json.load(open(v1_report_path)) if v1_report_path.exists() else None
+    current_report_path = registry.report_path(current)
+    current_report = json.load(open(current_report_path)) if current_report_path.exists() else None
 
     rows, counts = export_feedback(TRAIN_FAMILIES)
     print("analyst feedback:", ", ".join(f"{k} {v}" for k, v in counts.items()))
@@ -117,24 +122,20 @@ def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
     finally:
         cfg_tmp.unlink(missing_ok=True)
 
-    if v1 is None:
-        print(f"no {v1_report_path}; compare manually")
+    if current_report is None:
+        print(f"no {current_report_path}; compare manually")
         return
     budget = cfg["train"]["fpr_budget"] * 10000
-    f1_1, f1_2 = v1["main"]["macro_f1"], v2["main"]["macro_f1"]
-    fa_1, fa_2 = false_alerts_per_10k(v1), false_alerts_per_10k(v2)
-    print("\npromotion check (same test set):")
-    print(f"  v1  macro-F1 {f1_1}  false alerts/10k {fa_1}")
-    print(f"  v2  macro-F1 {f1_2}  false alerts/10k {fa_2}  (budget {budget:g})")
-    problems = []
-    if f1_2 <= f1_1:
-        problems.append(f"macro-F1 did not improve ({f1_2} <= {f1_1})")
-    if fa_2 > budget:
-        problems.append(f"false alerts over budget ({fa_2} > {budget:g})")
+    print(f"\npromotion check against the active bundle, {current} (same test set):")
+    for name, r in ((current, current_report), (out_name, v2)):
+        print(f"  {name}  macro-F1 {r['main']['macro_f1']}  false alerts/10k {false_alerts_per_10k(r)}")
+    print(f"  (budget {budget:g})")
+    problems = registry.promotion_problems(current_report, v2, budget)
     if problems:
         print("  DO NOT PROMOTE: " + "; ".join(problems))
     else:
-        print(f"  RECOMMEND PROMOTE: review, then copy {out_dir} over models/v1")
+        print(f"  RECOMMEND PROMOTE: review, then `python scripts/promote.py {out_name}`; "
+              f"{current} stays in models/{current} to roll back to")
 
 
 if __name__ == "__main__":

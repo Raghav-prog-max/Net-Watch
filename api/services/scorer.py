@@ -15,6 +15,7 @@ import joblib
 import numpy as np
 import yaml
 
+from ml import registry
 from ml.drift.monitor import ks_test, status as drift_status, window_psi
 from ml.explain import Explainer
 from ml.models import classifier as clf_mod
@@ -24,7 +25,8 @@ from .mitre import get_mitre_dict
 # Resolved from the repository root, so the API finds its models whatever
 # directory uvicorn is started from.
 ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", str(ROOT / "models" / "v1"))
+# the bundle models/ACTIVE names (v1 without it): scripts/promote.py switches it
+MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", str(registry.model_dir(registry.active_version())))
 
 # ml/config.yaml `drift`; these defaults apply only if a key is missing
 DRIFT_DEFAULTS = {

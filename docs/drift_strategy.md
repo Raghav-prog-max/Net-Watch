@@ -55,10 +55,13 @@ rule applies as the handbook describes.
 
 1. Dashboard shows Drift status and lists the top drifting features.
 2. Build a new training set: original training data **plus** analyst-labelled alerts.
-3. Train v2 using `make train` (same settings, same splits).
-4. Evaluate v2 on the same test and LOFO sets as v1.
-5. Promote v2 only if macro-F1 improves **and** FPR stays within the 0.5% budget.
-6. Keep v1 for rollback; do not delete it.
+3. Train v2 using `make retrain` (same settings, same splits) into `models/v2`.
+4. Evaluate v2 on the same test and LOFO sets as the active model.
+5. Promote v2 only if macro-F1 improves **and** FPR stays within the 0.5% budget:
+   `make promote VERSION=v2` checks both, then points `models/ACTIVE` at v2. The
+   API serves that version's models and its report together after a restart.
+6. Keep v1 for rollback: promotion copies and deletes nothing, and
+   `make rollback` points `models/ACTIVE` back at v1.
 
 A person approves every model change. Nothing retrains automatically.
 

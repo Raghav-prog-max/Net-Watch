@@ -128,6 +128,8 @@ repository root with the virtual environment's Python:
 | `make dashboard` | `cd dashboard && npm install && npm run dev` |
 | `make seed` | `.venv\Scripts\python scripts/seed_db.py --count 80 --scenario known` |
 | `make retrain` | `.venv\Scripts\python scripts/retrain.py --out models/v2` |
+| `make promote VERSION=v2` | `.venv\Scripts\python scripts/promote.py v2` |
+| `make rollback` | `.venv\Scripts\python scripts/promote.py v1 --rollback` |
 | `make test` | `.venv\Scripts\python -m pytest -q` |
 | `make nslkdd` | `.venv\Scripts\python scripts/nslkdd_check.py` |
 | `make eda` | `.venv\Scripts\python -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb` |

@@ -7,6 +7,9 @@ from pathlib import Path
 import yaml
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
+
+from ml import registry
+
 try:
     from sqlalchemy.orm import Session
 except ImportError:
@@ -20,7 +23,8 @@ from .score import scorer_dependency
 
 router = APIRouter()
 
-REPORT_PATH = Path(os.environ.get("NETWATCH_REPORT", ROOT / "reports" / "metrics.json"))
+# the report of the bundle being served, so the figures match the models
+REPORT_PATH = Path(os.environ.get("NETWATCH_REPORT", registry.report_path(Path(MODEL_DIR).name)))
 CONFIG_PATH = ROOT / "ml" / "config.yaml"
 MODEL_CARD_PATH = ROOT / "docs" / "model_card.md"
 TRIAGE_STATUSES = ("open", "acknowledged", "escalated", "false_positive", "resolved")
