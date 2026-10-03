@@ -7,6 +7,7 @@ import ShapBar from "@/components/ShapBar";
 import { ApiUnreachable, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, Level } from "@/lib/types";
+import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
 const LEVELS: (Level | "All")[] = ["All", "Critical", "High", "Medium", "Low"];
 
@@ -22,6 +23,7 @@ export default function AlertFeed() {
   const [triageSuccessMsg, setTriageSuccessMsg] = useState<string | null>(null);
   const [triageErrorMsg, setTriageErrorMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [falsePositives, refreshFalsePositives] = useFalsePositiveCount();
 
   // Initial load & real-time WebSocket subscription
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function AlertFeed() {
         note
       );
       setAlerts((prev) => prev.map((a) => (a.id === alertId ? updated : a)));
+      refreshFalsePositives();
       setTriageSuccessMsg(`Alert ${alertId} updated to ${status.replace("_", " ")}`);
       setTimeout(() => setTriageSuccessMsg(null), 3000);
     } catch (e) {
@@ -123,6 +126,15 @@ export default function AlertFeed() {
         </div>
 
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <Link
+            href="/models"
+            className="nw-pill nw-pill-purple"
+            title="Alerts marked false positive: each one becomes a training label for the next model"
+            style={{ fontSize: "11px", textDecoration: "none" }}
+          >
+            Analyst feedback: {falsePositives === null ? "—" : falsePositives.toLocaleString()} false
+            {falsePositives === 1 ? " positive" : " positives"}
+          </Link>
           <button
             onClick={() => setIsPaused(!isPaused)}
             className={`nw-btn-pill ${isPaused ? "nw-btn-amber" : "nw-btn-dark"}`}
