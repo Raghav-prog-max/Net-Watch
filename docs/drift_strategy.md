@@ -14,6 +14,14 @@
 
 All thresholds and sizes are read from `drift:` in `ml/config.yaml`.
 
+The drift set (handbook: "a held-out day, plus a perturbed copy of test with scaled
+packet sizes and stretched durations, to trigger the drift monitor on demand") is two
+replayer scenarios. `--scenario drift` takes the test split's benign flows and scales
+their packet sizes and stretches their durations by the same factor, so packets per
+second fall and bytes per second stay put; the factor climbs to a 1.2x hold, then to
+3x, so the status walks stable -> warning -> drift. `--scenario day` replays the day
+`make train` held out (`data/splits/drift.pkl`, CICIDS2017's Monday) unchanged.
+
 PSI bins come from 10 quantile edges computed on benign validation traffic at
 training time and saved to `models/v1/reference_stats.json`. The two outer bins
 are open-ended: a flow below the lowest edge or above the highest counts in the

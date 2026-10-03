@@ -14,10 +14,11 @@ import pandas as pd
 
 from ml.drift.monitor import bin_counts, psi, reference_stats, status, window_psi
 import replay.replayer as replayer
-from replay.replayer import pick, synthetic_drift
+from replay.replayer import drift_ramp, perturb, pick
 
 RNG = np.random.default_rng(9)
-SHIFTED = ["Flow Duration", "Flow IAT Mean", "Flow Bytes/s", "Total Fwd Packets"]
+# columns the drift scenario moves: two timings, a packet size, and a variance
+SHIFTED = ["Flow Duration", "Flow IAT Mean", "Fwd Packet Length Mean", "Packet Length Variance"]
 
 
 def _lognormal(shift=0.0, n=4000, d=4):
@@ -117,13 +118,16 @@ def test_one_noisy_feature_cannot_declare_drift():
 
 
 # ---------------------------------------------------------------- the scenario
-# The drift scenario replays the held-out drift day (data/splits/drift.pkl) when
-# training wrote one, and a synthetic ramp otherwise. The ramp tests call
-# synthetic_drift directly so they do not depend on what is in data/splits/.
+# The drift scenario replays a perturbed copy of the test split's benign flows
+# (data/splits/test.pkl); the day scenario replays the held-out day
+# (data/splits/drift.pkl). The ramp tests call drift_ramp directly so they do
+# not depend on what is in data/splits/.
 
 def _frame(n=4000):
     cols = {c: np.exp(RNG.normal(0, 1, n)) * 100 for c in SHIFTED}
-    cols["Flow Packets/s"] = np.exp(RNG.normal(0, 1, n)) * 100    # never shifted
+    cols["Flow Bytes/s"] = np.exp(RNG.normal(0, 1, n)) * 100       # bytes over time: unmoved
+    cols["Flow Packets/s"] = np.exp(RNG.normal(0, 1, n)) * 100     # falls as flows stretch
+    cols["Total Fwd Packets"] = np.exp(RNG.normal(0, 1, n)) * 100  # a count: never moved
     cols["family"] = "Benign"
     return pd.DataFrame(cols)
 
@@ -132,34 +136,70 @@ def _factors(df, out, col):
     return (out[col] / df.loc[out.index, col]).to_numpy()
 
 
-def _with_drift_split(path, fn):
-    """Run fn with replayer.DRIFT_SPLIT pointing at path."""
-    saved = replayer.DRIFT_SPLIT
-    replayer.DRIFT_SPLIT = Path(path)
-    try:
-        return fn()
-    finally:
-        replayer.DRIFT_SPLIT = saved
-
-
-def test_drift_scenario_replays_the_held_out_day_when_there_is_one():
-    df = _frame()
-    held_out = _frame(300).assign(day="Monday")
+def _with_splits(fn, test=None, drift=None):
+    """Run fn with replayer.TEST_SPLIT and DRIFT_SPLIT pointing at these paths
+    (a path that does not exist stands for a split training did not write)."""
+    saved = replayer.TEST_SPLIT, replayer.DRIFT_SPLIT
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "drift.pkl"
-        held_out.to_pickle(path)
-        out = _with_drift_split(path, lambda: pick(df, "drift", limit=200))
-    assert len(out) == 200
-    assert (out["day"] == "Monday").all(), "should replay the split, not the ramp"
+        replayer.TEST_SPLIT = Path(test) if test else Path(tmp) / "no-test.pkl"
+        replayer.DRIFT_SPLIT = Path(drift) if drift else Path(tmp) / "no-drift.pkl"
+        try:
+            return fn()
+        finally:
+            replayer.TEST_SPLIT, replayer.DRIFT_SPLIT = saved
 
 
-def test_drift_scenario_falls_back_to_the_ramp_without_a_split():
-    """Synthetic data has no Monday, so training writes no drift split. The
-    scenario used to send nothing at all then; it has to send the ramp."""
+def test_perturb_scales_packet_sizes_and_stretches_durations():
+    """The handbook's drift set: "a perturbed copy of test with scaled packet
+    sizes and stretched durations". The old ramp scaled packet counts and
+    bytes/s instead, and left packet sizes alone."""
+    df = _frame(200)
+    out = perturb(df, 2.0)
+    for col in ("Flow Duration", "Flow IAT Mean", "Fwd Packet Length Mean"):
+        assert np.allclose(out[col], df[col] * 2), col
+    assert np.allclose(out["Packet Length Variance"], df["Packet Length Variance"] * 4)
+    assert np.allclose(out["Flow Packets/s"], df["Flow Packets/s"] / 2), "same packets, longer flow"
+    assert np.allclose(out["Flow Bytes/s"], df["Flow Bytes/s"]), "bigger packets over a longer flow"
+    assert np.allclose(out["Total Fwd Packets"], df["Total Fwd Packets"])
+    assert (out["family"] == "Benign").all()
+
+
+def test_drift_scenario_perturbs_the_test_split():
+    """It used to replay every processed flow's benign rows, training ones included."""
+    df = _frame()
+    test = _frame(3000).assign(split="test")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "test.pkl"
+        test.to_pickle(path)
+        out = _with_splits(lambda: pick(df, "drift", limit=2000), test=path)
+    assert len(out) == 2000
+    assert (out["split"] == "test").all()
+    assert np.allclose(_factors(test, out, "Flow Duration")[-1], 3.0)
+
+
+def test_drift_scenario_perturbs_test_even_when_there_is_a_held_out_day():
+    """With a held-out day it replayed that day unchanged, and nothing had
+    checked that an ordinary Monday trips the monitor. That is `day` now."""
     df = _frame()
     with tempfile.TemporaryDirectory() as tmp:
-        out = _with_drift_split(Path(tmp) / "missing.pkl",
-                                lambda: pick(df, "drift", limit=2000))
+        test_path, day_path = Path(tmp) / "test.pkl", Path(tmp) / "drift.pkl"
+        _frame(3000).to_pickle(test_path)
+        _frame(300).assign(day="Monday").to_pickle(day_path)
+        drift = _with_splits(lambda: pick(df, "drift", limit=200), test=test_path, drift=day_path)
+        day = _with_splits(lambda: pick(df, "day", limit=200), test=test_path, drift=day_path)
+    assert "day" not in drift.columns, "drift should be the perturbed test split"
+    assert len(day) == 200 and (day["day"] == "Monday").all(), "day replays the held-out day"
+
+
+def test_day_scenario_without_a_held_out_day_says_so():
+    import pytest
+    with pytest.raises(SystemExit, match="Use --scenario drift"):
+        _with_splits(lambda: pick(_frame(), "day", limit=10))
+
+
+def test_drift_scenario_falls_back_to_all_flows_without_a_test_split():
+    df = _frame()
+    out = _with_splits(lambda: pick(df, "drift", limit=2000))
     assert len(out) == 2000
     assert np.allclose(_factors(df, out, "Flow Duration")[-1], 3.0)
 
@@ -168,7 +208,7 @@ def test_drift_scenario_ramps_rather_than_stepping():
     """The original applied one scalar per column: an instant step, not the
     gradual shift its comment described, and too small to register at all."""
     df = _frame()
-    out = synthetic_drift(df, limit=2000)
+    out = drift_ramp(df, limit=2000)
     f = _factors(df, out, "Flow Duration")
 
     assert np.allclose(f[:100], 1.0), "the opening should be unshifted baseline"
@@ -183,11 +223,11 @@ def test_drift_scenario_holds_in_the_warning_band_before_the_peak():
     The scenario now holds a moderate shift first, and that hold has to read
     as Warning on its own -- not Stable, and not already Drift."""
     df = _frame()
-    out = synthetic_drift(df, limit=2000)
+    out = drift_ramp(df, limit=2000)
     f = _factors(df, out, "Flow Duration")
     hold = f[250:1000]                       # after the climb, before the ramp
     assert np.allclose(hold, hold[0]), "the moderate shift should be held flat"
-    assert 1.3 < hold[0] < 2.0
+    assert 1.1 < hold[0] < 1.5
 
     ref = reference_stats(df[SHIFTED].to_numpy(), SHIFTED)
     got = window_psi(out[SHIFTED].to_numpy()[250:1000], SHIFTED, ref)
@@ -198,27 +238,20 @@ def test_drift_scenario_respects_the_limit():
     """The ramp has to fit inside what the replayer actually sends, or it is cut
     off during the baseline and never reaches drift."""
     df = _frame()
-    out = synthetic_drift(df, limit=1500)
+    out = drift_ramp(df, limit=1500)
     assert len(out) == 1500
     assert np.allclose(_factors(df, out, "Flow Duration")[-1], 3.0), (
         "the last flow sent must be at the peak shift")
 
 
-def test_unrelated_features_are_left_alone():
-    df = _frame()
-    out = synthetic_drift(df, limit=2000)
-    assert np.allclose(_factors(df, out, "Flow Packets/s"), 1.0)
-
-
 def test_drift_scenario_is_large_enough_to_be_detected():
     """End of the replay vs baseline, measured the way the monitor measures it."""
     df = _frame()
-    out = synthetic_drift(df, limit=2000)
+    out = drift_ramp(df, limit=2000)
     ref = reference_stats(df[SHIFTED].to_numpy(), SHIFTED)
     tail = out[SHIFTED].to_numpy()[-500:]
     got = window_psi(tail, SHIFTED, ref)
     assert status(got)["status"] == "drift", f"peak shift only reached {got}"
-
 
 
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
