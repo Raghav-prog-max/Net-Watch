@@ -6,8 +6,10 @@ Scenarios:
   normal  benign traffic only, to show the false-alert rate
   known   a DDoS and PortScan burst
   novel   families the classifier never trained on
-  drift   the held-out drift day (data/splits/drift.pkl), or a synthetic
-          ramp of shifted benign traffic when there is no such split
+  drift   test's benign flows with packet sizes scaled and durations stretched,
+          more as the replay goes on: the monitor goes stable -> warning -> drift
+  day     the held-out day (data/splits/drift.pkl), unchanged: real drift,
+          CICIDS2017 only
   mixed   everything, in timestamp order
 """
 import argparse
@@ -30,35 +32,74 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ml.data.labels import TRAIN_FAMILIES
 from ml.features.select import feature_columns
 
-# Written by ml/train.py when the data has a Monday to hold out (CICIDS2017).
-# The synthetic data has no days, so there is no drift split to replay.
+# Written by ml/train.py. The drift scenario perturbs the test split; the day
+# scenario replays the held-out day, which only data with a Monday has (CICIDS2017).
+TEST_SPLIT = Path("data/splits/test.pkl")
 DRIFT_SPLIT = Path("data/splits/drift.pkl")
 
+# The handbook's drift set is "a held-out day, plus a perturbed copy of test with
+# scaled packet sizes and stretched durations, to trigger the drift monitor on
+# demand". Sizes and timings move by the same factor, so a flow stays consistent
+# with itself: bigger packets over a longer flow, bytes per second unchanged and
+# packets per second down by the factor. Packet counts and flags do not move.
+# Only the columns a dataset has are touched (the synthetic data has a few).
+SIZE_COLUMNS = [
+    "Total Length of Fwd Packets", "Total Length of Bwd Packets",
+    "Fwd Packet Length Max", "Fwd Packet Length Min", "Fwd Packet Length Mean",
+    "Fwd Packet Length Std", "Bwd Packet Length Max", "Bwd Packet Length Min",
+    "Bwd Packet Length Mean", "Bwd Packet Length Std", "Min Packet Length",
+    "Max Packet Length", "Packet Length Mean", "Packet Length Std", "Average Packet Size",
+    "Avg Fwd Segment Size", "Avg Bwd Segment Size", "Subflow Fwd Bytes", "Subflow Bwd Bytes",
+]
+SQUARED_SIZE_COLUMNS = ["Packet Length Variance"]
+TIME_COLUMNS = [
+    "Flow Duration", "Flow IAT Mean", "Flow IAT Std", "Flow IAT Max", "Flow IAT Min",
+    "Fwd IAT Total", "Fwd IAT Mean", "Fwd IAT Std", "Fwd IAT Max", "Fwd IAT Min",
+    "Bwd IAT Total", "Bwd IAT Mean", "Bwd IAT Std", "Bwd IAT Max", "Bwd IAT Min",
+    "Active Mean", "Active Std", "Active Max", "Active Min",
+    "Idle Mean", "Idle Std", "Idle Max", "Idle Min",
+]
+PER_SECOND_COLUMNS = ["Flow Packets/s", "Fwd Packets/s", "Bwd Packets/s"]
 
-def synthetic_drift(df, limit=None):
-    """Benign traffic with a gradual, made-up shift, for when there is no held-out
-    drift day. The detector should stay mostly quiet while the drift monitor
-    notices the distribution move.
+
+def perturb(df, factor):
+    """Scale packet sizes and stretch durations by `factor` (a number, or one per row)."""
+    out = df.copy()
+    f = np.asarray(factor, dtype="float64")
+    for c in SIZE_COLUMNS + TIME_COLUMNS:
+        if c in out.columns:
+            out[c] = out[c].to_numpy() * f
+    for c in SQUARED_SIZE_COLUMNS:
+        if c in out.columns:
+            out[c] = out[c].to_numpy() * f ** 2
+    for c in PER_SECOND_COLUMNS:
+        if c in out.columns:
+            out[c] = out[c].to_numpy() / f
+    return out
+
+
+def drift_ramp(df, limit=None, warn_level=1.2, peak=3.0):
+    """The test split's benign flows, perturbed a little more as the replay goes
+    on. The detector should stay mostly quiet while the drift monitor notices the
+    distribution move.
 
     Phases, in stream order, so the status walks stable -> warning -> drift
     within one replay: a short baseline, a quick climb to a moderate shift,
     a hold there, then a ramp to the peak and a hold at it.
 
-    The peak is 3x because smaller shifts do not cross the standard PSI
-    bands this monitor uses. Flow features span orders of magnitude, so a
-    multiplier is a small move in log space: measured end to end, 1.3x gives
-    PSI ~0.08 (still "stable"), 1.6x ~0.23 ("warning"), 2x ~0.47 ("drift").
-
-    The hold at 1.45x is what makes Warning visible. Drift is declared when
-    PSI is at least Warning *and* the unexplained alert rate is >= 2x its
-    training baseline (docs/drift_strategy.md). That baseline is ~0.1%, and
-    shifted flows raise it, so a straight ramp crossed 2x at the same moment
-    PSI crossed 0.10 and the status went stable -> drift. With every flow at
-    1.4-1.45x, PSI sits at ~0.11-0.13 while the rate stays under 2x; at 1.5x
-    the rate reaches 2x within 3000 flows. Measured end to end at --limit
-    5000: stable, stable, warning, drift, drift (one snapshot per 1000).
+    The hold is what makes Warning visible. Drift is declared when PSI is at
+    least Warning *and* the unexplained alert rate is >= 2x its training
+    baseline (docs/drift_strategy.md); shifted flows raise that rate, so a
+    straight ramp crossed 2x as soon as PSI crossed 0.10 and the status went
+    stable -> drift. Sizes and timings together move PSI further than the old
+    ramp (durations, bytes/s and packet counts): its 1.45x hold already read
+    Warning in the first 1000 flows, so the hold is 1.2x. Measured end to end
+    on the synthetic data at --limit 5000, one snapshot per 1000 flows: stable,
+    warning, drift, drift, drift; 7% of the flows alert, mostly at the peak,
+    because traffic past anything in training looks abnormal to the detector
+    too, and it is the alert-rate rule that declares the drift.
     """
-    out = df[df["family"] == "Benign"].sample(frac=0.5, random_state=3).copy()
+    out = df[df["family"] == "Benign"].sample(frac=1.0, random_state=3)
     # Truncate before building the ramp, not after: the replayer only sends
     # --limit flows (5000 by default), and a ramp laid across all the sampled
     # rows would be cut off during the hold phase and never reach drift.
@@ -69,7 +110,7 @@ def synthetic_drift(df, limit=None):
     # nothing ages out: the unshifted opening stays in the window and dilutes
     # PSI for the whole run. It is kept short (5%, at least 100 flows) so the
     # moderate hold can reach the warning band.
-    n, warn_level, peak = len(out), 1.45, 3.0
+    n = len(out)
     hold = max(100, n // 20)                # unshifted baseline
     climb = hold + n // 20                  # quick climb to the moderate shift
     plateau = n // 2                        # hold it: PSI in the warning band
@@ -79,11 +120,7 @@ def synthetic_drift(df, limit=None):
     factor[climb:plateau] = warn_level
     factor[plateau:ramp] = np.linspace(warn_level, peak, ramp - plateau)
     factor[ramp:] = peak
-    shift_cols = [c for c in ("Flow Duration", "Flow IAT Mean", "Flow Bytes/s",
-                              "Total Fwd Packets") if c in out.columns]
-    for c in shift_cols:
-        out[c] = out[c].to_numpy() * factor
-    return out
+    return perturb(out, factor)
 
 
 def pick(df, scenario, limit=None):
@@ -94,18 +131,20 @@ def pick(df, scenario, limit=None):
     if scenario == "novel":
         return df[~df["family"].isin(TRAIN_FAMILIES)]
     if scenario == "drift":
-        # Prefer the held-out drift day: real drift, not a made-up one
-        if DRIFT_SPLIT.exists():
-            out = pd.read_pickle(DRIFT_SPLIT)
-            # Sample it so it fits the limit
-            out = out.sample(frac=1.0, random_state=3).reset_index(drop=True)
-            if limit:
-                out = out.iloc[:limit]
-            return out
-        # Without one (synthetic data) the scenario used to send nothing at all
-        print(f"{DRIFT_SPLIT} not found (no held-out drift day in this data); "
-              "replaying a synthetic drift ramp instead")
-        return synthetic_drift(df, limit)
+        # A perturbed copy of test: it moves the monitor on demand, on any data.
+        # It used to replay the held-out day whenever there was one, and nothing
+        # had checked that an ordinary Monday trips the monitor; that is `day`.
+        if TEST_SPLIT.exists():
+            return drift_ramp(pd.read_pickle(TEST_SPLIT), limit)
+        print(f"{TEST_SPLIT} not found (run `make train`); perturbing all processed flows instead")
+        return drift_ramp(df, limit)
+    if scenario == "day":
+        # real drift: a whole day the model never saw, unchanged
+        if not DRIFT_SPLIT.exists():
+            raise SystemExit(f"{DRIFT_SPLIT} not found: only data with a Monday to hold out "
+                             "(CICIDS2017) has a held-out day. Use --scenario drift.")
+        out = pd.read_pickle(DRIFT_SPLIT).sample(frac=1.0, random_state=3).reset_index(drop=True)
+        return out.iloc[:limit] if limit else out
     return df
 
 
@@ -153,7 +192,7 @@ def main(a):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", default="mixed",
-                    choices=["normal", "known", "novel", "drift", "mixed"])
+                    choices=["normal", "known", "novel", "drift", "day", "mixed"])
     # 127.0.0.1, not localhost: on Windows "localhost" tries IPv6 first and every
     # request waited ~2 s for the fallback, a tenth of the replay rate
     ap.add_argument("--url", default="http://127.0.0.1:8000/score")
