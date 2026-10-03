@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "lenis/dist/lenis.css";
 import AppLayout from "@/components/AppLayout";
+import SmoothScroll from "@/components/SmoothScroll";
 
 export const metadata: Metadata = {
   title: "NetWatch // SOC Intrusion Detection Console",
@@ -20,7 +22,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <AppLayout>{children}</AppLayout>
+        <SmoothScroll>
+          <AppLayout>{children}</AppLayout>
+        </SmoothScroll>
       </body>
     </html>
   );
