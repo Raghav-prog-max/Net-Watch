@@ -58,7 +58,11 @@ def export_feedback(families):
             elif not r.features:
                 no_features += 1          # scored before features were stored
             else:
-                used.append({**r.features, "family": label})
+                # a grouped alert keeps the inputs of its flows as a list (capped
+                # by MAX_GROUP_SAMPLES in api/routes/score.py); one stored
+                # before grouping kept a single dict
+                samples = r.features if isinstance(r.features, list) else [r.features]
+                used.extend({**f, "family": label} for f in samples)
         return used, {"triaged": len(rows), "used": len(used),
                       "skipped_no_features": no_features, "skipped_unusable_label": unmapped}
     finally:

@@ -151,11 +151,15 @@ def render():
       f"Measured as a full system (classifier + anomaly detector), it produced "
       f"**{sys_m.get('false_alerts_per_10k_benign_flows', main['false_alerts_per_10k_benign_flows']):.1f} false alerts per 10,000 benign "
       f"flows** ({pct(sys_realised, 2)})."
-      f" This is " + ("over the 0.5% budget." if sys_realised > budget else "within budget."))
+      f" This is " + (f"over the {pct(budget)} budget." if sys_realised > budget else f"within the {pct(budget)} budget."))
     w("")
+    # The classifier's threshold comes from its share of the budget, chosen on
+    # validation; the test flows can land either side of that share.
+    clf_budget = thr.get("classifier_fpr_budget", budget)
     w(f"As a component, the classifier alone scored Macro-F1 {main['macro_f1']:.3f} and produced "
-      f"{main['false_alerts_per_10k_benign_flows']:.1f} false alerts/10k ({pct(realised, 2)}), "
-      f"meeting its isolated budget constraint of {pct(budget)} at threshold {thr['attack_threshold']:.4f}.")
+      f"{main['false_alerts_per_10k_benign_flows']:.1f} false alerts/10k ({pct(realised, 2)}) at threshold "
+      f"{thr['attack_threshold']:.4f}, set on validation for its {pct(clf_budget)} share of the budget"
+      + ("." if realised <= clf_budget else "; on the test flows it is over that share."))
     w("")
     w("No accuracy figure is reported: about 80% of traffic is benign, so a model that "
       "never alerts would score about 80%.")

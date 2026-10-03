@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import pandas as pd
 
-from ml.drift.monitor import psi, reference_stats, status, window_psi
+from ml.drift.monitor import bin_counts, psi, reference_stats, status, window_psi
 import replay.replayer as replayer
 from replay.replayer import pick, synthetic_drift
 
@@ -43,6 +43,42 @@ def test_psi_grows_with_the_size_of_the_shift():
 
 def test_psi_of_identical_counts_is_zero():
     assert abs(psi([10, 20, 30], [10, 20, 30])) < 1e-9
+
+
+def test_traffic_past_the_reference_range_reads_as_drift():
+    """np.histogram dropped values outside the reference edges, so half a window
+    beyond the reference maximum disappeared and the other half still matched:
+    PSI 0.007, Stable."""
+    X = _lognormal()
+    ref = reference_stats(X, SHIFTED)
+    window = _lognormal()
+    window[:2000] = X.max(axis=0) * 5
+    got = window_psi(window, SHIFTED, ref)
+    assert status(got)["status"] == "drift", got
+    assert min(got.values()) > 0.25
+
+
+def test_traffic_below_the_reference_range_counts_too():
+    X = _lognormal()
+    ref = reference_stats(X, SHIFTED)
+    window = _lognormal()
+    window[:2000] = X.min(axis=0) / 5
+    assert status(window_psi(window, SHIFTED, ref))["status"] == "drift"
+
+
+def test_bin_counts_match_histogram_inside_the_range():
+    """Saved reference_stats.json counts came from np.histogram; inside the
+    range the open-ended bins must count exactly the same, edges included."""
+    X = _lognormal(n=3000, d=1)[:, 0]
+    edges = np.unique(np.quantile(X, np.linspace(0, 1, 11)))
+    on_edges = np.concatenate([X, edges])           # values sitting on every edge
+    expected, _ = np.histogram(on_edges, bins=edges)
+    assert bin_counts(on_edges, edges).tolist() == expected.tolist()
+
+
+def test_bin_counts_skip_missing_values():
+    edges = [0.0, 1.0, 2.0, 3.0]
+    assert bin_counts([0.5, np.nan, 2.5, -4.0, 9.0], edges).tolist() == [2, 0, 2]
 
 
 def test_status_bands():
