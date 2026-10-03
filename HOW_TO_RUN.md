@@ -68,6 +68,9 @@ make dashboard
 ```
 *(Available at `http://localhost:3000`)*
 
+For the 3-minute pitch demo, follow [`docs/demo_script.md`](docs/demo_script.md): six replayer runs, with
+what to show at each.
+
 ---
 
 ## 4. Offline Demo Mode

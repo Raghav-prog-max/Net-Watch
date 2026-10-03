@@ -72,6 +72,10 @@ class Alert(AlertBase):
 
 class ScoreResponse(BaseModel):
     scored: int
+    # flows that raised an alert, new or folded into an open one: the alert rate.
+    # `alerts` is shorter, as a burst of one family is one alert.
+    alerted: int = 0
+    # alerts opened by this request, and growing ones re-sent (at most every 5 s)
     alerts: List[Alert]
 
 class AlertCreate(AlertBase):

@@ -131,7 +131,7 @@ def main(a):
     features = feature_columns(df)
     print(f"{a.scenario}: {len(rows):,} flows at {a.rate}/s -> {a.url}")
 
-    sent = alerts = 0
+    sent = alerted = 0
     for start in range(0, min(len(rows), a.limit), a.batch):
         chunk = rows.iloc[start:start + a.batch]
         batch = build_batch(chunk, features)
@@ -140,12 +140,14 @@ def main(a):
         except urllib.error.HTTPError as e:
             # say why, instead of a bare "HTTP Error 422" traceback
             raise SystemExit(f"{a.url} returned {e.code}: {e.read().decode(errors='replace')[:500]}")
-        sent += len(batch); alerts += len(res["alerts"])
+        # one alert per burst of a family (api/routes/score.py), so the alert
+        # rate is the flows that raised one, not the alerts sent back
+        sent += len(batch); alerted += res.get("alerted", len(res["alerts"]))
         for al in res["alerts"][:2]:
             print(f"  {al['severity']['level']:<8} {al['prediction']['family']:<10} "
                   f"truth={al['flow'].get('truth', '?')}")
         time.sleep(len(batch) / max(a.rate, 1))
-    print(f"sent {sent} flows, {alerts} alerts ({100 * alerts / max(sent, 1):.1f}%)")
+    print(f"sent {sent} flows, {alerted} raised an alert ({100 * alerted / max(sent, 1):.1f}%)")
 
 
 if __name__ == "__main__":
