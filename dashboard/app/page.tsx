@@ -106,16 +106,17 @@ export default function LandingPage() {
       <section
         style={{
           width: "100%",
-          height: "100vh",
+          minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           position: "relative",
           zIndex: 10,
         }}
+        className="lg:h-screen"
       >
         {/* ── SPLINE 3D INTERACTIVE HERO ─────────────────────── */}
-        <div className="reveal-init stagger-2 w-full h-full">
+        <div className="reveal-init stagger-2 w-full h-full flex-1 flex flex-col">
           <SplineSceneBasic />
         </div>
       </section>

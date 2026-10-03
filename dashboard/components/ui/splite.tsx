@@ -28,10 +28,16 @@ export function SplineScene({ scene, className, style, zoom = 'auto', onLoad }: 
       if (typeof zoom === 'number') {
         targetZoom = zoom
       } else {
-        // Responsive zoom: narrower aspect ratio / container width needs lower zoom
-        // so the robot's outstretched arms and hands fit comfortably inside the frame.
-        // For width ~800px (e.g. 50% split on 1440/1280 screen), targetZoom is ~0.70.
-        targetZoom = Math.min(0.82, Math.max(0.55, (width / 1000) * 0.80))
+        // When container is wide landscape (robot placed on top full-width, aspect >= 1.3),
+        // container height is the primary constraint. We scale zoom to comfortably
+        // frame the robot's head, arms, and upper body vertically.
+        // For narrower / portrait containers (split column or mobile),
+        // container width is the constraint so outstretched arms/hands don't clip.
+        if (aspect >= 1.3) {
+          targetZoom = Math.min(0.72, Math.max(0.55, 0.52 + (height / 800) * 0.20))
+        } else {
+          targetZoom = Math.min(0.82, Math.max(0.55, (width / 1000) * 0.80))
+        }
       }
 
       // 1. Spline API setZoom (updates orbitControls if present)
