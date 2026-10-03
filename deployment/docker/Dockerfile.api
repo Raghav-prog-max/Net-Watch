@@ -1,0 +1,71 @@
+# ==============================================================================
+# NetWatch AI SOC — Production API Dockerfile (FastAPI + LightGBM + TreeSHAP)
+# ==============================================================================
+# Multi-stage hardened production container with non-root security context.
+# ==============================================================================
+
+# ── Stage 1: Build & Dependencies ─────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install compilation & runtime dependencies
+# LightGBM requires OpenMP (libgomp1)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+# Install wheels into isolated directory
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# ── Stage 2: Hardened Production Runtime ──────────────────────────────────────
+FROM python:3.11-slim AS runner
+
+WORKDIR /app
+
+# Install runtime OpenMP support and curl for healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create dedicated non-root user and group
+RUN groupadd -g 10001 netwatch && \
+    useradd -u 10001 -g netwatch -s /bin/bash -m netwatch
+
+# Copy installed python packages from builder
+COPY --from=builder /root/.local /home/netwatch/.local
+
+# Copy application source code
+COPY --chown=netwatch:netwatch api /app/api
+COPY --chown=netwatch:netwatch ml /app/ml
+COPY --chown=netwatch:netwatch models /app/models
+COPY --chown=netwatch:netwatch reports /app/reports
+COPY --chown=netwatch:netwatch scripts /app/scripts
+
+# Set persistent data directory permissions
+RUN mkdir -p /data/db /data/models /data/reports && \
+    chown -R netwatch:netwatch /data /app
+
+# Set environment paths and python configs
+ENV PATH="/home/netwatch/.local/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH="/app" \
+    NETWATCH_DB="/data/db/netwatch.db"
+
+USER netwatch
+
+EXPOSE 8000
+
+# Health check against root endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+    CMD curl -f http://127.0.0.1:8000/ || exit 1
+
+# Launch uvicorn with worker concurrency configurable via env
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-4} --timeout-keep-alive 65 --access-log"]

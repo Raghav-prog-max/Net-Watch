@@ -1,0 +1,56 @@
+# ==============================================================================
+# NetWatch AI SOC — Production Monitoring & Observability Stack
+# ==============================================================================
+# Prometheus metric scraping + Grafana visual dashboards for system health,
+# ML inference latency, alert rate, and drift metrics.
+#
+# Usage:
+#   docker compose -f deployment/docker/docker-compose.monitoring.yml up -d
+# ==============================================================================
+
+version: '3.8'
+
+networks:
+  netwatch-prod-network:
+    external: true
+
+volumes:
+  prometheus-data:
+    name: netwatch-prometheus-data
+  grafana-data:
+    name: netwatch-grafana-data
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: netwatch-prometheus
+    restart: unless-stopped
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - netwatch-prod-network
+
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: netwatch-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin_netwatch_secure}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - netwatch-prod-network
+    depends_on:
+      - prometheus
