@@ -208,7 +208,8 @@ def ensure_schema(db_path: Path = DB_PATH) -> None:
     """Add columns introduced after a database was first created.
 
     create_all() makes missing tables but never alters existing ones, so an
-    alert store from before `features` existed would fail on every insert.
+    alert store from before `features` or `flow_count` existed would fail on
+    every insert.
     """
     if not Path(db_path).exists():
         return
@@ -217,7 +218,9 @@ def ensure_schema(db_path: Path = DB_PATH) -> None:
         cols = {row[1] for row in conn.execute("PRAGMA table_info(alerts)")}
         if cols and "features" not in cols:
             conn.execute("ALTER TABLE alerts ADD COLUMN features JSON")
-            conn.commit()
+        if cols and "flow_count" not in cols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN flow_count INTEGER DEFAULT 1")
+        conn.commit()
     finally:
         conn.close()
 

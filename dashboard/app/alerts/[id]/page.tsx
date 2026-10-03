@@ -88,6 +88,7 @@ export default function AlertDetailPage() {
 
         <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
           Alert ID: <span className="mono" style={{ color: "#FFFFFF" }}>{alert.id}</span> · {alert.timestamp}
+          {alert.flow_count > 1 && <> · {alert.flow_count.toLocaleString()} flows, last at this time</>}
         </div>
       </div>
 

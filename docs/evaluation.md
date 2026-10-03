@@ -23,7 +23,10 @@ and the held-out family is replayed at the full system. The table in the model
 card shows how much the anomaly detector catches on its own.
 
 Infiltration and Heartbleed are never trained on and serve as the hardest test:
-unknown families the system has never seen even in LOFO experiments.
+unknown families the system has never seen even in LOFO experiments. Every one of
+their flows is scored, whichever split its time block fell in
+(`split_out_novel` in `ml/data/split.py`): CICIDS2017 has only 47 of them, and
+scoring just the share that landed in test left a handful.
 
 ## Naive vs honest split
 

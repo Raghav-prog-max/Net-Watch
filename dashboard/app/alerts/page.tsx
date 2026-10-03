@@ -345,6 +345,15 @@ export default function AlertFeed() {
                       NOVEL
                     </span>
                   )}
+                  {alert.flow_count > 1 && (
+                    <span
+                      className="mono"
+                      title={`${alert.flow_count.toLocaleString()} flows grouped into this alert`}
+                      style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}
+                    >
+                      ×{alert.flow_count.toLocaleString()}
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--nw-text-muted)" }}>

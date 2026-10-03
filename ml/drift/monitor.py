@@ -2,6 +2,22 @@
 import numpy as np
 
 
+def bin_counts(values, edges):
+    """Counts per bin, with the two outer bins open-ended.
+
+    np.histogram drops values outside [edges[0], edges[-1]], so traffic that
+    moved past the reference range vanished from the window and what was left
+    still looked like the reference: half a window at 5x the reference maximum
+    read as PSI 0.007, Stable. Interior edges split as np.histogram splits them
+    (a value on an edge goes to the bin above), so the reference's own counts
+    are unchanged and saved reference_stats.json files stay valid. NaN is skipped.
+    """
+    v = np.asarray(values, dtype="float64")
+    v = v[~np.isnan(v)]
+    inner = np.asarray(edges, dtype="float64")[1:-1]
+    return np.bincount(np.searchsorted(inner, v, side="right"), minlength=len(edges) - 1)
+
+
 def reference_stats(X, features, bins=10):
     """Quantile bin edges and expected counts, saved at training time."""
     ref = {}
@@ -11,8 +27,7 @@ def reference_stats(X, features, bins=10):
         edges = np.unique(np.quantile(col, np.linspace(0, 1, bins + 1)))
         if len(edges) < 3:
             continue
-        counts, _ = np.histogram(col, bins=edges)
-        ref[name] = {"edges": edges.tolist(), "counts": counts.tolist()}
+        ref[name] = {"edges": edges.tolist(), "counts": bin_counts(col, edges).tolist()}
     return ref
 
 
@@ -30,8 +45,7 @@ def window_psi(X_window, features, ref):
     for i, name in enumerate(features):
         if name not in ref:
             continue
-        edges = np.asarray(ref[name]["edges"], dtype="float64")
-        counts, _ = np.histogram(X[:, i], bins=edges)
+        counts = bin_counts(X[:, i], ref[name]["edges"])
         out[name] = round(psi(ref[name]["counts"], counts), 4)
     return out
 

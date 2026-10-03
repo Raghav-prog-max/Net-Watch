@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score
 
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
 from ml.data.load import load_processed
-from ml.data.split import add_blocks, make_splits, downsample_benign
+from ml.data.split import add_blocks, make_splits, downsample_benign, split_out_novel
 from ml.drift.monitor import reference_stats
 from ml.evaluate import lofo, metrics, naive, system
 from ml.evaluate.thresholds import pick_threshold
@@ -144,10 +144,12 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     features = feature_columns(train)
 
-    # Rare families are never trained on. They exist to test the anomaly detector.
-    novel_mask = ~train["family"].isin(TRAIN_FAMILIES)
-    train = train[~novel_mask]
-    val = val[val["family"].isin(TRAIN_FAMILIES)]
+    # Rare families are never trained on. They exist to test the anomaly detector,
+    # so all of their flows are evaluated, whichever split their time block fell
+    # in. Keeping only the share in test threw ~85% away: CICIDS2017 has 47 such
+    # flows, and the model card scored 2. The splits are unchanged, so no other
+    # figure moves.
+    train, val, novel = split_out_novel(train, val, test, TRAIN_FAMILIES)
     if holdout:
         # Demo model: this family is removed from training so the anomaly detector
         # has to catch it. This is what makes "Unknown / novel" appear on stage.
@@ -288,8 +290,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
         "benign_relabelled_unknown": int((alerted & ~attacks & known_ood).sum()),
     }
 
-    # novel families the classifier never saw
-    novel = test[~test["family"].isin(TRAIN_FAMILIES)]
+    # novel families the classifier never saw: all of their flows (see above)
     if len(novel):
         Xn = matrix(novel, features)
         flagged = det.is_anomalous(det.score(Xn))
