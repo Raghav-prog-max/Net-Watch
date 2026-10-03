@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 
-from ml.data.split import add_blocks, make_splits
+from ml.data.split import add_blocks, make_splits, split_out_novel
 
 
 def _frame(n=4000):
@@ -33,7 +33,37 @@ def test_splits_are_non_empty():
     assert len(train) and len(val) and len(test)
 
 
+def _with_novel():
+    """A rare never-trained family spread across the day, one flow in 40."""
+    df = _frame()
+    df.loc[df.index % 40 == 0, "family"] = "Infiltration"
+    return add_blocks(df, block_minutes=5)
+
+
+def test_every_never_trained_flow_is_evaluated():
+    """Only the share of Infiltration and Heartbleed that the split put in test
+    was scored, about 15%: on CICIDS2017, 2 flows of 47."""
+    df = _with_novel()
+    train, val, test = make_splits(df)
+    train, val, novel = split_out_novel(train, val, test, ["Benign"])
+    assert len(novel) == (df["family"] == "Infiltration").sum() == 100
+    assert sorted(novel["value"]) == sorted(df.loc[df["family"] == "Infiltration", "value"])
+    assert (test["family"] == "Infiltration").sum() < len(novel), "most were outside test"
+
+
+def test_never_trained_flows_leave_train_and_val_and_nothing_else_moves():
+    df = _with_novel()
+    train0, val0, test0 = make_splits(df)
+    train, val, _ = split_out_novel(train0, val0, test0, ["Benign"])
+    assert not train["family"].eq("Infiltration").any()
+    assert not val["family"].eq("Infiltration").any()
+    pd.testing.assert_frame_equal(train, train0[train0["family"] == "Benign"])
+    pd.testing.assert_frame_equal(val, val0[val0["family"] == "Benign"])
+
+
 if __name__ == "__main__":
     test_no_block_in_two_splits()
     test_splits_are_non_empty()
+    test_every_never_trained_flow_is_evaluated()
+    test_never_trained_flows_leave_train_and_val_and_nothing_else_moves()
     print("split leakage tests passed")
