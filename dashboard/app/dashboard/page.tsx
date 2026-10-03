@@ -6,9 +6,10 @@ import MainThreatChart from "@/components/MainThreatChart";
 import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
-import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, getModelRegistryInfo, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
+import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
 interface AlertCounts {
   total: number;
@@ -28,7 +29,7 @@ export default function DashboardPage() {
   const [drift, setDrift] = useState<DriftStatus | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
   const [apiDown, setApiDown] = useState(false);
-  const [fpTotal, setFpTotal] = useState<number | null>(null);
+  const [fpTotal, refreshFpTotal] = useFalsePositiveCount();
   // Totals over the whole alert store. The alert list below holds only the latest
   // 100, so counting it would cap every card at 100.
   const [counts, setCounts] = useState<AlertCounts | null>(null);
@@ -56,7 +57,6 @@ export default function DashboardPage() {
     listAlerts({ limit: "100" })
       .then((a) => { setAlerts(a); setApiDown(false); })
       .catch((e) => { setAlerts([]); setApiDown(e instanceof ApiUnreachable); });
-    getModelRegistryInfo().then((m) => setFpTotal(m.feedback?.false_positive ?? null)).catch(() => setFpTotal(null));
     getModelMetrics().then(setReport).catch(() => setReport(null));
     getDrift().then(setDrift).catch(() => setDrift(null));
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
@@ -71,6 +71,7 @@ export default function DashboardPage() {
       const updated = await triage(id, status, status === "false_positive" ? "Analyst FP" : undefined);
       setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
       refreshCounts();
+      refreshFpTotal();
       if (selectedAlert?.id === id) {
         setSelectedAlert(updated);
       }
