@@ -219,8 +219,9 @@ def render():
 
     nf = m.get("novel_families")
     if nf:
-        w(f"Families withheld from training altogether ({', '.join(nf['families'])}, "
-          f"{nf['flows']:,} test flows): {pct(nf.get('alerted', nf['caught_by_anomaly_detector']))} "
+        w(f"Families withheld from training altogether ({', '.join(nf['families'])}; "
+          f"all {nf['flows']:,} of their flows, as none were trained on): "
+          f"{pct(nf.get('alerted', nf['caught_by_anomaly_detector']))} "
           f"raised an alert, and **{pct(nf['shown_as_unknown'])} were shown to the analyst as "
           "Unknown** rather than under a known family's name.")
         w("")
