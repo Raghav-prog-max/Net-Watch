@@ -86,9 +86,25 @@ export interface EvaluationReport {
     threshold: number;
     fpr_at_threshold: number;
     recall_at_threshold: number;
+    // the classifier's share of the budget (train.classifier_fpr_budget); before
+    // 30 Sep 2026 the classifier had the whole budget and this was all of it
     fpr_budget: number;
   };
+  // the classifier alone; what analysts see is `system`
   main: SummaryMetrics;
+  // What analysts see: an alert from the classifier OR the anomaly detector, on
+  // the benign test flows, against the whole budget (train.fpr_budget).
+  // Absent in reports from before 30 Sep 2026. Read it through lib/falseAlerts.ts.
+  system?: {
+    benign_flows: number;
+    false_positive_rate: number;
+    false_alerts_per_10k_benign_flows: number;
+    from_classifier_per_10k: number;
+    from_detector_only_per_10k: number;
+    attack_flows_alerted: number | null;
+    budget_per_10k: number;
+    within_budget: boolean;
+  };
   random_forest_baseline?: SummaryMetrics;
   naive_comparison?: {
     split?: string;

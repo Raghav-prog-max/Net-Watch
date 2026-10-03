@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
+import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -71,7 +72,8 @@ export default function EvaluationPage() {
 
   const m = report.main;
   const naive = report.naive_comparison;
-  const budgetPer10k = Math.round(report.threshold.fpr_budget * 10000);
+  // the headline is the whole system; `m` (and the comparisons below) is the classifier alone
+  const fa = falseAlerts(report);
   const novel = report.novel_families;
   const novelShown = novel.shown_as_unknown ?? novel.caught_by_anomaly_detector;
 
@@ -96,8 +98,10 @@ export default function EvaluationPage() {
           Model Evaluation &amp; Honest Validation Proof
         </h1>
         <p style={{ margin: 0, color: "var(--nw-text-muted)", fontSize: "13px", maxWidth: "900px" }}>
-          Evaluated strictly on non-overlapping 5-minute time blocks. The alert threshold is derived
-          from an explicit false-positive budget (≤ {budgetPer10k} alerts per 10k benign flows), never left at an arbitrary 0.5.
+          Evaluated strictly on non-overlapping 5-minute time blocks. Alert thresholds are derived
+          from an explicit false-alert budget (≤ {fa.budgetPer10k} per 10k benign flows
+          {fa.fromDetectorPer10k != null && `, ${fa.classifierBudgetPer10k} of them for the classifier and the rest for the anomaly detector`}),
+          never left at an arbitrary 0.5.
         </p>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
           <span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>
@@ -136,9 +140,9 @@ export default function EvaluationPage() {
             False Alerts / 10k Flows
           </div>
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-card-1)", margin: "4px 0" }}>
-            {m.false_alerts_per_10k_benign_flows}
+            {fa.per10k}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>Budget: &le; {budgetPer10k}/10k flows</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>{falseAlertsBreakdown(fa)}</div>
         </div>
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
@@ -148,7 +152,11 @@ export default function EvaluationPage() {
           <div style={{ fontSize: "32px", fontWeight: 800, color: "var(--nw-text-primary)", margin: "4px 0" }}>
             {report.threshold.threshold.toFixed(3)}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>From FPR ROC budget curve</div>
+          <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+            Classifier, chosen on validation for ≤ {fa.classifierBudgetPer10k}/10k:{" "}
+            {(report.threshold.fpr_at_threshold * 10000).toFixed(1)}/10k false alerts,{" "}
+            {(report.threshold.recall_at_threshold * 100).toFixed(1)}% of attacks caught
+          </div>
         </div>
 
         <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "20px", padding: "20px 24px" }}>
@@ -209,7 +217,7 @@ export default function EvaluationPage() {
                   </span>
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
-                  False Alerts: <strong style={{ color: "var(--nw-text-primary)" }}>{naive.false_alerts_per_10k} / 10k flows</strong>.
+                  Classifier false alerts: <strong style={{ color: "var(--nw-text-primary)" }}>{naive.false_alerts_per_10k} / 10k flows</strong>.
                   {naive.macro_f1_over_seeds &&
                     ` Range over ${naive.macro_f1_over_seeds.seeds} random splits: ${naive.macro_f1_over_seeds.min}–${naive.macro_f1_over_seeds.max}.`}
                   {naive.test_flows_from_blocks_seen_in_training != null &&
@@ -249,7 +257,9 @@ export default function EvaluationPage() {
               {m.macro_f1} Macro-F1 <span style={{ fontSize: "12px", color: "var(--nw-card-2)" }}>(HONEST)</span>
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
-              False Alerts: <strong style={{ color: "var(--nw-card-1)" }}>{m.false_alerts_per_10k_benign_flows} / 10k flows</strong>. Calibrated to genuine analyst capacity. The test suite fails if any block appears in two splits.
+              Classifier false alerts: <strong style={{ color: "var(--nw-card-1)" }}>{m.false_alerts_per_10k_benign_flows} / 10k flows</strong>,
+              the same model and measure as the naive split ({fa.per10k}/10k with the anomaly detector). The test
+              suite fails if any block appears in two splits.
             </div>
           </div>
         </div>
@@ -478,7 +488,7 @@ export default function EvaluationPage() {
                         ? `${pct(report.novel_families.shown_as_unknown)} as Unknown`
                         : "—"}
                     </td>
-                    <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{pct(m.false_positive_rate)}</td>
+                    <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{pct(fa.falsePositiveRate)}</td>
                   </tr>
                 )}
               </tbody>
@@ -547,7 +557,7 @@ export default function EvaluationPage() {
                   <tr style={{ borderBottom: "1px solid #26262C", textAlign: "left", color: "var(--nw-text-muted)" }}>
                     <th style={{ padding: "8px 12px" }}>Classifier (test set)</th>
                     <th style={{ padding: "8px 12px" }}>Macro-F1</th>
-                    <th style={{ padding: "8px 12px" }}>False alerts / 10k</th>
+                    <th style={{ padding: "8px 12px" }}>Classifier false alerts / 10k</th>
                     {Object.keys(m.per_class).map((f) => <th key={f} style={{ padding: "8px 12px" }}>{f} F1</th>)}
                   </tr>
                 </thead>
