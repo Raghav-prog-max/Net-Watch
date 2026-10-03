@@ -11,7 +11,7 @@ PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK
 UVICORN := $(PYTHON) -m uvicorn
 PIP     := $(PYTHON) -m pip
 
-.PHONY: venv setup synthetic data train evaluate card api demo seed retrain test quick holdout eda nslkdd clean
+.PHONY: venv setup synthetic data train evaluate card api demo seed retrain promote rollback test quick holdout eda nslkdd clean
 
 venv:           ## create the virtual environment
 	$(PY_FALLBACK) -m venv .venv
@@ -57,6 +57,12 @@ seed:           ## seed the alert database for offline demo (run after make trai
 
 retrain:        ## retrain v2 with analyst feedback labels
 	$(PYTHON) scripts/retrain.py --out models/v2
+
+promote:        ## serve a retrained bundle if it passes the check: make promote VERSION=v2
+	$(PYTHON) scripts/promote.py $(VERSION)
+
+rollback:       ## serve v1 again (or VERSION=...); restart the API after either
+	$(PYTHON) scripts/promote.py $(or $(VERSION),v1) --rollback
 
 eda:            ## re-run the EDA notebook on data/processed (needs requirements-dev.txt)
 	$(PYTHON) -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb

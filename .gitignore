@@ -3,6 +3,8 @@ data/processed/*
 data/splits/*
 data/alerts.db
 models/v*/
+# which bundle the API serves (scripts/promote.py): local state, like netwatch.db
+models/ACTIVE
 reports/*
 __pycache__/
 *.pyc
