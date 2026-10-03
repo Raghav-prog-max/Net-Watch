@@ -15,7 +15,10 @@
 All thresholds and sizes are read from `drift:` in `ml/config.yaml`.
 
 PSI bins come from 10 quantile edges computed on benign validation traffic at
-training time and saved to `models/v1/reference_stats.json`.
+training time and saved to `models/v1/reference_stats.json`. The two outer bins
+are open-ended: a flow below the lowest edge or above the highest counts in the
+first or last bin, so traffic that moves past anything seen in training raises
+PSI instead of dropping out of the count (`bin_counts` in `ml/drift/monitor.py`).
 Only flows that did **not** alert are counted, so a busy attack hour does not
 read as distribution drift.
 
