@@ -32,6 +32,8 @@ export interface Alert {
   analyst_label: string | null;
   analyst_note: string | null;
   model_version: string;
+  // flows of this family folded into the alert while it was open (api/routes/score.py)
+  flow_count: number;
 }
 
 export interface DriftHistoryPoint {
