@@ -14,7 +14,7 @@ import pandas as pd
 
 from ml.drift.monitor import bin_counts, psi, reference_stats, status, window_psi
 import replay.replayer as replayer
-from replay.replayer import drift_ramp, perturb, pick
+from replay.replayer import drift_ramp, perturb, pick, replay_pool
 
 RNG = np.random.default_rng(9)
 # columns the drift scenario moves: two timings, a packet size, and a variance
@@ -119,7 +119,7 @@ def test_one_noisy_feature_cannot_declare_drift():
 
 # ---------------------------------------------------------------- the scenario
 # The drift scenario replays a perturbed copy of the test split's benign flows
-# (data/splits/test.pkl); the day scenario replays the held-out day
+# (data/splits/test.pkl, through replay_pool); the day scenario replays the held-out day
 # (data/splits/drift.pkl). The ramp tests call drift_ramp directly so they do
 # not depend on what is in data/splits/.
 
@@ -171,7 +171,7 @@ def test_drift_scenario_perturbs_the_test_split():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.pkl"
         test.to_pickle(path)
-        out = _with_splits(lambda: pick(df, "drift", limit=2000), test=path)
+        out = _with_splits(lambda: pick(replay_pool(df), "drift", limit=2000), test=path)
     assert len(out) == 2000
     assert (out["split"] == "test").all()
     assert np.allclose(_factors(test, out, "Flow Duration")[-1], 3.0)
@@ -185,7 +185,7 @@ def test_drift_scenario_perturbs_test_even_when_there_is_a_held_out_day():
         test_path, day_path = Path(tmp) / "test.pkl", Path(tmp) / "drift.pkl"
         _frame(3000).to_pickle(test_path)
         _frame(300).assign(day="Monday").to_pickle(day_path)
-        drift = _with_splits(lambda: pick(df, "drift", limit=200), test=test_path, drift=day_path)
+        drift = _with_splits(lambda: pick(replay_pool(df), "drift", limit=200), test=test_path, drift=day_path)
         day = _with_splits(lambda: pick(df, "day", limit=200), test=test_path, drift=day_path)
     assert "day" not in drift.columns, "drift should be the perturbed test split"
     assert len(day) == 200 and (day["day"] == "Monday").all(), "day replays the held-out day"
@@ -199,7 +199,7 @@ def test_day_scenario_without_a_held_out_day_says_so():
 
 def test_drift_scenario_falls_back_to_all_flows_without_a_test_split():
     df = _frame()
-    out = _with_splits(lambda: pick(df, "drift", limit=2000))
+    out = _with_splits(lambda: pick(replay_pool(df), "drift", limit=2000))
     assert len(out) == 2000
     assert np.allclose(_factors(df, out, "Flow Duration")[-1], 3.0)
 
