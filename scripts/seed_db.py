@@ -49,9 +49,8 @@ def seed(count: int = 50, scenario: str = "known") -> None:
 
     scorer = Scorer()
     flows = [{f: float(r[f]) for f in features} for _, r in rows.iterrows()]
-    metas = [{"dst_port": str(int(r.get("Destination Port", 0))),
-              "truth": str(r["family"])} for _, r in rows.iterrows()]
-    alerts = scorer.score(flows, metas)
+    # flow facts come from the features, as for live alerts; no ground-truth label
+    alerts = scorer.score(flows)
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()

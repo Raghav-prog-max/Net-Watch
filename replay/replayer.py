@@ -176,10 +176,9 @@ def post(url, batch):
 
 def build_batch(chunk, features):
     """Rows -> the POST /score payload items (api/schemas.py ScoredFlow)."""
-    return [{"features": {f: float(r[f]) for f in features},
-             "meta": {"dst_port": str(int(r.get("Destination Port", 0))),
-                      "truth": str(r["family"])}}
-            for _, r in chunk.iterrows()]
+    # no meta: the API reads the flow facts off the features, and the family is
+    # the answer the system is being tested on, not something to show analysts
+    return [{"features": {f: float(r[f]) for f in features}} for _, r in chunk.iterrows()]
 
 
 def main(a):
@@ -203,7 +202,7 @@ def main(a):
         sent += len(batch); alerted += res.get("alerted", len(res["alerts"]))
         for al in res["alerts"][:2]:
             print(f"  {al['severity']['level']:<8} {al['prediction']['family']:<10} "
-                  f"truth={al['flow'].get('truth', '?')}")
+                  f"x{al.get('flow_count', 1)}")
         time.sleep(len(batch) / max(a.rate, 1))
     print(f"sent {sent} flows, {alerted} raised an alert ({100 * alerted / max(sent, 1):.1f}%)")
 
