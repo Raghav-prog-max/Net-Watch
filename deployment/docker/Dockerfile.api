@@ -9,14 +9,9 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Install compilation & runtime dependencies
-# LightGBM requires OpenMP (libgomp1)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libgomp1 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
+# No compiler: every requirement ships a wheel for Python 3.11 (the root
+# Dockerfile, which CI builds, installs them without one). build-essential cost
+# ~100 MB of downloads per build and was never used.
 COPY requirements.txt .
 
 # Install wheels into isolated directory
@@ -47,9 +42,12 @@ COPY --chown=netwatch:netwatch ml /app/ml
 COPY --chown=netwatch:netwatch models /app/models
 COPY --chown=netwatch:netwatch reports /app/reports
 COPY --chown=netwatch:netwatch scripts /app/scripts
+# GET /models serves the model card
+COPY --chown=netwatch:netwatch docs/model_card.md /app/docs/model_card.md
 
-# Set persistent data directory permissions
-RUN mkdir -p /data/db /data/models /data/reports && \
+# The alert store's volume (docker-compose.prod.yml). models/ and reports/ are
+# mounted from the host over the copies above.
+RUN mkdir -p /data/db && \
     chown -R netwatch:netwatch /data /app
 
 # Set environment paths and python configs
@@ -67,5 +65,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
     CMD curl -f http://127.0.0.1:8000/ || exit 1
 
-# Launch uvicorn with worker concurrency configurable via env
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-4} --timeout-keep-alive 65 --access-log"]
+# One worker, on purpose. The API keeps state in the process: the loaded models,
+# the drift window, alert grouping and the WebSocket connections. With 4 workers
+# each had its own, so a dashboard only saw the alerts scored by the worker its
+# socket happened to land on, and drift and grouping each saw a share of the
+# traffic. Scale with a bigger container, not more workers.
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "65", "--access-log"]

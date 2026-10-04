@@ -38,14 +38,19 @@ securityContext:
 The reverse proxy (`deployment/nginx/nginx.conf`) acts as the single public entry point:
 - **Direct Backend Exposure Blocked**: Port 8000 (FastAPI) and port 3000 (Next.js) are not exposed to the public internet; they exist only inside the internal Docker bridge network (`netwatch-prod-network`).
 - **DDoS Mitigation & Rate Limiting**:
-  - `/score` endpoint: Limited to 100 requests/sec with burst buffer of 30.
-  - General API endpoints: Limited to 50 requests/sec.
+  - `/api/score`: limited to 100 requests/sec per client IP, burst 30.
+  - The rest of the API (`/api/...`): limited to 50 requests/sec per client IP, burst 20.
+  - The replayer and anything else on the private network call the API directly, without these limits.
   - Client max body size capped at 25MB.
 
-### TLS / HTTPS Enforcement
-- All HTTP traffic automatically redirects to HTTPS (Port 443).
-- **HSTS** (`Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`) is enforced for 1 year.
-- TLS 1.2 and TLS 1.3 only; legacy insecure SSLv3/TLS 1.0/1.1 are explicitly disabled.
+### TLS / HTTPS Enforcement (with `NGINX_SITE=https`)
+These hold when `.env.production` sets `NGINX_SITE=https`, which serves `nginx/site-https.conf` and needs the certificates `scripts/init-ssl.sh` writes. The default, `NGINX_SITE=http`, is plain HTTP for local and staging use.
+- All HTTP traffic redirects to HTTPS (port 443).
+- **HSTS** (`Strict-Transport-Security: max-age=31536000; includeSubDomains`) for 1 year, sent over HTTPS only.
+- TLS 1.2 and TLS 1.3 only; SSLv3 and TLS 1.0/1.1 are not offered.
+
+### CORS
+`ALLOWED_ORIGINS` (comma-separated) limits which other origins may call the API. Behind nginx the dashboard is on the same origin, so it can stay empty: any origin may read the API, and never with credentials.
 
 ---
 
@@ -72,7 +77,8 @@ Configured in `deployment/nginx/security-headers.conf`:
 - **Production Secret Stores**:
   - In cloud deployments (AWS, GCP, Azure), integrate with AWS Secrets Manager, HashiCorp Vault, or Azure Key Vault via Kubernetes External Secrets Operator (ESO).
 - **Secret Rotation**:
-  - Rotate `SECRET_KEY` and database credentials every 90 days.
+  - Rotate the Grafana admin password, and renew TLS certificates (Let's Encrypt: every 90 days, `init-ssl.sh`).
+  - The API has no login, signing key or database password today: anyone who can reach it can read and triage alerts. Keep it on a private network or behind an authenticating proxy.
 
 ---
 

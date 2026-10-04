@@ -518,3 +518,21 @@ def test_drift_reports_the_analyst_false_positive_share():
     body = client.get("/metrics/drift").json()
     assert set(body["fp_share"]) == {"share", "false_positives", "alerts"}
     assert body["history"] == []
+
+
+# ------------------------------------------------------------------------ CORS
+
+def test_allowed_origins_parses_the_env_var():
+    from api.main import allowed_origins
+    assert allowed_origins(None) == ["*"]
+    assert allowed_origins("") == ["*"]
+    assert allowed_origins("https://a.example, https://b.example,") == ["https://a.example",
+                                                                        "https://b.example"]
+
+
+def test_any_origin_may_read_the_api_but_never_with_credentials():
+    """It allowed every origin *with* credentials: any site could call the API
+    with a visitor's cookies."""
+    res = client.get("/", headers={"Origin": "https://elsewhere.example"})
+    assert res.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in res.headers
