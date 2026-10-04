@@ -2,7 +2,9 @@
 # NetWatch AI SOC — Production Deployment Handbook
 # ==============================================================================
 
-This directory contains production deployment configurations, container specifications, Kubernetes manifests, reverse proxy rules, CI/CD pipelines, operational scripts, and documentation for running **NetWatch AI SOC** at scale.
+This directory contains production deployment configurations, container specifications, Kubernetes manifests, reverse proxy rules, CI/CD templates, operational scripts, and documentation for running **NetWatch AI SOC**.
+
+**What is verified:** the single-host Docker Compose stack (nginx, API, dashboard, demo replayer), the scripts, and nginx's HTTP and HTTPS sites. **Not yet:** the Kubernetes manifests, the monitoring stack and the CI/CD templates (see their sections).
 
 ---
 
@@ -11,44 +13,47 @@ This directory contains production deployment configurations, container specific
 ```text
 deployment/
 ├── README.md                           # Master Production & Deployment Guide (this file)
-├── env.production.example              # Template for production environment variables
+├── env.production.example              # Every variable the stack reads, documented
 ├── docker/                             # Hardened Production Container Configurations
-│   ├── Dockerfile.api                  # Multi-stage FastAPI backend (non-root, OpenMP, healthcheck)
+│   ├── Dockerfile.api                  # Multi-stage FastAPI backend (non-root, one worker, healthcheck)
 │   ├── Dockerfile.dashboard            # Multi-stage Next.js frontend (non-root, healthcheck)
-│   ├── Dockerfile.replayer             # Background traffic flow replayer service
-│   ├── docker-compose.prod.yml         # Production orchestration (API + Dashboard + Nginx + DB)
-│   ├── docker-compose.monitoring.yml   # Prometheus + Grafana observability stack
-│   └── .dockerignore                   # Build context exclusions
-├── nginx/                              # Reverse Proxy, SSL, & Rate Limiting
-│   ├── nginx.conf                      # Master Nginx configuration (WebSockets, caching, proxying)
-│   └── security-headers.conf           # Hardened HTTP security headers (HSTS, CSP, X-Frame)
-├── k8s/                                # Production Kubernetes Manifests
+│   ├── Dockerfile.replayer             # Demo traffic replayer (one scenario per run)
+│   ├── docker-compose.prod.yml         # Production orchestration (nginx + API + dashboard + replayer)
+│   └── docker-compose.monitoring.yml   # Prometheus + Grafana (not wired yet)
+├── nginx/                              # Reverse Proxy, TLS, & Rate Limiting
+│   ├── nginx.conf                      # Common settings, upstreams, rate-limit zones
+│   ├── netwatch-locations.conf         # Routes: API under /api, dashboard everywhere else
+│   ├── site-http.conf                  # Plain HTTP site (NGINX_SITE=http, the default)
+│   ├── site-https.conf                 # HTTP→HTTPS redirect, TLS 1.2+, HSTS (NGINX_SITE=https)
+│   ├── security-headers.conf           # Security headers (CSP, X-Frame-Options, ...)
+│   └── ssl/                            # Certificates from init-ssl.sh (gitignored)
+├── k8s/                                # Kubernetes Manifests (not yet consistent, see below)
 │   ├── namespace.yaml                  # Dedicated 'netwatch' namespace
 │   ├── configmap.yaml                  # Application ConfigMap
-│   ├── secrets.template.yaml           # Secrets template (JWT, passwords)
+│   ├── secrets.template.yaml           # Secrets template
 │   ├── pvc.yaml                        # PersistentVolumeClaims for DB and models
 │   ├── api-deployment.yaml             # FastAPI deployment (liveness/readiness, non-root)
 │   ├── dashboard-deployment.yaml       # Next.js deployment (liveness/readiness)
 │   ├── services.yaml                   # ClusterIP internal services
 │   ├── ingress.yaml                    # Ingress controller with TLS & WebSocket support
 │   └── hpa.yaml                        # Horizontal Pod Autoscalers (HPA)
-├── monitoring/                         # Observability Configuration
+├── monitoring/                         # Observability Configuration (not wired yet)
 │   ├── prometheus.yml                  # Prometheus metric scraping rules
-│   └── grafana/dashboards/             # Pre-configured Grafana telemetry dashboards
-├── ci-cd/                              # Automated CI/CD Pipelines
-│   ├── release-pipeline.yml            # GitHub Actions production release & rollout workflow
+│   └── grafana/dashboards/             # Grafana dashboard
+├── ci-cd/                              # CI/CD templates: not active (see below)
+│   ├── release-pipeline.yml            # GitHub Actions release workflow template
 │   └── gitlab-ci.yml                   # GitLab CI/CD alternative template
 ├── scripts/                            # Operational Automation Scripts
-│   ├── deploy.sh                       # One-command automated production deployment
-│   ├── rollback.sh                     # Emergency rollback to stable containers
-│   ├── backup.sh                       # Daily database & model bundle snapshotting
-│   ├── healthcheck.sh                  # Comprehensive health verification test
-│   └── init-ssl.sh                     # SSL certificate generator (Let's Encrypt / self-signed)
+│   ├── deploy.sh                       # Build, start, health-check; roll back on failure
+│   ├── rollback.sh                     # Put back the images from before the last deploy
+│   ├── backup.sh                       # Snapshot the alert store, models & reports
+│   ├── healthcheck.sh                  # End-to-end check through nginx
+│   └── init-ssl.sh                     # TLS certificates (Let's Encrypt / self-signed)
 └── docs/                               # Detailed Production Documentation
     ├── PRODUCTION_RUNBOOK.md           # Operational runbook: incidents, alerts, retraining
-    ├── SECURITY_HARDENING.md           # Security audit, compliance, non-root user guide
-    ├── DISASTER_RECOVERY.md            # RPO/RTO targets, backup restore, cold rebuilds
-    └── ARCHITECTURE_PRODUCTION.md      # High-availability topology & data flow specs
+    ├── SECURITY_HARDENING.md           # Security controls and what they need
+    ├── DISASTER_RECOVERY.md            # Backup restore, cold rebuilds
+    └── ARCHITECTURE_PRODUCTION.md      # Topology & data flow
 ```
 
 ---
@@ -58,59 +63,49 @@ deployment/
 ### 1. Prerequisites
 - Docker Engine $\ge 24.0$
 - Docker Compose v2 $\ge 2.20$
-- Active trained models in `models/v1/` (`make train` or download)
+- Trained models in `models/v1/` (`make data && make train`): the API mounts `models/` and `reports/` from the repository
 
 ### 2. Configure Environment
 ```bash
 cp deployment/env.production.example deployment/.env.production
-# Edit deployment/.env.production with your domain, secrets, and parameters
+# Edit deployment/.env.production: PUBLIC_URL, NGINX_SITE, ports
+```
+`PUBLIC_URL` is the address users open. The dashboard is served there and reaches the API at `<PUBLIC_URL>/api` (WebSocket: `<PUBLIC_URL>/api/ws/alerts`); it is baked into the dashboard at build time, so rebuild after changing it.
+
+For HTTPS (`NGINX_SITE=https`), create certificates first:
+```bash
+bash deployment/scripts/init-ssl.sh netwatch.yourdomain.com letsencrypt you@example.com
 ```
 
-### 3. One-Click Automated Deployment
+### 3. One-Command Automated Deployment
 ```bash
 bash deployment/scripts/deploy.sh
 ```
 This script will:
-1. Validate required dependencies and environment files.
-2. Build multi-stage optimized production containers.
-3. Start the services (`netwatch-api`, `netwatch-dashboard`, `netwatch-nginx`) with health checks.
-4. Verify HTTP, WebSocket, and ML inference endpoints before declaring success.
-5. Automatically roll back if health checks fail.
+1. Validate dependencies, the environment file, the trained models and (for HTTPS) the certificates.
+2. Tag the running images `:previous`, then build the production images.
+3. Start `netwatch-api`, `netwatch-dashboard` and `netwatch-nginx` with health checks.
+4. Check the API, dashboard pages and a real `/api/score` call through nginx.
+5. Roll back to the `:previous` images if the check fails.
 
-### 4. Optional: Start Monitoring Stack (Prometheus + Grafana)
+### 4. Optional: Replay Demo Traffic
 ```bash
-docker compose -f deployment/docker/docker-compose.monitoring.yml up -d
-# Access Grafana at: http://localhost:3001 (default user: admin)
+docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production \
+  --profile demo run --rm -e REPLAY_SCENARIO=known replayer
 ```
+It reads `data/` from the repository (processed flows and the splits `make train` writes).
+
+### 5. Optional: Monitoring Stack (Prometheus + Grafana) — not wired yet
+`docker-compose.monitoring.yml` starts, but the API does not expose Prometheus metrics yet and the Grafana dashboard has no queries, so it shows nothing. Being fixed separately.
 
 ---
 
-## ☸️ Enterprise Track: Kubernetes Deployment
+## ☸️ Enterprise Track: Kubernetes Deployment — not yet consistent
 
-### 1. Create Namespace & Secrets
-```bash
-kubectl apply -f deployment/k8s/namespace.yaml
-kubectl apply -f deployment/k8s/configmap.yaml
-# Copy secrets.template.yaml, replace base64 values, then apply:
-kubectl apply -f deployment/k8s/secrets.yaml
-```
-
-### 2. Provision Storage & Workloads
-```bash
-kubectl apply -f deployment/k8s/pvc.yaml
-kubectl apply -f deployment/k8s/api-deployment.yaml
-kubectl apply -f deployment/k8s/dashboard-deployment.yaml
-kubectl apply -f deployment/k8s/services.yaml
-kubectl apply -f deployment/k8s/ingress.yaml
-kubectl apply -f deployment/k8s/hpa.yaml
-```
-
-### 3. Verify Rollout Status
-```bash
-kubectl rollout status deployment/netwatch-api -n netwatch
-kubectl rollout status deployment/netwatch-dashboard -n netwatch
-kubectl get all,ingress -n netwatch
-```
+The manifests do not match the API yet and are being fixed separately. Until then, do not use them:
+- The API keeps state in its process (drift window, alert grouping, WebSocket connections) and its alert store is SQLite, so it must run as **one** replica; the manifests run 2–8 behind an autoscaler on a `ReadWriteOnce` volume.
+- The ingress routes `/alerts`, `/models` and `/evaluation` to the API, hiding those dashboard pages; it needs the `/api` prefix nginx now uses.
+- `NEXT_PUBLIC_API_URL` is set on the running dashboard, but Next.js only reads it at build time.
 
 ---
 
@@ -118,17 +113,25 @@ kubectl get all,ingress -n netwatch
 
 | Script | Purpose | Usage |
 |:---|:---|:---|
-| [`deploy.sh`](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/scripts/deploy.sh) | Zero-downtime build, deployment & health validation | `bash deployment/scripts/deploy.sh` |
-| [`healthcheck.sh`](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/scripts/healthcheck.sh) | Verifies API, scoring engine, alerts, and dashboard | `bash deployment/scripts/healthcheck.sh` |
-| [`backup.sh`](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/scripts/backup.sh) | Archives DB, model bundles & reports with 30-day retention | `bash deployment/scripts/backup.sh` |
-| [`rollback.sh`](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/scripts/rollback.sh) | Immediate rollback to cached stable containers | `bash deployment/scripts/rollback.sh` |
-| [`init-ssl.sh`](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/scripts/init-ssl.sh) | Generates Let's Encrypt or self-signed SSL certs | `bash deployment/scripts/init-ssl.sh <domain>` |
+| [`deploy.sh`](scripts/deploy.sh) | Build, start, health-check; roll back on failure | `bash deployment/scripts/deploy.sh` |
+| [`healthcheck.sh`](scripts/healthcheck.sh) | API, dashboard pages and scoring, through nginx | `bash deployment/scripts/healthcheck.sh https://netwatch.yourdomain.com` |
+| [`backup.sh`](scripts/backup.sh) | Alert store (online copy), models & reports, 30-day retention | `bash deployment/scripts/backup.sh` |
+| [`rollback.sh`](scripts/rollback.sh) | Put back the images from before the last deploy | `bash deployment/scripts/rollback.sh` |
+| [`init-ssl.sh`](scripts/init-ssl.sh) | Let's Encrypt or self-signed certificates for nginx | `bash deployment/scripts/init-ssl.sh <domain> [selfsigned\|letsencrypt] [email]` |
+
+To roll back a **model** rather than code, use `python scripts/promote.py v1 --rollback` and restart the API.
+
+---
+
+## 🧩 CI/CD Templates — not active
+
+`ci-cd/release-pipeline.yml` is a GitHub Actions workflow, but GitHub only runs workflows in `.github/workflows/`, and `gitlab-ci.yml` is for GitLab. Neither runs; the repository's CI is `.github/workflows/ci.yml`. Activating the release pipeline is a team decision (it pushes images to a registry).
 
 ---
 
 ## 📚 Detailed Reference Documentation
 
-- 📖 [**Production Runbook**](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/docs/PRODUCTION_RUNBOOK.md) — Incident response procedures, false alert spikes, and retraining workflow.
-- 🔒 [**Security Hardening Guide**](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/docs/SECURITY_HARDENING.md) — Non-root users, rate limiting, and security headers.
-- 🔄 [**Disaster Recovery Plan**](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/docs/DISASTER_RECOVERY.md) — RTO/RPO objectives, database recovery, and cold rebuilds.
-- 🏗️ [**Production Architecture**](file:///Users/satveekgupta/Developer/MS%20Hack/Net-Watch/deployment/docs/ARCHITECTURE_PRODUCTION.md) — Network topology, data flow, and concurrency specifications.
+- 📖 [**Production Runbook**](docs/PRODUCTION_RUNBOOK.md) — Incident response procedures, false alert spikes, and retraining workflow.
+- 🔒 [**Security Hardening Guide**](docs/SECURITY_HARDENING.md) — Non-root users, rate limiting, TLS, and security headers.
+- 🔄 [**Disaster Recovery Plan**](docs/DISASTER_RECOVERY.md) — Database recovery, model restore, and cold rebuilds.
+- 🏗️ [**Production Architecture**](docs/ARCHITECTURE_PRODUCTION.md) — Network topology and data flow.

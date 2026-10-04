@@ -14,13 +14,13 @@ flowchart TD
     Sensor["Network Tap / Flow Sensors"]
 
     subgraph Edge["Perimeter & Load Balancing"]
-        Nginx["Nginx Reverse Proxy & SSL (Port 80/443)"]
+        Nginx["Nginx Reverse Proxy, optional TLS (Port 80/443)"]
     end
 
     subgraph Application["Application Layer (Internal Network)"]
         Dashboard["Next.js 16 Dashboard (Port 3000)"]
         API["FastAPI Inference Engine (Port 8000)"]
-        WorkerPool["Uvicorn Worker Pool (4x Concurrency)"]
+        WorkerPool["One Uvicorn Worker (state lives in the process)"]
     end
 
     subgraph Engines["ML Scoring Engines"]
@@ -31,17 +31,17 @@ flowchart TD
     end
 
     subgraph Data["Persistence & Storage Layer"]
-        AlertDB[("SQLite / PostgreSQL Alert Store")]
-        ModelStore["Mounted Model Volume (/data/models)"]
-        ReportsStore["Metrics & Calibration (/data/reports)"]
+        AlertDB[("SQLite Alert Store (netwatch-db-data volume)")]
+        ModelStore["models/ from the repository (models/ACTIVE picks the version)"]
+        ReportsStore["reports/ from the repository"]
     end
 
-    Sensor -->|POST /score| Nginx
+    Sensor -->|POST /api/score| Nginx
     Client -->|HTTPS & WSS| Nginx
 
-    Nginx -->|/_next & /| Dashboard
-    Nginx -->|/score, /alerts, /metrics| API
-    Nginx -->|/ws/alerts WebSocket| API
+    Nginx -->|every path but /api| Dashboard
+    Nginx -->|/api/... prefix stripped| API
+    Nginx -->|/api/ws/alerts WebSocket| API
 
     API --> WorkerPool
     WorkerPool --> LightGBM
@@ -60,19 +60,19 @@ flowchart TD
 
 | Component | Technology | Role in Production | Concurrency / Scaling |
 |:---|:---|:---|:---|
-| **Reverse Proxy** | Nginx 1.25 Alpine | SSL termination, HTTP/2, WebSocket multiplexing, rate-limiting | Multi-worker epoll event loop |
-| **Backend API** | FastAPI + Python 3.11 | ML inference, drift tracking, alert persistence, WS broadcasting | 4x Uvicorn worker processes |
+| **Reverse Proxy** | Nginx 1.25 Alpine | Routing (`/api` to the API, the rest to the dashboard), TLS and HTTP/2 with `NGINX_SITE=https`, WebSockets, rate limiting | Multi-worker epoll event loop |
+| **Backend API** | FastAPI + Python 3.11 | ML inference, drift tracking, alert persistence, WS broadcasting | **One** Uvicorn worker: the drift window, alert grouping and WebSocket connections live in the process, so more workers would each see a share of the traffic. Scale up, not out. |
 | **SOC Dashboard** | Next.js 16 + React 18 | Interactive SOC triage, 3D visualization, MITRE telemetry | Node.js cluster / multi-instance |
 | **Supervised Classifier** | LightGBM | Multiclass attack family identification with calibrated probabilities | CPU OpenMP thread-parallel |
 | **Anomaly Detector** | Isolation Forest | Unsupervised novel attack detection against benign envelope | Pre-fitted tree estimators |
 | **Explainability** | TreeSHAP | Feature attribution values for top contributing flow features | TreePath caching |
-| **Database** | SQLite / PostgreSQL | Alert history, analyst triage labels, escalation tracking | Connection pooling with WAL mode |
+| **Database** | SQLite | Alert history, analyst triage labels, escalation tracking | One writer (the API) |
 
 ---
 
 ## 3. Data Flow: Flow Ingestion to Live SOC Alert
 
-1. **Ingestion**: Network sensors emit batches of flow dictionaries to `POST /score`.
+1. **Ingestion**: Network sensors post batches of flows to `POST /api/score` (`{"flows": [{"features": {...}}]}`).
 2. **Feature Preparation**: Features are aligned against the trained 30-feature schema; non-feature identifiers (`Flow ID`, IP addresses) are safely stripped.
 3. **Dual-Engine Evaluation**:
    - LightGBM predicts attack family probability distribution.
@@ -83,4 +83,4 @@ flowchart TD
    - Attributed features map to MITRE ATT&CK techniques and recommended actions.
 6. **Persistence & Broadcast**:
    - The alert is committed to `netwatch.db`.
-   - The alert payload broadcasts via WebSocket `/ws/alerts` to connected analyst consoles in $< 15\text{ms}$.
+   - The alert payload broadcasts via the WebSocket (`/api/ws/alerts` through nginx) to connected analyst consoles.

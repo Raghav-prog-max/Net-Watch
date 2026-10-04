@@ -24,11 +24,12 @@ COPY dashboard/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Argument passed at build time for client-side API URL
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_WS_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://127.0.0.1:8000}
-ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://127.0.0.1:8000/ws/alerts}
+# Where the browser reaches the API. Next.js bakes NEXT_PUBLIC_* into the bundle
+# at build time, so this is a build argument: setting it on the running container
+# changes nothing. Behind nginx the API is under /api on the same host, and the
+# dashboard derives the WebSocket address from it (ws://<host>/api/ws/alerts).
+ARG NEXT_PUBLIC_API_URL=http://localhost/api
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Build Next.js application
 RUN npm run build
@@ -49,8 +50,8 @@ RUN apk add --no-cache curl
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy public assets and built pages
-COPY --from=builder /app/public ./public 2>/dev/null || true
+# Built pages and dependencies. The dashboard has no public/ directory, and the
+# line that copied one used shell syntax COPY does not have: it failed the build.
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules

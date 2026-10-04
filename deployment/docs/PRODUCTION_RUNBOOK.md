@@ -38,10 +38,11 @@ kubectl rollout restart deployment/netwatch-dashboard -n netwatch
 
 ### Incident A: API Returns HTTP 503 "Models Not Found"
 * **Symptoms**: `/score`, `/models`, or `/metrics/drift` returns `503 Service Unavailable`.
-* **Root Cause**: The model bundle (`models/v1/classifier.joblib`, `scaler.joblib`, etc.) is missing or corrupted on the mounted volume.
+* **Root Cause**: The active model bundle (`models/<ACTIVE>/`: `classifier.joblib`, `anomaly.joblib`, `novelty.joblib`, `thresholds.json`, `reference_stats.json`) is missing or corrupted. The API mounts `models/` from the repository.
 * **Resolution**:
   1. Check if model files exist:
      ```bash
+     cat models/ACTIVE 2>/dev/null || echo v1   # the version being served
      ls -la models/v1/
      ```
   2. If missing, restore from the latest backup or re-run evaluation:
@@ -61,21 +62,17 @@ kubectl rollout restart deployment/netwatch-dashboard -n netwatch
 * **Diagnosis**:
   1. Query active drift metrics:
      ```bash
-     curl -s http://localhost:8000/metrics/drift | jq .
+     curl -s "${PUBLIC_URL}/api/metrics/drift" | jq .
      ```
   2. Inspect whether a network topology shift or new benign software is generating unfamiliar feature distributions.
 * **Resolution**:
   1. Review analyst triage labels in SQLite:
      ```bash
-     sqlite3 netwatch.db "SELECT analyst_label, COUNT(*) FROM alerts GROUP BY analyst_label;"
+     # the alert store is in the netwatch-db-data volume, not ./netwatch.db
+     docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production exec -T api python -c "import sqlite3; print(sqlite3.connect('/data/db/netwatch.db').execute('SELECT status, analyst_label, COUNT(*) FROM alerts GROUP BY 1, 2').fetchall())"
      ```
-  2. Trigger feedback retraining with analyst labels:
-     ```bash
-     python -m scripts.retrain --eval-v1
-     ```
-  3. Validate candidate v2 model:
-     - Check `reports/v2/promotion.json`.
-     - Only promote if validation false alert rate $\le$ budget and macro-F1 is preserved.
+  2. Retrain with the analyst labels (section 3), and promote only if the check passes: macro-F1
+     improves and false alerts stay within the budget.
 
 ### Incident C: WebSocket Disconnections on Live Alert Rail
 * **Symptoms**: Dashboard shows "Disconnected" dot; live alerts do not stream until page reload.
@@ -88,7 +85,8 @@ kubectl rollout restart deployment/netwatch-dashboard -n netwatch
     proxy_set_header Connection $connection_upgrade;
     proxy_read_timeout 86400s;
     ```
-  - Verify container health: `bash deployment/scripts/healthcheck.sh`.
+  - Verify container health: `bash deployment/scripts/healthcheck.sh "${PUBLIC_URL}"`.
+  - The dashboard connects to `<PUBLIC_URL>/api/ws/alerts`; nginx routes `/api/ws/` with the upgrade headers (`nginx/netwatch-locations.conf`).
 
 ---
 
@@ -112,18 +110,18 @@ flowchart LR
    ```bash
    bash deployment/scripts/backup.sh
    ```
-2. Run retraining pipeline:
+2. Run the retraining pipeline. It reads the analyst labels from an alert store, so point
+   `NETWATCH_DB` at the copy of the production store that `backup.sh` made:
    ```bash
-   python -m scripts.retrain --eval-v1
+   NETWATCH_DB=/path/to/netwatch.db python scripts/retrain.py --out models/v2
    ```
-3. Inspect promotion results:
+   It prints the promotion check against the version being served: DO NOT PROMOTE, or RECOMMEND PROMOTE.
+3. If recommended and approved, promote and restart the API:
    ```bash
-   cat reports/v2/promotion.json
+   python scripts/promote.py v2        # re-checks, then points models/ACTIVE at v2; v1 is kept
+   docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production restart api
    ```
-4. If approved for rollout, restart the API service:
-   ```bash
-   docker compose -f deployment/docker/docker-compose.prod.yml restart api
-   ```
+4. To go back: `python scripts/promote.py v1 --rollback`, then restart the API.
 
 ---
 
