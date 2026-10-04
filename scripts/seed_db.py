@@ -29,6 +29,7 @@ from api.db.models import AlertModel
 from api.db.session import Base, SessionLocal, engine
 from api.services.scorer import Scorer
 from ml.features.select import feature_columns
+from replay.replayer import pick, replay_pool
 
 
 def seed(count: int = 50, scenario: str = "known") -> None:
@@ -37,15 +38,11 @@ def seed(count: int = 50, scenario: str = "known") -> None:
     if not processed.exists():
         raise SystemExit("run `make data` first — data/processed/flows.pkl not found")
 
-    df = pd.read_pickle(processed).sample(frac=1.0, random_state=42)
+    # the replayer's flows and scenarios, so seeded alerts come from traffic the
+    # models were not fitted on, as live ones do
+    df = replay_pool(pd.read_pickle(processed)).sample(frac=1.0, random_state=42)
     features = feature_columns(df)
-
-    if scenario == "known":
-        rows = df[df["family"].isin(["DDoS", "PortScan", "DoS"])].head(count)
-    elif scenario == "novel":
-        rows = df[~df["family"].isin(["Benign", "DoS", "DDoS", "PortScan", "BruteForce", "WebAttack", "Bot"])].head(count)
-    else:
-        rows = df.head(count)
+    rows = pick(df, scenario).head(count)
 
     if rows.empty:
         raise SystemExit(f"no rows matched scenario={scenario!r}")
