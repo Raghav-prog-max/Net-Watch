@@ -12,6 +12,7 @@ export default function SocSidebar() {
     { href: "/evaluation", label: "Evaluation", icon: "fact_check" },
     { href: "/drift", label: "Drift", icon: "timeline" },
     { href: "/models", label: "Models", icon: "model_training" },
+    { href: "/users", label: "Users & RBAC", icon: "manage_accounts" },
   ];
 
   const bottomItems = [
@@ -21,16 +22,14 @@ export default function SocSidebar() {
 
   return (
     <aside
+      data-lenis-prevent
       style={{
-        width: "240px",
+        width: "100%",
         backgroundColor: "#0E0E12",
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
-        flexShrink: 0,
-        height: "100vh",
-        position: "sticky",
-        top: 0,
+        height: "100%",
         overflowY: "auto",
         padding: "16px 0",
         borderRight: "1px solid rgba(255, 255, 255, 0.06)",
