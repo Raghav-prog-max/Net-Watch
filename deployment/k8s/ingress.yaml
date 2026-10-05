@@ -1,22 +1,33 @@
+# Routing for ingress-nginx, the same as deployment/nginx/netwatch-locations.conf:
+#   /api/...     -> the API, with /api removed (/api/alerts -> /alerts,
+#                   /api/ws/alerts -> /ws/alerts)
+#   /api/metrics -> refused: Prometheus scrapes the API inside the cluster
+#   everything else -> the dashboard, whose pages include /alerts, /models and
+#                      /evaluation, so API paths cannot sit beside them
+# The dashboard image must be built with NEXT_PUBLIC_API_URL=https://<host>/api
+# (deployment/README.md).
+#
+# Three Ingresses, because ingress-nginx applies annotations to a whole Ingress.
+# The rewrite turns on regex matching for every path of the host; ingress-nginx
+# then tries paths longest first, so /api/metrics$ is checked before /api/(.*),
+# and /api/(.*) before /. tests/test_k8s_manifests.py checks the routing.
+#
+# Security headers are not set here: snippet annotations are rejected by
+# ingress-nginx's default configuration since v1.9. security-headers.yaml holds
+# them for the controller instead.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: netwatch-ingress
+  name: netwatch-dashboard
   namespace: netwatch
   labels:
     app.kubernetes.io/name: netwatch
   annotations:
-    kubernetes.io/ingress.class: nginx
+    # the one Ingress that asks cert-manager for the host's certificate
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Frame-Options: SAMEORIGIN";
-      more_set_headers "X-Content-Type-Options: nosniff";
-      more_set_headers "X-XSS-Protection: 1; mode=block";
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
         - netwatch.yourdomain.com
@@ -25,51 +36,6 @@ spec:
     - host: netwatch.yourdomain.com
       http:
         paths:
-          # WebSocket streaming
-          - path: /ws
-            pathType: Prefix
-            backend:
-              service:
-                name: netwatch-api-service
-                port:
-                  number: 8000
-          # API endpoints
-          - path: /score
-            pathType: Prefix
-            backend:
-              service:
-                name: netwatch-api-service
-                port:
-                  number: 8000
-          - path: /alerts
-            pathType: Prefix
-            backend:
-              service:
-                name: netwatch-api-service
-                port:
-                  number: 8000
-          - path: /metrics
-            pathType: Prefix
-            backend:
-              service:
-                name: netwatch-api-service
-                port:
-                  number: 8000
-          - path: /models
-            pathType: Prefix
-            backend:
-              service:
-                name: netwatch-api-service
-                port:
-                  number: 8000
-          - path: /evaluation
-            pathType: Prefix
-            backend:
-              service:
-                name: netwatch-api-service
-                port:
-                  number: 8000
-          # Next.js Frontend
           - path: /
             pathType: Prefix
             backend:
@@ -77,3 +43,62 @@ spec:
                 name: netwatch-dashboard-service
                 port:
                   number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: netwatch-api
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch-api
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+    # the alert stream (/api/ws/alerts) is a WebSocket that stays open
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - netwatch.yourdomain.com
+      secretName: netwatch-tls-cert
+  rules:
+    - host: netwatch.yourdomain.com
+      http:
+        paths:
+          - path: /api/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: netwatch-api-service
+                port:
+                  number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: netwatch-api-metrics-private
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch-api
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # no request through the ingress comes from 127.0.0.1, so all get 403;
+    # /api/metrics/model and /api/metrics/drift are not matched and still work
+    nginx.ingress.kubernetes.io/whitelist-source-range: "127.0.0.1/32"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: netwatch.yourdomain.com
+      http:
+        paths:
+          - path: /api/metrics$
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: netwatch-api-service
+                port:
+                  number: 8000

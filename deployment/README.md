@@ -4,7 +4,7 @@
 
 This directory contains production deployment configurations, container specifications, Kubernetes manifests, reverse proxy rules, CI/CD templates, operational scripts, and documentation for running **NetWatch AI SOC**.
 
-**What is verified:** the single-host Docker Compose stack (nginx, API, dashboard, demo replayer), the scripts, and nginx's HTTP and HTTPS sites. **In part:** the monitoring stack. The API's `/metrics` is tested and was checked against a running API, and every metric the Grafana dashboard queries is exposed, but Prometheus and Grafana have not yet been run together in Docker. **Not yet:** the Kubernetes manifests and the CI/CD templates (see their sections).
+**What is verified:** the single-host Docker Compose stack (nginx, API, dashboard, demo replayer), the scripts, and nginx's HTTP and HTTPS sites. **In part:** the monitoring stack. The API's `/metrics` is tested and was checked against a running API, and every metric the Grafana dashboard queries is exposed, but Prometheus and Grafana have not yet been run together in Docker. **Checked without a cluster:** the Kubernetes manifests (`tests/test_k8s_manifests.py`); they have not been applied to one. **Not yet:** the CI/CD templates (see their sections).
 
 ---
 
@@ -27,16 +27,17 @@ deployment/
 │   ├── site-https.conf                 # HTTP→HTTPS redirect, TLS 1.2+, HSTS (NGINX_SITE=https)
 │   ├── security-headers.conf           # Security headers (CSP, X-Frame-Options, ...)
 │   └── ssl/                            # Certificates from init-ssl.sh (gitignored)
-├── k8s/                                # Kubernetes Manifests (not yet consistent, see below)
+├── k8s/                                # Kubernetes Manifests (see below)
 │   ├── namespace.yaml                  # Dedicated 'netwatch' namespace
-│   ├── configmap.yaml                  # Application ConfigMap
-│   ├── secrets.template.yaml           # Secrets template
-│   ├── pvc.yaml                        # PersistentVolumeClaims for DB and models
-│   ├── api-deployment.yaml             # FastAPI deployment (liveness/readiness, non-root)
+│   ├── configmap.yaml                  # The API's runtime settings (alert store path, CORS)
+│   ├── secrets.template.yaml           # Secrets template (optional: nothing reads it yet)
+│   ├── pvc.yaml                        # PersistentVolumeClaim for the alert store
+│   ├── api-deployment.yaml             # FastAPI: one replica, replaced on deploy, non-root
 │   ├── dashboard-deployment.yaml       # Next.js deployment (liveness/readiness)
 │   ├── services.yaml                   # ClusterIP internal services
-│   ├── ingress.yaml                    # Ingress controller with TLS & WebSocket support
-│   └── hpa.yaml                        # Horizontal Pod Autoscalers (HPA)
+│   ├── ingress.yaml                    # API under /api, dashboard everywhere else, TLS
+│   ├── security-headers.yaml           # The nginx security headers, for ingress-nginx
+│   └── hpa.yaml                        # Autoscaler for the dashboard
 ├── monitoring/                         # Observability Configuration
 │   ├── prometheus.yml                  # Scrapes the API's /metrics
 │   └── grafana/
@@ -113,12 +114,40 @@ Not yet run end to end in Docker: check that Prometheus' target `netwatch-api` i
 
 ---
 
-## ☸️ Enterprise Track: Kubernetes Deployment — not yet consistent
+## ☸️ Enterprise Track: Kubernetes Deployment
 
-The manifests do not match the API yet and are being fixed separately. Until then, do not use them:
-- The API keeps state in its process (drift window, alert grouping, WebSocket connections) and its alert store is SQLite, so it must run as **one** replica; the manifests run 2–8 behind an autoscaler on a `ReadWriteOnce` volume.
-- The ingress routes `/alerts`, `/models` and `/evaluation` to the API, hiding those dashboard pages; it needs the `/api` prefix nginx now uses.
-- `NEXT_PUBLIC_API_URL` is set on the running dashboard, but Next.js only reads it at build time.
+The manifests follow the Compose deployment. `tests/test_k8s_manifests.py` checks them in CI, emulating ingress-nginx's routing for every API path and dashboard page. They have not been applied to a cluster yet.
+
+- **One API pod.** The API keeps state in its process (drift window, alert grouping, WebSocket connections, `/metrics` counters) and its alert store is SQLite on a `ReadWriteOnce` volume. It runs one replica, replaced on each deploy, with a short gap in service, and no autoscaler. The dashboard has two to six.
+- **Models are in the API image.** To serve a new model, run `make train` (and `scripts/promote.py` if needed), then build and roll out a new API image.
+- **Routing, as in nginx:** `/api/...` goes to the API with `/api` removed, and the alert stream is `/api/ws/alerts`. `/api/metrics` is refused; Prometheus can scrape the API pod, which carries `prometheus.io/*` annotations. Everything else goes to the dashboard.
+- **Not carried over from nginx:** rate limits. Add `nginx.ingress.kubernetes.io/limit-rps` to the `netwatch-api` Ingress if the cluster needs them.
+
+**Needs:** an ingress-nginx controller (ingress class `nginx`), and cert-manager with a `letsencrypt-prod` ClusterIssuer (or create the `netwatch-tls-cert` secret yourself).
+
+```bash
+# 1. Images. The dashboard's API address is fixed at build time.
+docker build -f deployment/docker/Dockerfile.api -t <registry>/netwatch-api:<tag> .
+docker build -f deployment/docker/Dockerfile.dashboard \
+  --build-arg NEXT_PUBLIC_API_URL=https://netwatch.yourdomain.com/api \
+  -t <registry>/netwatch-dashboard:<tag> .
+docker push <registry>/netwatch-api:<tag>
+docker push <registry>/netwatch-dashboard:<tag>
+
+# 2. Replace netwatch.yourdomain.com in configmap.yaml and ingress.yaml, and the
+#    image names in the two deployments, then apply (not secrets.template.yaml:
+#    nothing reads it yet, and its values are placeholders):
+kubectl apply -f deployment/k8s/namespace.yaml
+for f in configmap pvc api-deployment dashboard-deployment services ingress hpa security-headers; do
+  kubectl apply -f deployment/k8s/$f.yaml
+done
+
+# 3. Optional: send the Compose deployment's security headers on every response
+kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge \
+  -p '{"data":{"add-headers":"netwatch/netwatch-security-headers"}}'
+```
+
+The two CI templates build the dashboard with `NEXT_PUBLIC_API_URL=<PUBLIC_URL>/api` (a repository or CI/CD variable) and roll out with `kubectl set image`.
 
 ---
 
