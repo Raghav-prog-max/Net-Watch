@@ -12,8 +12,10 @@ accuracy. We report macro-F1, PR-AUC per class, and FPR instead.
 ## Splits
 
 Time-block splits (5-minute windows) ensure no burst of near-duplicate flows
-appears in both training and test. The leakage test (`tests/test_split_leakage.py`)
-fails the build if one block crosses a split boundary.
+appears in both training and test. Blocks are divided within each attack family, so
+a family that fills only a few blocks (DDoS: 5 of 398) still has some in validation
+and test. The leakage test (`tests/test_split_leakage.py`) fails the build if one
+block crosses a split boundary or a family is missing from one.
 
 ## Leave-one-family-out (LOFO)
 

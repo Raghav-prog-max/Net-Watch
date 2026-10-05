@@ -56,7 +56,8 @@ def render():
     budget = cfg["train"]["fpr_budget"]
     realised = main["false_positive_rate"]
     attacks = [c for c in per if c != "Benign"]
-    weakest = min(attacks, key=lambda c: per[c]["recall"])
+    # a family with no test flows has recall 0 by default, not because it was missed
+    weakest = min((c for c in attacks if per[c]["support"] > 0), key=lambda c: per[c]["recall"])
 
     # where the classifier's false alerts on benign traffic end up
     b = labels.index("Benign")
@@ -111,7 +112,8 @@ def render():
     source = "Synthetic traffic shaped like CICIDS2017" if synthetic else "CICIDS2017 flow records"
     w(f"{source}: {len(flows):,} flows after cleaning, {m['features']} features. "
       f"Split into {cfg['split']['block_minutes']}-minute time blocks so no block appears "
-      "in two splits; a test fails the build if one does.")
+      "in two splits, divided within each attack family so every family is in test; "
+      "a test fails the build if either breaks.")
     w("")
     w("| Split | Flows | Note |")
     w("| --- | ---: | --- |")
