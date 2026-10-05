@@ -1,4 +1,5 @@
 import type { Alert, DriftStatus, EvaluationReport, ModelRegistryInfo } from "./types";
+import { auth } from "./firebase";
 
 export type { EvaluationReport, ModelRegistryInfo } from "./types";
 
@@ -27,8 +28,15 @@ export class ApiUnreachable extends Error {
 async function get(path: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2000);
+  
+  const headers: Record<string, string> = {};
+  if (auth.currentUser) {
+    const token = await auth.currentUser.getIdToken();
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   try {
-    return await fetch(`${BASE}${path}`, { cache: "no-store", signal: controller.signal });
+    return await fetch(`${BASE}${path}`, { headers, cache: "no-store", signal: controller.signal });
   } catch {
     throw new ApiUnreachable(path);
   } finally {
@@ -95,10 +103,16 @@ export async function triage(
   analyst_note?: string,
 ): Promise<Alert> {
   let res: Response;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (auth.currentUser) {
+    const token = await auth.currentUser.getIdToken();
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   try {
     res = await fetch(`${BASE}/alerts/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ status, analyst_label, analyst_note }),
     });
   } catch {

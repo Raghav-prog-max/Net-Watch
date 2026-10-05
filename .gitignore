@@ -25,3 +25,4 @@ venv/
 netwatch.db
 .pytest_cache/
 .env
+serviceAccountKey.json

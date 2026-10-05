@@ -8,6 +8,7 @@ except ImportError:
 from ..schemas import Alert, Feedback
 from ..db.session import get_db, SQLALCHEMY_AVAILABLE
 from ..db.models import AlertModel
+from ..services.auth import verify_token
 
 router = APIRouter()
 
@@ -40,7 +41,8 @@ def get_alerts(
     family: Optional[str] = None,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
 ):
     query = db.query(AlertModel)
     if status:
@@ -98,7 +100,7 @@ def get_alerts(
     }
 
 @router.get("/alerts/{id}", response_model=Alert)
-def get_alert(id: str, db: Session = Depends(get_db)):
+def get_alert(id: str, db: Session = Depends(get_db), user=Depends(verify_token)):
     alert = db.query(AlertModel).filter(AlertModel.id == id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -122,7 +124,7 @@ def get_alert(id: str, db: Session = Depends(get_db)):
     }
 
 @router.patch("/alerts/{id}", response_model=Alert)
-def update_alert(id: str, feedback: Feedback, db: Session = Depends(get_db)):
+def update_alert(id: str, feedback: Feedback, db: Session = Depends(get_db), user=Depends(verify_token)):
     alert = db.query(AlertModel).filter(AlertModel.id == id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")

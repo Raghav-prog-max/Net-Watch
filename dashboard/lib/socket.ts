@@ -5,17 +5,21 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";   // se
 
 type AlertListener = (alert: Alert) => void;
 
-/** Subscribes to the live alert feed. Returns an unsubscribe function. */
+import { auth } from "./firebase";
+
 export function subscribeToAlerts(onAlert: AlertListener): () => void {
   const url = BASE.replace(/^http/, "ws") + "/ws/alerts";
   let socket: WebSocket | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
 
-  const connect = () => {
+  const connect = async () => {
     if (typeof window === "undefined") return;
     try {
-      socket = new WebSocket(url);
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const authUrl = token ? `${url}?token=${token}` : url;
+
+      socket = new WebSocket(authUrl);
       socket.onmessage = (event) => {
         try {
           const parsed = normalizeAlert(JSON.parse(event.data) as Alert);

@@ -1,9 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@/lib/userContext";
 
 export default function SocTopBar() {
   const [hasUnread, setHasUnread] = useState(true);
+  const { user, login, logout, loading } = useUser();
+
+  const displayName = user?.displayName || "Analyst";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <header
@@ -25,7 +35,7 @@ export default function SocTopBar() {
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <h1 style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", margin: 0, letterSpacing: "-0.01em" }}>
-            Hello, Sarah Analyst
+            Hello, {loading ? "..." : displayName}
           </h1>
           <span style={{ fontSize: "12px", color: "#8E909B" }}>•</span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#8E909B" }}>NODE-ONLINE</span>
@@ -109,24 +119,38 @@ export default function SocTopBar() {
         {/* User Avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingLeft: "12px", borderLeft: "1px solid rgba(255, 255, 255, 0.1)" }}>
           <div style={{ position: "relative" }}>
-            <div
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "50%",
-                backgroundColor: "#1A1A20",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#FFFFFF",
-                fontFamily: "var(--font-mono)",
-                fontWeight: 700,
-                fontSize: "12px",
-              }}
-            >
-              SA
-            </div>
+            {user?.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt="Profile"
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  backgroundColor: "#1A1A20",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#FFFFFF",
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 700,
+                  fontSize: "12px",
+                }}
+              >
+                {initials}
+              </div>
+            )}
             <span style={{
               position: "absolute",
               bottom: 0,
@@ -139,9 +163,35 @@ export default function SocTopBar() {
             }} />
           </div>
           <div>
-            <div style={{ fontSize: "12px", fontWeight: 600, color: "#FFFFFF", lineHeight: 1.2 }}>Sarah Analyst</div>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "#FFFFFF", lineHeight: 1.2 }}>{displayName}</div>
             <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>Tier-2 SecOps</div>
           </div>
+          {/* Login/Logout Button */}
+          <button
+            onClick={user ? logout : login}
+            style={{
+              marginLeft: "12px",
+              padding: "4px 12px",
+              backgroundColor: "transparent",
+              color: "#8E909B",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: "9999px",
+              fontSize: "10px",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.color = "#FFFFFF";
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.3)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.color = "#8E909B";
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
+            }}
+          >
+            {user ? "Sign Out" : "Login"}
+          </button>
         </div>
       </div>
     </header>

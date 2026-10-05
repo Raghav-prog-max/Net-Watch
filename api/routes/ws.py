@@ -1,6 +1,7 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import List
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from typing import List, Optional
 import json
+from firebase_admin import auth
 
 router = APIRouter()
 
@@ -28,7 +29,16 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 @router.websocket("/ws/alerts")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
+    if not token:
+        await websocket.close(code=1008)
+        return
+    try:
+        decoded_token = auth.verify_id_token(token)
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket)
     try:
         while True:
