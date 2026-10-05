@@ -4,7 +4,7 @@
 
 This directory contains production deployment configurations, container specifications, Kubernetes manifests, reverse proxy rules, CI/CD templates, operational scripts, and documentation for running **NetWatch AI SOC**.
 
-**What is verified:** the single-host Docker Compose stack (nginx, API, dashboard, demo replayer), the scripts, and nginx's HTTP and HTTPS sites. **Not yet:** the Kubernetes manifests, the monitoring stack and the CI/CD templates (see their sections).
+**What is verified:** the single-host Docker Compose stack (nginx, API, dashboard, demo replayer), the scripts, and nginx's HTTP and HTTPS sites. **In part:** the monitoring stack. The API's `/metrics` is tested and was checked against a running API, and every metric the Grafana dashboard queries is exposed, but Prometheus and Grafana have not yet been run together in Docker. **Not yet:** the Kubernetes manifests and the CI/CD templates (see their sections).
 
 ---
 
@@ -19,7 +19,7 @@ deployment/
 │   ├── Dockerfile.dashboard            # Multi-stage Next.js frontend (non-root, healthcheck)
 │   ├── Dockerfile.replayer             # Demo traffic replayer (one scenario per run)
 │   ├── docker-compose.prod.yml         # Production orchestration (nginx + API + dashboard + replayer)
-│   └── docker-compose.monitoring.yml   # Prometheus + Grafana (not wired yet)
+│   └── docker-compose.monitoring.yml   # Prometheus + Grafana, on the production network
 ├── nginx/                              # Reverse Proxy, TLS, & Rate Limiting
 │   ├── nginx.conf                      # Common settings, upstreams, rate-limit zones
 │   ├── netwatch-locations.conf         # Routes: API under /api, dashboard everywhere else
@@ -37,9 +37,11 @@ deployment/
 │   ├── services.yaml                   # ClusterIP internal services
 │   ├── ingress.yaml                    # Ingress controller with TLS & WebSocket support
 │   └── hpa.yaml                        # Horizontal Pod Autoscalers (HPA)
-├── monitoring/                         # Observability Configuration (not wired yet)
-│   ├── prometheus.yml                  # Prometheus metric scraping rules
-│   └── grafana/dashboards/             # Grafana dashboard
+├── monitoring/                         # Observability Configuration
+│   ├── prometheus.yml                  # Scrapes the API's /metrics
+│   └── grafana/
+│       ├── provisioning/               # Prometheus data source + dashboard provider
+│       └── dashboards/                 # The NetWatch telemetry dashboard
 ├── ci-cd/                              # CI/CD templates: not active (see below)
 │   ├── release-pipeline.yml            # GitHub Actions release workflow template
 │   └── gitlab-ci.yml                   # GitLab CI/CD alternative template
@@ -95,8 +97,19 @@ docker compose -f deployment/docker/docker-compose.prod.yml --env-file deploymen
 ```
 It reads `data/` from the repository (processed flows and the splits `make train` writes).
 
-### 5. Optional: Monitoring Stack (Prometheus + Grafana) — not wired yet
-`docker-compose.monitoring.yml` starts, but the API does not expose Prometheus metrics yet and the Grafana dashboard has no queries, so it shows nothing. Being fixed separately.
+### 5. Optional: Monitoring Stack (Prometheus + Grafana)
+```bash
+docker compose -f deployment/docker/docker-compose.monitoring.yml --env-file deployment/.env.production up -d
+```
+Run it after the production stack, whose network it joins. Prometheus scrapes the API's `GET /metrics` (`api/services/telemetry.py`) on that network; nginx keeps `/api/metrics` off the public site, and Prometheus itself listens on this host only (`127.0.0.1:9090`). Grafana (`http://<host>:3001`, user `admin`, `GRAFANA_ADMIN_PASSWORD`, which must be set) comes up with Prometheus as its data source and the *NetWatch AI SOC — Production Telemetry* dashboard in the NetWatch folder:
+- flows scored per second, `/score` latency (p95, p99), alerts opened by family;
+- the live alert rate per 10k flows beside the report's false-alert rate and budget;
+- drift status, the largest feature PSI against its bands, the unexplained-alert rate against its baseline;
+- alerts by triage status, the analysts' false-positive share, the model version served.
+
+The counters live in the API process (one worker), so a restart zeroes them; Prometheus' `rate()` allows for that. The drift panels show "No data" until the API has seen 500 benign-looking flows.
+
+Not yet run end to end in Docker: check that Prometheus' target `netwatch-api` is up (`http://127.0.0.1:9090/targets`) and that the dashboard's panels fill once traffic flows.
 
 ---
 
