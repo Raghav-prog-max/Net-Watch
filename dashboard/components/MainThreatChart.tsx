@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -23,12 +23,36 @@ interface BucketData {
   topFamily: string;
 }
 
+/** Mapping from button label to the number of hours it represents. */
+const RANGE_OPTIONS = [
+  { label: "1H", hours: 1 },
+  { label: "6H", hours: 6 },
+  { label: "24H", hours: 24 },
+  { label: "7D", hours: 24 * 7 },
+] as const;
+
+type RangeLabel = (typeof RANGE_OPTIONS)[number]["label"];
+
 export default function MainThreatChart({ alerts }: MainThreatChartProps) {
+  const [activeRange, setActiveRange] = useState<RangeLabel>("24H");
+
+  /** The cutoff timestamp: only alerts newer than this are shown. */
+  const cutoffMs = useMemo(() => {
+    const hours = RANGE_OPTIONS.find((r) => r.label === activeRange)!.hours;
+    return Date.now() - hours * 60 * 60 * 1000;
+  }, [activeRange]);
+
+  /** Alerts filtered to the active time range. */
+  const filteredAlerts = useMemo(
+    () => alerts.filter((a) => new Date(a.timestamp).getTime() >= cutoffMs),
+    [alerts, cutoffMs],
+  );
+
   const buckets = useMemo<BucketData[]>(() => {
-    if (alerts.length === 0) return [];
+    if (filteredAlerts.length === 0) return [];
 
     // Order chronologically from oldest to newest
-    const sorted = [...alerts].sort(
+    const sorted = [...filteredAlerts].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
@@ -67,7 +91,13 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
         topFamily,
       };
     });
-  }, [alerts]);
+  }, [filteredAlerts]);
+
+  /** Style helper: returns pill styles for active vs inactive range button. */
+  const pillStyle = (label: RangeLabel): React.CSSProperties =>
+    label === activeRange
+      ? { padding: "4px 12px", borderRadius: "9999px", background: "#FFFFFF", color: "#000000", fontWeight: 600, border: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", cursor: "pointer" }
+      : { padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" };
 
   return (
     <div
@@ -96,19 +126,26 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
             Network Alert Volume &amp; Severity Distribution
           </h2>
           <p style={{ fontSize: "12px", color: "#8E909B", margin: "2px 0 0" }}>
-            {alerts.length > 0
+            {filteredAlerts.length > 0
               ? `Real-time aggregate ingress packets scrutinized across edge gateways`
-              : "Awaiting live alerts from GET /alerts and WS /ws/alerts"}
+              : alerts.length > 0
+                ? `No alerts in the last ${activeRange} window — try a wider range`
+                : "Awaiting live alerts from GET /alerts and WS /ws/alerts"}
           </p>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           {/* Range Selector Pills */}
           <div style={{ display: "flex", backgroundColor: "#050508", padding: "4px", borderRadius: "9999px", border: "1px solid rgba(255, 255, 255, 0.1)", fontSize: "12px" }}>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>1H</button>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>6H</button>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "#FFFFFF", color: "#000000", fontWeight: 600, border: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", cursor: "pointer" }}>24H</button>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>7D</button>
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => setActiveRange(opt.label)}
+                style={pillStyle(opt.label)}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
 
           {/* Legend */}
@@ -141,7 +178,9 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
               textAlign: "center",
             }}
           >
-            No live alerts recorded yet. Run the API and traffic replayer.
+            {alerts.length > 0
+              ? `No alerts match the ${activeRange} window. Try a wider range (e.g. 7D).`
+              : "No live alerts recorded yet. Run the API and traffic replayer."}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
