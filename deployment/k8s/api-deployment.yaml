@@ -1,3 +1,10 @@
+# One replica, replaced rather than rolled. The API keeps state in its process:
+# alert grouping, WebSocket clients, the drift window and the /metrics counters
+# (api/routes/score.py, api/services/). Its alert store is SQLite on a
+# ReadWriteOnce volume. A second pod would group, stream and count only its own
+# share of the traffic, and could not mount the volume on another node. The
+# image runs one uvicorn worker for the same reason. Hence no autoscaler
+# (hpa.yaml), and a short gap in service on each deploy.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,12 +14,9 @@ metadata:
     app.kubernetes.io/name: netwatch-api
     app.kubernetes.io/part-of: netwatch-soc
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: netwatch-api
@@ -20,6 +24,12 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: netwatch-api
+      annotations:
+        # for a Prometheus that discovers pods; deployment/monitoring/prometheus.yml
+        # scrapes the same path
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -42,8 +52,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: netwatch-config
+            # nothing in the API reads these yet (secrets.template.yaml)
             - secretRef:
                 name: netwatch-secrets
+                optional: true
           resources:
             requests:
               cpu: 500m
@@ -70,12 +82,7 @@ spec:
           volumeMounts:
             - name: data-volume
               mountPath: /data/db
-            - name: models-volume
-              mountPath: /app/models
       volumes:
         - name: data-volume
           persistentVolumeClaim:
             claimName: netwatch-data-pvc
-        - name: models-volume
-          persistentVolumeClaim:
-            claimName: netwatch-models-pvc
