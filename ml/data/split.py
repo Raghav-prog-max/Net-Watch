@@ -3,9 +3,14 @@
 Flows from one attack burst are near-duplicates. Splitting them at random puts
 copies of the same burst in train and test, which inflates every metric. We group
 flows into short time blocks and split whole blocks instead.
+
+Each attack family sits in a handful of blocks (CICIDS2017: DDoS 5 of 398,
+PortScan 12), so blocks are shuffled and divided within each family. Shuffling
+them all together put DDoS's 5 in train and val and none in test, where it then
+scored F1 = 0.
 """
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupShuffleSplit
 
 
 def add_blocks(df: pd.DataFrame, block_minutes: int = 5) -> pd.DataFrame:
@@ -19,17 +24,49 @@ def add_blocks(df: pd.DataFrame, block_minutes: int = 5) -> pd.DataFrame:
     return df
 
 
-def make_splits(df, test_size=0.30, random_state=42):
-    """Returns (train, val, test). No time block appears in more than one."""
-    gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
-    train_i, rest_i = next(gss.split(df, groups=df["block"]))
-    train, rest = df.iloc[train_i], df.iloc[rest_i]
+def block_strata(df: pd.DataFrame) -> pd.Series:
+    """The family each time block is split under, indexed by block: the rarest
+    attack family among its flows (fewest flows in `df`), or Benign if it has
+    none. Without a family column every block is in one stratum."""
+    blocks = pd.Index(df["block"].unique(), name="block")
+    if "family" not in df.columns:
+        return pd.Series("all", index=blocks)
+    flows = df["family"].value_counts()
+    attacks = df.loc[df["family"] != "Benign", ["block", "family"]].drop_duplicates()
+    rarest = (attacks.assign(flows=attacks["family"].map(flows))
+              .sort_values(["flows", "family"])
+              .drop_duplicates("block")
+              .set_index("block")["family"])
+    return rarest.reindex(blocks).fillna("Benign")
 
-    gss2 = GroupShuffleSplit(n_splits=1, test_size=0.50, random_state=random_state)
-    val_i, test_i = next(gss2.split(rest, groups=rest["block"]))
-    return (train.reset_index(drop=True),
-            rest.iloc[val_i].reset_index(drop=True),
-            rest.iloc[test_i].reset_index(drop=True))
+
+def _held_out(n_blocks, share):
+    """(val, test) block counts for a stratum of n_blocks: `share` each, but at
+    least one each while train keeps one. Two blocks: one trains, one tests."""
+    if n_blocks >= 3:
+        k = min(max(1, int(n_blocks * share + 0.5)), (n_blocks - 1) // 2)
+        return k, k
+    return (0, 1) if n_blocks == 2 else (0, 0)
+
+
+def make_splits(df, test_size=0.30, random_state=42):
+    """Returns (train, val, test). No time block appears in more than one, and
+    every family found in 3 or more blocks has blocks in all three (2 blocks:
+    train and test).
+
+    Within each stratum (block_strata), blocks are shuffled and test_size of
+    them divided equally between val and test."""
+    strata = block_strata(df)
+    rng = np.random.RandomState(random_state)
+    side = {}
+    for family in sorted(strata.unique()):
+        blocks = sorted(strata.index[strata == family])
+        blocks = [blocks[i] for i in rng.permutation(len(blocks))]
+        n_val, n_test = _held_out(len(blocks), test_size / 2)
+        for i, block in enumerate(blocks):
+            side[block] = "val" if i < n_val else "test" if i < n_val + n_test else "train"
+    where = df["block"].map(side)
+    return tuple(df[where == name].reset_index(drop=True) for name in ("train", "val", "test"))
 
 
 def split_out_novel(train, val, test, trained_families):
