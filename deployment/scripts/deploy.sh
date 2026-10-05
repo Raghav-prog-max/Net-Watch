@@ -2,8 +2,9 @@
 # ==============================================================================
 # NetWatch AI SOC — Automated Production Deployment Script
 # ==============================================================================
-# Validates environment, builds production containers, performs zero-downtime
-# rollout with health verification, and rolls back on failure.
+# Validates the environment, keeps the running images as :previous, builds and
+# starts the stack, checks it through nginx, and rolls back to :previous if the
+# check fails.
 # ==============================================================================
 
 set -euo pipefail
@@ -44,36 +45,57 @@ if [ ! -f "${ENV_FILE}" ]; then
     cp "${DEPLOY_DIR}/env.production.example" "${ENV_FILE}"
     log_warn "Please review and edit ${ENV_FILE} before running in actual production!"
 fi
+set -a; . "${ENV_FILE}"; set +a
+# what users open; the dashboard is built to call <PUBLIC_URL>/api
+PUBLIC_URL="${PUBLIC_URL:-http://localhost}"
+COMPOSE=(docker compose -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml" --env-file "${ENV_FILE}")
 
-# ── 2. Validate Models Exist ─────────────────────────────────────────────────
+# ── 2. Validate Models and Certificates ──────────────────────────────────────
 log_info "Checking trained model artifacts..."
-if [ ! -d "${ROOT_DIR}/models/v1" ] || [ ! -f "${ROOT_DIR}/models/v1/classifier.joblib" ]; then
-    log_warn "models/v1/classifier.joblib not found. Generating models via make train..."
-    (cd "${ROOT_DIR}" && make train)
+if [ ! -f "${ROOT_DIR}/models/v1/classifier.joblib" ]; then
+    log_error "models/v1/classifier.joblib not found: train first (make data && make train)."
+    exit 1
+fi
+if [ "${NGINX_SITE:-http}" = "https" ] && [ ! -f "${DEPLOY_DIR}/nginx/ssl/fullchain.pem" ]; then
+    log_error "NGINX_SITE=https but deployment/nginx/ssl/fullchain.pem is missing: run scripts/init-ssl.sh."
+    exit 1
 fi
 
-# ── 3. Build Production Containers ───────────────────────────────────────────
+# ── 3. Keep What Runs Now, Then Build ────────────────────────────────────────
+# rollback.sh restores these if the new build fails its health check. Only the
+# image of a container that is running and healthy is kept: tagging whatever
+# :production held would, after a failed deploy, replace the good :previous
+# with the broken build.
+for svc in api dashboard; do
+    cid="$("${COMPOSE[@]}" ps -q "${svc}" 2> /dev/null || true)"
+    if [ -n "${cid}" ] && [ "$(docker inspect -f '{{.State.Health.Status}}' "${cid}" 2> /dev/null)" = "healthy" ]; then
+        docker tag "$(docker inspect -f '{{.Image}}' "${cid}")" "netwatch-${svc}:previous"
+    else
+        log_warn "netwatch-${svc} is not running healthy: keeping the :previous image it has"
+    fi
+done
 log_info "Building production containers with Docker Compose..."
-docker compose \
-    -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml" \
-    --env-file "${ENV_FILE}" \
-    build --pull
+"${COMPOSE[@]}" build --pull
 
-# ── 4. Zero-Downtime Rollout ─────────────────────────────────────────────────
+# ── 4. Rollout ───────────────────────────────────────────────────────────────
+# The API restarts in place (one container: its state lives in the process), so
+# there is a short gap while it loads the models.
 log_info "Starting production services in background..."
-docker compose \
-    -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml" \
-    --env-file "${ENV_FILE}" \
-    up -d --remove-orphans
+# `up` itself fails when the API never turns healthy (the dashboard waits on
+# it). Under `set -e` that ended the script here, before the rollback below,
+# and left the broken build running.
+UP_OK=true
+"${COMPOSE[@]}" up -d --remove-orphans || UP_OK=false
 
 # ── 5. Run Healthcheck Verification ──────────────────────────────────────────
 log_info "Waiting for services to become healthy..."
 MAX_ATTEMPTS=20
 ATTEMPT=1
 HEALTHY=false
+[ "${UP_OK}" = true ] || ATTEMPT=$((MAX_ATTEMPTS + 1))
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-    if "${DEPLOY_DIR}/scripts/healthcheck.sh" > /dev/null 2>&1; then
+    if "${DEPLOY_DIR}/scripts/healthcheck.sh" "${HEALTHCHECK_URL:-${PUBLIC_URL}}" > /dev/null 2>&1; then
         HEALTHY=true
         break
     fi
@@ -86,14 +108,15 @@ echo ""
 if [ "$HEALTHY" = true ]; then
     log_success "=================================================="
     log_success " NetWatch AI SOC successfully deployed to PROD!"
-    log_success " Dashboard: http://localhost:80 (or configured domain)"
-    log_success " API:       http://localhost:80/score"
-    log_success " WebSocket: ws://localhost:80/ws/alerts"
+    log_success " Dashboard: ${PUBLIC_URL}"
+    log_success " API:       ${PUBLIC_URL}/api (scoring: POST /api/score)"
+    log_success " WebSocket: ${PUBLIC_URL/http/ws}/api/ws/alerts"
     log_success "=================================================="
 else
-    log_error "Healthcheck timed out or failed! Viewing recent container logs:"
-    docker compose -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml" logs --tail=50
-    log_warn "Initiating automated rollback to previous container state..."
+    log_error "Healthcheck timed out or failed:"
+    "${DEPLOY_DIR}/scripts/healthcheck.sh" "${HEALTHCHECK_URL:-${PUBLIC_URL}}" || true
+    "${COMPOSE[@]}" logs --tail=50
+    log_warn "Initiating automated rollback to the images from before this deploy..."
     "${DEPLOY_DIR}/scripts/rollback.sh"
     exit 1
 fi

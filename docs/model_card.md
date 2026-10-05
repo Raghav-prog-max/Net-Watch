@@ -1,14 +1,12 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-09-30T10:41:27Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
-
-> **Every figure below comes from synthetic traffic, not CICIDS2017.** `data/raw/` holds output from `scripts/make_synthetic.py`, which exists so the pipeline can run before the real download lands. These numbers show the system works end to end; they are not results and must not be reported as such. Place the CICIDS2017 files in `data/raw/`, run `make data && make train`, and regenerate this card.
+Generated from `reports/metrics.json` (2026-10-05T04:30:34Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 ## What it does
 
 Scores each network flow with two models and turns their verdicts into an alert for a human analyst, or into silence.
 
-- **Classifier** (lightgbm): names one of 5 known attack families, or benign.
+- **Classifier** (lightgbm): names one of 6 known attack families, or benign.
 - **Anomaly detector** (Isolation Forest): trained on benign traffic only, and asks whether a flow looks normal at all. Features are log-scaled first, because flow features span orders of magnitude and raw scaling hides quiet attacks.
 - **Out-of-family check**: a classifier always returns one of the classes it was trained on, so a novel attack arrives with a confident but wrong label. This checks whether the flow resembles the family it was assigned, and reports Unknown when it does not.
 
@@ -16,25 +14,25 @@ An alert is raised if either model objects. Nothing in the system blocks, drops 
 
 ## Training data
 
-Synthetic traffic shaped like CICIDS2017: 2,563,107 flows after cleaning, 69 features. Split into 5-minute time blocks so no block appears in two splits; a test fails the build if one does.
+CICIDS2017 flow records: 2,687,892 flows after cleaning, 70 features. Split into 5-minute time blocks so no block appears in two splits, divided within each attack family so every family is in test; a test fails the build if either breaks.
 
 | Split | Flows | Note |
 | --- | ---: | --- |
-| Train | 517,341 | benign sampled to 20%; attacks kept whole |
-| Validation | 308,995 | sets both thresholds |
-| Test | 310,000 | never sampled; every figure below |
+| Train | 477,925 | benign sampled to 20%; attacks kept whole |
+| Validation | 299,213 | sets both thresholds |
+| Test | 454,638 | never sampled; every figure below |
 
 | Family | Flows | Role |
 | --- | ---: | --- |
-| Benign | 2,137,366 | trained |
-| DoS | 193,745 | trained |
-| DDoS | 128,014 | trained |
-| PortScan | 90,694 | trained |
-| BruteForce | 9,150 | trained |
-| Unknown | 2,143 | trained |
-| Bot | 1,948 | trained |
+| Benign | 2,224,370 | trained |
+| DoS | 199,420 | trained |
+| DDoS | 128,023 | trained |
+| PortScan | 119,922 | trained |
+| BruteForce | 11,976 | trained |
+| WebAttack | 2,180 | trained |
+| Bot | 1,954 | trained |
 | Infiltration | 36 | never trained on: test only |
-| Heartbleed | 11 | trained |
+| Heartbleed | 11 | never trained on: test only |
 
 Removed before training so the model cannot memorise hosts: flow ID, source and destination IP, source port. The timestamp is kept only until the data is split.
 
@@ -46,20 +44,21 @@ Surfacing suspicious traffic to a SOC analyst, who decides what happens next. Ea
 
 ## Performance
 
-End-to-end System Macro-F1 **0.835** across benign and 5 attack families. Measured as a full system (classifier + anomaly detector), it produced **112.6 false alerts per 10,000 benign flows** (1.13%). This is over the 0.5% budget.
+End-to-end System Macro-F1 **0.816** across benign and 6 attack families. Measured as a full system (classifier + anomaly detector), it produced **69.6 false alerts per 10,000 benign flows** (0.70%). This is over the 0.5% budget.
 
-As a component, the classifier alone scored Macro-F1 0.979 and produced 9.0 false alerts/10k (0.09%), meeting its isolated budget constraint of 0.5% at threshold 0.0052.
+As a component, the classifier alone scored Macro-F1 0.943 and produced 58.2 false alerts/10k (0.58%) at threshold 0.0001, set on validation for its 0.4% share of the budget; on the test flows it is over that share.
 
 No accuracy figure is reported: about 80% of traffic is benign, so a model that never alerts would score about 80%.
 
 | Class | Precision | Recall | F1 | PR-AUC | Test flows |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Benign | 1.000 | 0.999 | 1.000 | 1.000 | 236,177 |
-| BruteForce | 0.995 | 1.000 | 0.998 | 1.000 | 1,254 |
-| DDoS | 0.998 | 1.000 | 0.999 | 1.000 | 22,355 |
-| PortScan | 1.000 | 1.000 | 1.000 | 1.000 | 23,771 |
-| DoS | 0.997 | 1.000 | 0.998 | 1.000 | 26,110 |
-| Bot | 0.803 | 0.973 | 0.880 | 0.953 | 331 |
+| Benign | 1.000 | 0.994 | 0.997 | 0.999 | 265,050 |
+| Bot | 0.488 | 1.000 | 0.656 | 0.955 | 284 |
+| BruteForce | 0.996 | 1.000 | 0.998 | 1.000 | 2,024 |
+| DDoS | 0.999 | 1.000 | 0.999 | 1.000 | 33,540 |
+| PortScan | 0.982 | 1.000 | 0.991 | 0.993 | 69,064 |
+| DoS | 0.998 | 0.997 | 0.997 | 1.000 | 84,302 |
+| WebAttack | 0.945 | 0.986 | 0.965 | 0.993 | 368 |
 
 **Note on class weights:** The `class_weight` strategy was chosen over `no_handling` (the validation macro-F1 winner) because it significantly improves recall on the Bot family, keeping performance balanced across attacks.
 
@@ -70,13 +69,13 @@ To keep the full system within the false-alert budget, the classifier threshold 
 
 | Detector flag rate | Classifier threshold | Classifier TPR | Novel recall |
 | --- | --- | --- | --- |
-| 0.00% | 0.0047 | 99.89% | 0.00% |
-| 0.10% | 1.0000 | 96.02% | 0.00% |
-| 0.20% | 1.0000 | 79.77% | 0.00% |
-| 0.30% | 1.0000 | 71.17% | 0.00% |
-| 0.40% | 1.0000 | 64.86% | 0.00% |
-| 0.50% | — | 0.00% | 0.00% |
-| 1.00% | — | 0.00% | 100.00% |
+| 0.00% | 0.0000 | 99.99% | 2.13% |
+| 0.10% | 0.0000 | 99.99% | 48.94% |
+| 0.20% | 0.0000 | 99.99% | 53.19% |
+| 0.30% | 0.0002 | 99.99% | 57.45% |
+| 0.40% | 0.2749 | 99.94% | 59.57% |
+| 0.50% | — | 0.00% | 61.70% |
+| 1.00% | — | 0.00% | 87.23% |
 
 ### Attacks it was never trained on
 
@@ -84,23 +83,36 @@ Leave-one-family-out: each family is removed from training entirely, a fresh mod
 
 | Held-out family | Flows | Classifier alone | Detector alone | Full system | Benign FPR |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| PortScan | 23,771 | 3.5% | 0.4% | 3.6% | 1.38% |
-| BruteForce | 1,254 | 0.5% | 0.0% | 0.5% | 1.11% |
-| WebAttack | — | — | — | — | no test rows for this family |
-| Bot | 331 | 0.0% | 1.8% | 1.8% | 1.13% |
+| PortScan | 69,064 | 3.7% | 0.0% | 3.7% | 0.46% |
+| BruteForce | 2,024 | 43.1% | 0.0% | 43.1% | 0.82% |
+| WebAttack | 368 | 96.2% | 0.0% | 96.2% | 0.72% |
+| Bot | 284 | 0.0% | 0.0% | 0.0% | 0.64% |
 
-Families withheld from training altogether (Infiltration, 2 test flows): 100.0% raised an alert, and **100.0% were shown to the analyst as Unknown** rather than under a known family's name.
+Families withheld from training altogether (Heartbleed, Infiltration; all 47 of their flows, as none were trained on): 48.9% raised an alert, and **46.8% were shown to the analyst as Unknown** rather than under a known family's name.
+
+### Splitting the false-alert budget between the two models
+
+The same models at other cut-offs, both chosen on validation; nothing is retrained. The first row is the configuration in use (`train.classifier_fpr_budget` and `anomaly.benign_flag_rate` in `ml/config.yaml`). Each row trades false alerts against catching attacks the classifier has never seen.
+
+| Classifier budget | Detector flag rate | False alerts / 10k (val) | False alerts / 10k (test) | Macro-F1 | Never-trained families alerted | LOFO PortScan | LOFO BruteForce | LOFO WebAttack | LOFO Bot | 
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | 
+| 0.40% (in use) | 0.10% | 31.8 | 69.6 (over) | 0.943 | 48.9% | 3.7% | 43.1% | 96.2% | 0.0% | 
+| 0.50% | off | 22.0 | 58.2 (over) | 0.943 | 2.1% | 8.0% | 43.1% | 96.5% | 0.0% | 
+| 0.25% | 0.25% | 46.5 | 85.1 (over) | 0.943 | 57.5% | 2.0% | 4.1% | 96.2% | 0.0% | 
+| 0.10% | 0.40% | 49.7 | 84.4 (over) | 0.970 | 59.6% | 0.4% | 0.0% | 26.9% | 0.0% | 
+| 0.50% (before 30 Sep) | 1.00% | 121.2 | 146.6 (over) | 0.943 | 87.2% | 8.1% | 43.1% | 96.5% | 0.0% | 
 
 ## Failure modes
 
 Observed on the test set, most severe first.
 
-- **Novel attacks that look like normal traffic are missed.** Held out of training, BruteForce is caught only 0.5% of the time: it sits close enough to benign traffic that neither model separates it.
-- **Bot is the weakest known family**, at 0.973 recall.
-- **Benign and DoS are confused with each other.** 80 Benign flows were labelled DoS, and 8 the other way.
-- **False alerts on benign traffic concentrate on DoS**: 80 of 212 (38%) were labelled DoS.
-- **Some novel attacks keep a confident wrong name.** 0.0% of never-trained-on flows are still reported under a known family's label.
-- **The out-of-family check has a cost.** It relabels 0.9% of correct alerts on known families as Unknown (73,804 alerts measured), and 6 benign flows.
+- **The system is over its false-alert budget.** Analysts would see 69.6 false alerts per 10,000 benign flows against a budget of 50, because the anomaly detector's flags come on top of the classifier's. The table above shows splits of the budget that stay within it.
+- **Novel attacks that look like normal traffic are missed.** Held out of training, Bot is caught only 0.0% of the time: it sits close enough to benign traffic that neither model separates it.
+- **WebAttack is the weakest known family**, at 0.986 recall.
+- **Benign and PortScan are confused with each other.** 994 Benign flows were labelled PortScan.
+- **False alerts on benign traffic concentrate on PortScan**: 994 of 1,542 (64%) were labelled PortScan.
+- **Some novel attacks keep a confident wrong name.** 53.2% of never-trained-on flows are still reported under a known family's label.
+- **The out-of-family check has a cost.** It relabels 0.4% of correct alerts on known families as Unknown (189,582 alerts measured), and 52 benign flows.
 - **Drift raises the false-alert rate.** As normal traffic changes shape it moves away from what the detector learned, so more of it alerts, and some reads as Unknown.
 
 ## Known limitations
@@ -117,11 +129,10 @@ The same classifier, settings, benign downsampling and threshold rule, with only
 
 | Split | Macro-F1 | False alerts / 10k benign | Test flows from a block also in training |
 | --- | --- | --- | --- |
-| Time blocks (honest) | 0.979 | 9.0 | 0% |
-| Random rows (naive) | 0.4391 (0.4391–0.95 over 5 seeds) | 4523.6 | 100% |
+| Time blocks (honest) | 0.9434 | 58.2 | 0% |
+| Random rows (naive) | 0.9445 (0.9445–0.9604 over 5 seeds) | 32.6 | 100% |
 
-**No inflation was measured.** Every random split scored at or below the honest one, although 100% of its test flows came from time blocks also used in training.
- The synthetic generator's bursts carry independent noise per flow, so they are not near-duplicates and there is little to memorise. This has to be re-measured on CICIDS2017, where flows inside one attack burst are expected to be near-identical; a test with deliberately leaky data (`tests/test_naive_split.py`) shows the comparison does detect inflation when it exists.
+The random split scores higher on every seed, by +0.001 macro-F1 on the main one. That gap is what a leaky evaluation would have let us claim.
 
 **Not yet measured** — the handbook also requires a cross-dataset test on UNSW-NB15.
 

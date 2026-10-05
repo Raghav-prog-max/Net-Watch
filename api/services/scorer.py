@@ -15,6 +15,7 @@ import joblib
 import numpy as np
 import yaml
 
+from ml import registry
 from ml.drift.monitor import ks_test, status as drift_status, window_psi
 from ml.explain import Explainer
 from ml.models import classifier as clf_mod
@@ -24,7 +25,8 @@ from .mitre import get_mitre_dict
 # Resolved from the repository root, so the API finds its models whatever
 # directory uvicorn is started from.
 ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", str(ROOT / "models" / "v1"))
+# the bundle models/ACTIVE names (v1 without it): scripts/promote.py switches it
+MODEL_DIR = os.environ.get("NETWATCH_MODEL_DIR", str(registry.model_dir(registry.active_version())))
 
 # ml/config.yaml `drift`; these defaults apply only if a key is missing
 DRIFT_DEFAULTS = {
@@ -38,6 +40,50 @@ def drift_config() -> Dict[str, Any]:
     path = ROOT / "ml" / "config.yaml"
     cfg = yaml.safe_load(open(path)) if path.exists() else {}
     return {**DRIFT_DEFAULTS, **(cfg.get("drift") or {})}
+
+
+# IANA protocol numbers, as CICIDS2017's Protocol column holds them
+PROTOCOLS = {6: "TCP", 17: "UDP", 1: "ICMP"}
+# Never shown to the analyst: a ground-truth label decides the triage for them,
+# and a real network tap has none. The replayer used to send one as `truth`.
+LABEL_KEYS = {"truth", "label", "family"}
+
+
+def flow_facts(features: Dict[str, float], meta: Dict[str, Any]) -> Dict[str, Any]:
+    """The alert's `flow`, as the handbook's alert schema has it: dst_port,
+    protocol, duration_ms, fwd_packets, bwd_packets. From the request's
+    display-only `meta` where it gives them, else from the model inputs
+    (CICIDS2017 column names; Flow Duration is in microseconds). A fact the data
+    does not carry (the synthetic data has no Protocol) is left out, not sent
+    as null. Other `meta` keys, IPs say, pass through as text; labels do not."""
+    def number(value):
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return None
+        return value if np.isfinite(value) else None
+
+    facts: Dict[str, Any] = {}
+    port = number(meta.get("dst_port", features.get("Destination Port")))
+    if port is not None:
+        facts["dst_port"] = int(port)
+    protocol = meta.get("protocol")
+    if protocol is None and number(features.get("Protocol")) is not None:
+        protocol = PROTOCOLS.get(int(features["Protocol"]), str(int(features["Protocol"])))
+    if protocol is not None:
+        facts["protocol"] = str(protocol)
+    duration = number(features.get("Flow Duration"))
+    if duration is not None:
+        # most flows are shorter than a millisecond: keep the fraction
+        facts["duration_ms"] = round(duration / 1000, 3)
+    for key, column in (("fwd_packets", "Total Fwd Packets"), ("bwd_packets", "Total Backward Packets")):
+        packets = number(features.get(column))
+        if packets is not None:
+            facts[key] = int(round(packets))
+    for k, v in meta.items():
+        if k not in facts and k not in LABEL_KEYS:
+            facts[k] = str(v)
+    return facts
 
 
 class ModelsNotFound(RuntimeError):
@@ -137,7 +183,7 @@ class Scorer:
             alerts.append({
                 "id": f"alt_{uuid.uuid4().hex[:10]}",
                 "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "flow": {k: str(v) for k, v in meta.items()},
+                "flow": flow_facts(flows[i], meta),
                 "prediction": prediction,
                 "anomaly_score": core["anomaly_score"],
                 "is_novel": core["is_novel"],

@@ -68,7 +68,7 @@ def flows():
 
 def _score(scorer, rows):
     feats = [{f: float(r[f]) for f in scorer.features} for _, r in rows.iterrows()]
-    return scorer.score(feats, [{"truth": t} for t in rows["family"]])
+    return scorer.score(feats, [{"truth": t, "src_ip": "10.0.0.5"} for t in rows["family"]])
 
 
 @needs_models
@@ -116,8 +116,16 @@ def test_same_port_different_traffic_gives_different_verdicts(scorer, flows):
 @needs_models
 def test_alert_carries_explanation_and_metadata(scorer, flows):
     rows = flows[flows["family"] == "PortScan"].iloc[:5]
-    for a in _score(scorer, rows):
-        assert a["flow"]["truth"] == "PortScan"
+    scored = [(r, a) for i, r in rows.iterrows() for a in _score(scorer, rows.loc[[i]])]
+    assert scored, "PortScan flows should alert"
+    for r, a in scored:
+        # the handbook's flow facts, read off the features; the label never reaches the analyst
+        assert "truth" not in a["flow"]
+        assert a["flow"]["src_ip"] == "10.0.0.5", "other display-only meta passes through"
+        assert a["flow"]["dst_port"] == int(r["Destination Port"])
+        assert a["flow"]["duration_ms"] == round(float(r["Flow Duration"]) / 1000, 3)
+        assert a["flow"]["fwd_packets"] == round(float(r["Total Fwd Packets"]))
+        assert "protocol" not in a["flow"], "the synthetic data has no Protocol: left out, not null"
         assert len(a["explanation"]) == 3
         assert {e["feature"] for e in a["explanation"]} <= set(scorer.features)
         assert a["model_version"] == Path(MODEL_DIR).name
@@ -182,3 +190,36 @@ def test_drift_thresholds_come_from_the_config():
     for key in ("window", "warn_psi", "drift_psi", "alert_rate_warning_multiplier",
                 "alert_rate_drift_multiplier", "top_features_ks"):
         assert got[key] == cfg[key]
+
+
+# ------------------------------------------------------- flow facts (no models)
+
+def test_flow_facts_are_the_handbooks_fields():
+    from api.services.scorer import flow_facts
+    features = {"Destination Port": 443.0, "Protocol": 6.0, "Flow Duration": 12345.0,
+                "Total Fwd Packets": 3.0, "Total Backward Packets": 0.0, "Flow Bytes/s": 1.0}
+    assert flow_facts(features, {}) == {"dst_port": 443, "protocol": "TCP", "duration_ms": 12.345,
+                                        "fwd_packets": 3, "bwd_packets": 0}
+
+
+def test_flow_facts_never_show_a_label():
+    """The replayer sent the ground-truth family as `truth`, and the detail page
+    showed it to the analyst."""
+    from api.services.scorer import flow_facts
+    out = flow_facts({"Flow Duration": 1.0}, {"truth": "DDoS", "label": "x", "family": "y",
+                                               "src_ip": "10.0.0.5"})
+    assert out == {"duration_ms": 0.001, "src_ip": "10.0.0.5"}
+
+
+def test_flow_facts_leave_out_what_the_data_lacks():
+    from api.services.scorer import flow_facts
+    assert flow_facts({}, {}) == {}
+    assert flow_facts({"Protocol": 17.0}, {})["protocol"] == "UDP"
+    assert flow_facts({"Protocol": 47.0}, {})["protocol"] == "47"
+    assert flow_facts({"Flow Duration": float("nan"), "Destination Port": float("inf")}, {}) == {}
+
+
+def test_meta_overrides_the_features():
+    from api.services.scorer import flow_facts
+    out = flow_facts({"Destination Port": 80.0}, {"dst_port": "8080", "protocol": "TCP"})
+    assert out["dst_port"] == 8080 and out["protocol"] == "TCP"

@@ -11,6 +11,9 @@ Scenarios:
   day     the held-out day (data/splits/drift.pkl), unchanged: real drift,
           CICIDS2017 only
   mixed   everything, in timestamp order
+
+Every scenario draws on flows the models were not fitted on: the test split,
+plus all flows of the families the classifier never trains on (replay_pool).
 """
 import argparse
 import json
@@ -123,7 +126,24 @@ def drift_ramp(df, limit=None, warn_level=1.2, peak=3.0):
     return perturb(out, factor)
 
 
+def replay_pool(df):
+    """The flows the replayer may send, from the processed set `df`: none the
+    models were fitted on. It sent every processed flow, training rows included,
+    so the demo's false-alert rate and catches were partly measured on traffic
+    the models had learned. The test split is the held-out time blocks; the
+    families the classifier never trains on are test material whichever split
+    they fell in (ml/data/split.py split_out_novel), so all of theirs come too."""
+    if not TEST_SPLIT.exists():
+        print(f"{TEST_SPLIT} not found (run `make train`); replaying every processed "
+              "flow, training ones included")
+        return df
+    test = pd.read_pickle(TEST_SPLIT)
+    return pd.concat([test[test["family"].isin(TRAIN_FAMILIES)],
+                      df[~df["family"].isin(TRAIN_FAMILIES)]], ignore_index=True)
+
+
 def pick(df, scenario, limit=None):
+    """`df` is the replay pool (replay_pool), already shuffled."""
     if scenario == "normal":
         return df[df["family"] == "Benign"]
     if scenario == "known":
@@ -131,12 +151,10 @@ def pick(df, scenario, limit=None):
     if scenario == "novel":
         return df[~df["family"].isin(TRAIN_FAMILIES)]
     if scenario == "drift":
-        # A perturbed copy of test: it moves the monitor on demand, on any data.
-        # It used to replay the held-out day whenever there was one, and nothing
-        # had checked that an ordinary Monday trips the monitor; that is `day`.
-        if TEST_SPLIT.exists():
-            return drift_ramp(pd.read_pickle(TEST_SPLIT), limit)
-        print(f"{TEST_SPLIT} not found (run `make train`); perturbing all processed flows instead")
+        # A perturbed copy of test (the pool's benign flows are test's): it moves
+        # the monitor on demand, on any data. It used to replay the held-out day
+        # whenever there was one, and nothing had checked that an ordinary Monday
+        # trips the monitor; that is `day`.
         return drift_ramp(df, limit)
     if scenario == "day":
         # real drift: a whole day the model never saw, unchanged
@@ -145,7 +163,8 @@ def pick(df, scenario, limit=None):
                              "(CICIDS2017) has a held-out day. Use --scenario drift.")
         out = pd.read_pickle(DRIFT_SPLIT).sample(frac=1.0, random_state=3).reset_index(drop=True)
         return out.iloc[:limit] if limit else out
-    return df
+    # mixed: everything, in the order it happened (the pool is shuffled)
+    return df.sort_values("Timestamp", kind="stable") if "Timestamp" in df.columns else df
 
 
 def post(url, batch):
@@ -157,15 +176,14 @@ def post(url, batch):
 
 def build_batch(chunk, features):
     """Rows -> the POST /score payload items (api/schemas.py ScoredFlow)."""
-    return [{"features": {f: float(r[f]) for f in features},
-             "meta": {"dst_port": str(int(r.get("Destination Port", 0))),
-                      "truth": str(r["family"])}}
-            for _, r in chunk.iterrows()]
+    # no meta: the API reads the flow facts off the features, and the family is
+    # the answer the system is being tested on, not something to show analysts
+    return [{"features": {f: float(r[f]) for f in features}} for _, r in chunk.iterrows()]
 
 
 def main(a):
     cfg = yaml.safe_load(open(a.config))
-    df = pd.read_pickle(cfg["paths"]["processed"]).sample(frac=1.0, random_state=1)
+    df = replay_pool(pd.read_pickle(cfg["paths"]["processed"])).sample(frac=1.0, random_state=1)
     rows = pick(df, a.scenario, a.limit)
     features = feature_columns(df)
     print(f"{a.scenario}: {len(rows):,} flows at {a.rate}/s -> {a.url}")
@@ -184,7 +202,7 @@ def main(a):
         sent += len(batch); alerted += res.get("alerted", len(res["alerts"]))
         for al in res["alerts"][:2]:
             print(f"  {al['severity']['level']:<8} {al['prediction']['family']:<10} "
-                  f"truth={al['flow'].get('truth', '?')}")
+                  f"x{al.get('flow_count', 1)}")
         time.sleep(len(batch) / max(a.rate, 1))
     print(f"sent {sent} flows, {alerted} raised an alert ({100 * alerted / max(sent, 1):.1f}%)")
 

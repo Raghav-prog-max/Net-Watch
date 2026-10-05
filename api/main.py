@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -30,11 +31,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NetWatch API", version="1.0.0", lifespan=lifespan)
 
-# Allow all CORS for demo purposes
+
+def allowed_origins(value):
+    """ALLOWED_ORIGINS: the comma-separated origins a dashboard on another origin
+    is served from. Unset means any origin, which the local demo needs (dashboard
+    on :3000, API on :8000); behind nginx both share one origin and CORS is not
+    involved. deployment/env.production.example set it, but nothing read it."""
+    return [o.strip() for o in (value or "*").split(",") if o.strip()] or ["*"]
+
+
+_origins = allowed_origins(os.environ.get("ALLOWED_ORIGINS"))
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    # The dashboard sends no cookies. Credentials with "*" would let any site
+    # call the API with a visitor's cookies, so only named origins get them.
+    allow_credentials="*" not in _origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

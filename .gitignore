@@ -3,6 +3,8 @@ data/processed/*
 data/splits/*
 data/alerts.db
 models/v*/
+# which bundle the API serves (scripts/promote.py): local state, like netwatch.db
+models/ACTIVE
 reports/*
 __pycache__/
 *.pyc
@@ -25,3 +27,10 @@ venv/
 netwatch.db
 .pytest_cache/
 .env
+
+# Deployment secrets and state: the production env file, TLS certificates and keys
+# (scripts/init-ssl.sh), and backups (scripts/backup.sh)
+deployment/.env.production
+deployment/nginx/ssl/*
+!deployment/nginx/ssl/.gitkeep
+backups/
