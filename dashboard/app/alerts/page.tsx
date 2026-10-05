@@ -80,12 +80,15 @@ export default function AlertFeed() {
     }
   }
 
+  const [familyFilter, setFamilyFilter] = useState<string | null>(null);
+
   // Filtered alert list, most severe first (handbook: "sorted by severity")
   const filteredAlerts = useMemo(() => {
     return alerts.filter((a) => {
       if (level !== "All" && a.severity.level !== level) return false;
       if (novelOnly && !a.is_novel) return false;
       if (statusFilter !== "All" && a.status !== statusFilter) return false;
+      if (familyFilter && a.prediction.family !== familyFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const src = a.flow.src_ip?.toLowerCase() ?? "";
@@ -100,7 +103,7 @@ export default function AlertFeed() {
       return true;
     }).sort((x, y) =>
       y.severity.score - x.severity.score || y.timestamp.localeCompare(x.timestamp));
-  }, [alerts, level, novelOnly, statusFilter, searchQuery]);
+  }, [alerts, level, novelOnly, statusFilter, familyFilter, searchQuery]);
 
   // counts by family across everything loaded, largest first
   const familyCounts = useMemo(() => {
@@ -244,11 +247,26 @@ export default function AlertFeed() {
       {familyCounts.length > 0 && (
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px", fontSize: "12px" }}>
           <span style={{ color: "var(--nw-text-muted)", alignSelf: "center" }}>By family:</span>
-          {familyCounts.map(([fam, n]) => (
-            <span key={fam} className={`nw-pill ${fam === "Unknown" ? "nw-pill-amber" : "nw-pill-purple"}`}>
-              {fam} {n}
-            </span>
-          ))}
+          {familyCounts.map(([fam, n]) => {
+            const isActive = familyFilter === fam;
+            return (
+              <button
+                key={fam}
+                onClick={() => setFamilyFilter(isActive ? null : fam)}
+                className={`nw-pill ${fam === "Unknown" ? "nw-pill-amber" : "nw-pill-purple"}`}
+                style={{
+                  cursor: "pointer",
+                  border: "none",
+                  outline: "none",
+                  opacity: familyFilter && !isActive ? 0.4 : 1,
+                  boxShadow: isActive ? "0 0 0 2px rgba(255,255,255,0.2)" : "none",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {fam} {n}
+              </button>
+            );
+          })}
         </div>
       )}
 
