@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import copy
 from collections import Counter
@@ -6,7 +7,7 @@ from pathlib import Path
 
 import yaml
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ml import registry
 
@@ -17,10 +18,12 @@ except ImportError:
 
 from ..db.models import AlertModel
 from ..db.session import get_db
+from ..services import telemetry
 from ..services.drift_service import compute_drift
-from ..services.scorer import MODEL_DIR, ROOT
+from ..services.scorer import MODEL_DIR, ROOT, ModelsNotFound, get_scorer
 from .score import scorer_dependency
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 # the report of the bundle being served, so the figures match the models
@@ -58,6 +61,39 @@ def get_drift(scorer=Depends(scorer_dependency), db: Session = Depends(get_db)):
     against the training reference, alert rates, family mix, the analyst
     false-positive share (api/services/drift_service.py)."""
     return compute_drift(scorer, db)
+
+
+def optional_scorer():
+    """The scorer, or None before `make train`: /metrics still has counters and
+    alert counts to report then."""
+    try:
+        return get_scorer()
+    except ModelsNotFound:
+        return None
+
+
+@router.get("/metrics")
+def prometheus_metrics(scorer=Depends(optional_scorer), db: Session = Depends(get_db)):
+    """Prometheus text format (api/services/telemetry.py), scraped by
+    deployment/monitoring/prometheus.yml. Prometheus scraped this path before it
+    existed, so every target was down and the Grafana dashboard was empty."""
+    counts = Counter(status for (status,) in db.query(AlertModel.status).all())
+    state = {"alerts": {s: counts.get(s, 0) for s in TRIAGE_STATUSES},
+             "model_version": Path(MODEL_DIR).name}
+    if REPORT_PATH.exists():
+        report = json.load(open(REPORT_PATH))
+        system = report.get("system")
+        state["report"] = {
+            "false_alerts_per_10k": (system or report["main"])["false_alerts_per_10k_benign_flows"],
+            "budget_per_10k": (system or {}).get("budget_per_10k"),
+        }
+    if scorer is not None:
+        try:
+            state["drift"] = compute_drift(scorer, db)
+        except Exception:
+            # a scrape still reports what it can; the failure shows on /metrics/drift
+            log.exception("drift report failed during a /metrics scrape")
+    return Response(telemetry.exposition(state), media_type=telemetry.CONTENT_TYPE)
 
 
 VERSION_HISTORY = [

@@ -1,14 +1,17 @@
 # ==============================================================================
 # NetWatch AI SOC — Production Monitoring & Observability Stack
 # ==============================================================================
-# Prometheus metric scraping + Grafana visual dashboards for system health,
-# ML inference latency, alert rate, and drift metrics.
+# Prometheus scrapes the API's /metrics on the production network; Grafana comes
+# up with Prometheus as its data source and the NetWatch dashboard already loaded
+# (deployment/monitoring/grafana/provisioning).
 #
-# Usage:
-#   docker compose -f deployment/docker/docker-compose.monitoring.yml up -d
+# Usage, from the repository root, after docker-compose.prod.yml is up (it
+# creates the network):
+#   docker compose -f deployment/docker/docker-compose.monitoring.yml --env-file deployment/.env.production up -d
+# Grafana: http://<host>:${GRAFANA_PORT:-3001}, user admin, GRAFANA_ADMIN_PASSWORD.
 # ==============================================================================
 
-version: '3.8'
+name: netwatch-monitoring
 
 networks:
   netwatch-prod-network:
@@ -32,9 +35,9 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
+    # Prometheus has no login: this host only. Grafana reaches it on the network.
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     networks:
       - netwatch-prod-network
 
@@ -43,14 +46,20 @@ services:
     container_name: netwatch-grafana
     restart: unless-stopped
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin_netwatch_secure}
+      # no default: a published Grafana with a password from this file was the
+      # same password everywhere it ran
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in deployment/.env.production}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-data:/var/lib/grafana
-      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      # data source and dashboard provider; the dashboards themselves below.
+      # The JSON used to be mounted where Grafana expects provisioning YAML,
+      # with no data source, so nothing loaded.
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3001:3000"
-    networks:
-      - netwatch-prod-network
+      - "${GRAFANA_PORT:-3001}:3000"
     depends_on:
       - prometheus
+    networks:
+      - netwatch-prod-network
