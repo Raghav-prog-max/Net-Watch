@@ -16,7 +16,7 @@ import {
   type FirebaseUser,
 } from "./firebase";
 
-interface UserContextType {
+export interface UserContextType {
   currentUser: User | null;
   users: User[];
   auditLogs: AuditLogEntry[];

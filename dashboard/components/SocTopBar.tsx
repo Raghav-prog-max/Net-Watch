@@ -77,38 +77,7 @@ export default function SocTopBar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Search input & command palette state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [shortcutLabel, setShortcutLabel] = useState("⌘K");
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Detect OS for shortcut display (Ctrl+K on Windows/Linux, ⌘K on macOS)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const ua = (navigator.userAgent || navigator.platform || "").toLowerCase();
-      const isMac = /macintosh|mac os x|iphone|ipad|ipod/.test(ua);
-      setShortcutLabel(isMac ? "⌘K" : "Ctrl+K");
-    }
-  }, []);
-
-  // Global Cmd+K / Ctrl+K keyboard shortcut listener
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
-        setSearchFocused(true);
-      } else if (e.key === "Escape") {
-        setSearchFocused(false);
-        searchInputRef.current?.blur();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -210,7 +179,7 @@ export default function SocTopBar() {
     ).slice(0, 5);
   }, [searchQuery, recentAlerts]);
 
-  const roleDef = ROLE_DEFINITIONS[currentUser.role] || ROLE_DEFINITIONS.tier_2;
+  const roleDef = (currentUser?.role && ROLE_DEFINITIONS[currentUser.role as keyof typeof ROLE_DEFINITIONS]) || ROLE_DEFINITIONS.tier_2;
 
   return (
     <header
