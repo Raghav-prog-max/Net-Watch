@@ -117,14 +117,14 @@ export default function DashboardPage() {
 
         {/* Top KPI Metric Cards (3 Columns) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }} className="stat-cards-grid">
-          {/* Card 1: Critical Threats Active */}
+          {/* Card 1: Critical Threats */}
           <StatCard
-            label="Critical Threats Active"
+            label="Critical Threats"
             value={shown(counts?.critical)}
             subtext="Critical-severity alerts in the alert store"
             bgColor="#0E0E12"
             badge={counts && counts.critical > 0 ? "ACTION REQ" : undefined}
-            trendIcon="percent"
+            trendIcon="pie_chart"
             trendText={counts ? share(counts.critical, counts.total) : undefined}
             onClick={() => {
               const crit = alerts.find((a) => a.severity.level === "Critical");
@@ -138,18 +138,19 @@ export default function DashboardPage() {
             value={shown(counts?.open)}
             subtext="Open alerts · nothing is auto-blocked"
             bgColor="#0E0E12"
+            badge={counts ? (counts.open > 0 ? "PENDING" : "NOMINAL") : undefined}
             trendIcon="task_alt"
             trendText={counts ? `${(counts.total - counts.open).toLocaleString()} triaged` : undefined}
           />
 
-          {/* Card 3: Unknown Novel Hits */}
+          {/* Card 3: Unknown / Novel Hits */}
           <StatCard
-            label="Unknown (Never Seen)"
+            label="Unknown (Novel)"
             value={shown(counts?.novel)}
             subtext="Alerts matching no known attack family"
             bgColor="#0E0E12"
             badge="ZERO-DAY"
-            trendIcon="blur_on"
+            trendIcon="radar"
             trendText={counts ? share(counts.novel, counts.total) : undefined}
           />
         </div>
@@ -199,6 +200,11 @@ export default function DashboardPage() {
             max-width: calc(100vw - 240px - 320px) !important;
           }
         }
+        @media (max-width: 1180px) {
+          .stat-cards-grid {
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+          }
+        }
         @media (max-width: 1024px) {
           .alert-rail-container {
             display: none !important;
@@ -207,7 +213,7 @@ export default function DashboardPage() {
             max-width: 100% !important;
           }
         }
-        @media (max-width: 800px) {
+        @media (max-width: 768px) {
           .stat-cards-grid {
             grid-template-columns: 1fr !important;
           }

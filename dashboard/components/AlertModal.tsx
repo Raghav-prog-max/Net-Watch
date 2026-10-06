@@ -256,6 +256,14 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
               cursor: "pointer",
               transition: "all 0.15s ease",
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#FFFFFF";
+              e.currentTarget.style.color = "#000000";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "#0E0E12";
+              e.currentTarget.style.color = "#FFFFFF";
+            }}
           >
             Mark False Positive
           </button>
@@ -272,6 +280,14 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
                 fontWeight: 600,
                 cursor: "pointer",
                 transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#FFFFFF";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "#8E909B";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
               }}
             >
               Acknowledge
@@ -292,8 +308,26 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
                 gap: "6px",
                 transition: "all 0.15s ease",
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.16)";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.35)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#23232A";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
+              }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>emergency</span>
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  fontSize: "15px",
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                warning
+              </span>
               Escalate to IR
             </button>
             <button
@@ -313,8 +347,24 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
                 boxShadow: "0 2px 8px rgba(255, 255, 255, 0.1)",
                 transition: "all 0.15s ease",
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#E1E4EA";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#FFFFFF";
+              }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>check_circle</span>
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  fontSize: "15px",
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                check_circle
+              </span>
               Resolve Incident
             </button>
           </div>

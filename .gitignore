@@ -27,6 +27,9 @@ venv/
 netwatch.db
 .pytest_cache/
 .env
+.env*.local
+*.env.local
+dashboard/.env.local
 
 # Deployment secrets and state: the production env file, TLS certificates and keys
 # (scripts/init-ssl.sh), and backups (scripts/backup.sh)

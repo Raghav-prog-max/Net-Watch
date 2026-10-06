@@ -18,6 +18,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  security:
+    name: Secret & API Key Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test runner
+        run: python -m pip install pytest
+
+      - name: Run hardcoded API key detection test
+        run: python -m pytest tests/test_api_keys.py -v
+
   pipeline:
     name: ML pipeline + tests
     runs-on: ubuntu-latest

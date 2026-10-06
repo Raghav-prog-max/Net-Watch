@@ -12,7 +12,6 @@ export default function UsersPage() {
     currentUser,
     users,
     auditLogs,
-    switchUserById,
     addUser,
     updateUser,
     deleteUser,
@@ -33,7 +32,7 @@ export default function UsersPage() {
   const [auditSeverityFilter, setAuditSeverityFilter] = useState<string>("all");
 
   // Selected role to inspect in the matrix tab
-  const [highlightedRole, setHighlightedRole] = useState<UserRole>(currentUser.role);
+  const [highlightedRole, setHighlightedRole] = useState<UserRole>(currentUser?.role || "tier_2");
 
   // Modal states
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -198,7 +197,9 @@ export default function UsersPage() {
   };
 
   // Current user's role definition
-  const currentRoleDef = ROLE_DEFINITIONS[currentUser.role] || ROLE_DEFINITIONS.tier_2;
+  const currentRoleDef = currentUser
+    ? (ROLE_DEFINITIONS[currentUser.role] || ROLE_DEFINITIONS.tier_2)
+    : ROLE_DEFINITIONS.tier_2;
 
   // Group permissions by category for the RBAC matrix
   const permissionsByCategory = useMemo(() => {
@@ -327,7 +328,7 @@ export default function UsersPage() {
               width: "44px",
               height: "44px",
               borderRadius: "50%",
-              backgroundColor: currentUser.avatarColor,
+              backgroundColor: currentUser?.avatarColor || "#3B82F6",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -339,7 +340,7 @@ export default function UsersPage() {
               flexShrink: 0,
             }}
           >
-            {currentUser.initials}
+            {currentUser?.initials || "NW"}
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -369,57 +370,16 @@ export default function UsersPage() {
               </span>
               <span style={{ fontSize: "11px", color: "#10B981", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                 <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10B981" }} />
-                Active Session
+                Firebase Cloud Session
               </span>
             </div>
             <div style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", marginTop: "2px" }}>
-              {currentUser.name} <span style={{ fontSize: "12px", color: "var(--nw-text-muted)", fontWeight: 400 }}>({currentUser.email})</span>
+              {currentUser?.name || "Analyst"} <span style={{ fontSize: "12px", color: "var(--nw-text-muted)", fontWeight: 400 }}>({currentUser?.email || "No session"})</span>
             </div>
             <div style={{ fontSize: "12px", color: "var(--nw-text-dim)", marginTop: "2px" }}>
-              Department: <strong style={{ color: "#E1E4EA" }}>{currentUser.department}</strong> · Shift: <strong style={{ color: "#E1E4EA" }}>{currentUser.shift || "Active"}</strong> · Capabilities: <strong style={{ color: "#FFFFFF" }}>{currentRoleDef.permissions.length} of {PERMISSIONS_CATALOG.length} granted</strong>
+              Department: <strong style={{ color: "#E1E4EA" }}>{currentUser?.department || "SecOps Team"}</strong> · Shift: <strong style={{ color: "#E1E4EA" }}>{currentUser?.shift || "Standard"}</strong> · Capabilities: <strong style={{ color: "#FFFFFF" }}>{currentRoleDef.permissions.length} of {PERMISSIONS_CATALOG.length} granted</strong>
             </div>
           </div>
-        </div>
-
-        {/* Quick persona switcher pills */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "11px", color: "var(--nw-text-muted)", marginRight: "4px" }}>Quick Switch:</span>
-          {users.map((u) => {
-            const isSelected = u.id === currentUser.id;
-            return (
-              <button
-                key={u.id}
-                onClick={() => switchUserById(u.id)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "4px 10px",
-                  borderRadius: "9999px",
-                  fontSize: "11px",
-                  backgroundColor: isSelected ? "#FFFFFF" : "var(--nw-bg-elevated)",
-                  color: isSelected ? "#000000" : "#E1E4EA",
-                  border: `1px solid ${isSelected ? "#FFFFFF" : "rgba(255, 255, 255, 0.1)"}`,
-                  cursor: "pointer",
-                  fontWeight: isSelected ? 700 : 500,
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <span
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    backgroundColor: u.avatarColor,
-                  }}
-                />
-                <span>{u.name.split(" ")[0]}</span>
-                <span style={{ fontSize: "9px", opacity: 0.75, fontFamily: "var(--font-mono)" }}>
-                  {ROLE_DEFINITIONS[u.role]?.tier.replace("Tier-", "T")}
-                </span>
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -776,7 +736,7 @@ export default function UsersPage() {
                   ) : (
                     filteredUsers.map((user) => {
                       const roleDef = ROLE_DEFINITIONS[user.role] || ROLE_DEFINITIONS.tier_2;
-                      const isCurrent = user.id === currentUser.id;
+                      const isCurrent = currentUser ? user.id === currentUser.id : false;
 
                       return (
                         <tr
@@ -929,17 +889,7 @@ export default function UsersPage() {
                           {/* Actions */}
                           <td style={{ padding: "11px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
                             <div style={{ display: "inline-flex", gap: "5px", alignItems: "center", justifyContent: "flex-end" }}>
-                              {!isCurrent ? (
-                                <button
-                                  onClick={() => switchUserById(user.id)}
-                                  className="nw-btn-pill nw-btn-secondary"
-                                  style={{ padding: "3px 8px", fontSize: "11px", gap: "3px" }}
-                                  title="Switch active persona to this user"
-                                >
-                                  <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>swap_horiz</span>
-                                  <span>Switch</span>
-                                </button>
-                              ) : (
+                              {isCurrent && (
                                 <span
                                   style={{
                                     fontSize: "9px",
@@ -1097,7 +1047,7 @@ export default function UsersPage() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span className="nw-pill nw-pill-lime" style={{ fontSize: "10px" }}>
-                  Active User Role: {ROLE_DEFINITIONS[currentUser.role]?.title}
+                  Active User Role: {currentUser ? ROLE_DEFINITIONS[currentUser.role]?.title : "No Active Session"}
                 </span>
               </div>
             </div>
@@ -1112,7 +1062,7 @@ export default function UsersPage() {
                     {(Object.keys(ROLE_DEFINITIONS) as UserRole[]).map((roleKey) => {
                       const r = ROLE_DEFINITIONS[roleKey];
                       const isHighlighted = highlightedRole === roleKey;
-                      const isCurrent = currentUser.role === roleKey;
+                      const isCurrent = currentUser ? currentUser.role === roleKey : false;
 
                       return (
                         <th
