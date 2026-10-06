@@ -11,7 +11,7 @@ PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK
 UVICORN := $(PYTHON) -m uvicorn
 PIP     := $(PYTHON) -m pip
 
-.PHONY: venv setup synthetic data train evaluate card api demo seed retrain promote rollback test quick holdout eda nslkdd clean
+.PHONY: venv setup synthetic data train evaluate card api demo seed retrain promote rollback test check-secrets quick holdout eda nslkdd clean
 
 venv:           ## create the virtual environment
 	$(PY_FALLBACK) -m venv .venv
@@ -74,6 +74,9 @@ test:           ## run the full test suite
 # pytest, not `python tests/x.py`: most test files have no __main__, so running
 # them as scripts executed none of their tests and still exited 0
 	$(PYTHON) -m pytest -q
+
+check-secrets:  ## check for hardcoded API keys and secrets
+	$(PYTHON) -m pytest tests/test_api_keys.py -v
 
 clean:
 	rm -rf data/processed/* models/v1/* reports/* data/alerts.db

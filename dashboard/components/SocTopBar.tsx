@@ -42,7 +42,7 @@ export default function SocTopBar() {
   const notifRef = useRef<HTMLDivElement>(null);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { currentUser, users, switchUserById } = useUser();
+  const { currentUser, logout } = useUser();
 
   // Search input & command palette state
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,6 +76,8 @@ export default function SocTopBar() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -177,7 +179,7 @@ export default function SocTopBar() {
     ).slice(0, 5);
   }, [searchQuery, recentAlerts]);
 
-  const roleDef = ROLE_DEFINITIONS[currentUser.role] || ROLE_DEFINITIONS.tier_2;
+  const roleDef = (currentUser?.role && ROLE_DEFINITIONS[currentUser.role as keyof typeof ROLE_DEFINITIONS]) || ROLE_DEFINITIONS.tier_2;
 
   return (
     <header
@@ -199,7 +201,7 @@ export default function SocTopBar() {
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <h1 style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", margin: 0, letterSpacing: "-0.01em" }}>
-            Hello, {currentUser.name}
+            Hello, {currentUser?.name || "Analyst"}
           </h1>
           <span style={{ fontSize: "12px", color: "#8E909B" }}>•</span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#8E909B" }}>NODE-ONLINE</span>
@@ -528,7 +530,7 @@ export default function SocTopBar() {
                   width: "32px",
                   height: "32px",
                   borderRadius: "50%",
-                  backgroundColor: currentUser.avatarColor,
+                  backgroundColor: currentUser?.avatarColor || "#3B82F6",
                   border: "1px solid rgba(255, 255, 255, 0.2)",
                   display: "flex",
                   alignItems: "center",
@@ -539,7 +541,7 @@ export default function SocTopBar() {
                   fontSize: "12px",
                 }}
               >
-                {currentUser.initials}
+                {currentUser?.initials || "NW"}
               </div>
               <span style={{
                 position: "absolute",
@@ -548,13 +550,13 @@ export default function SocTopBar() {
                 width: "8px",
                 height: "8px",
                 borderRadius: "50%",
-                backgroundColor: "#10B981",
+                backgroundColor: currentUser ? "#10B981" : "#6B7280",
                 border: "2px solid #050508",
               }} />
             </div>
             <div>
               <div style={{ fontSize: "12px", fontWeight: 600, color: "#FFFFFF", lineHeight: 1.2 }}>
-                {currentUser.name}
+                {currentUser?.name || "Analyst"}
               </div>
               <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
                 {roleDef.title}
@@ -591,8 +593,8 @@ export default function SocTopBar() {
             >
               {/* Profile Card Header */}
               <div style={{ paddingBottom: "12px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", marginBottom: "12px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>{currentUser.name}</div>
-                <div style={{ fontSize: "11px", color: "#8E909B", marginBottom: "6px" }}>{currentUser.email}</div>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>{currentUser?.name || "Analyst"}</div>
+                <div style={{ fontSize: "11px", color: "#8E909B", marginBottom: "6px" }}>{currentUser?.email || "No session"}</div>
                 <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                   <span
                     style={{
@@ -616,80 +618,24 @@ export default function SocTopBar() {
                     {roleDef.title}
                   </span>
                   <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
-                    {currentUser.department}
+                    {currentUser?.department || "SecOps Team"}
                   </span>
                 </div>
               </div>
 
-              {/* Quick Persona Switcher */}
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", color: "#8E909B", letterSpacing: "0.08em", marginBottom: "8px" }}>
-                  Switch Active Persona
+              {/* Verified Session Info */}
+              <div style={{ marginBottom: "12px", padding: "8px 10px", borderRadius: "8px", backgroundColor: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                <div style={{ fontSize: "9px", color: "#8E909B", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>
+                  Active Authentication Realm
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "180px", overflowY: "auto" }}>
-                  {users.map((u) => {
-                    const isSelected = u.id === currentUser.id;
-                    const r = ROLE_DEFINITIONS[u.role];
-                    return (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          switchUserById(u.id);
-                          setUserDropdownOpen(false);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          width: "100%",
-                          padding: "6px 8px",
-                          borderRadius: "8px",
-                          backgroundColor: isSelected ? "rgba(255, 255, 255, 0.08)" : "transparent",
-                          border: "none",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          transition: "background 0.15s ease",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "50%",
-                              backgroundColor: u.avatarColor,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#FFFFFF",
-                              fontSize: "10px",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {u.initials}
-                          </div>
-                          <div>
-                            <div style={{ fontSize: "11px", fontWeight: isSelected ? 700 : 500, color: "#FFFFFF" }}>
-                              {u.name}
-                            </div>
-                            <div style={{ fontSize: "9px", color: r?.badgeText || "#8E909B", fontFamily: "var(--font-mono)" }}>
-                              {r?.shortLabel} • {r?.title}
-                            </div>
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "#10B981" }}>
-                            check
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                <div style={{ fontSize: "11px", color: "#10B981", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10B981" }} />
+                  Firebase Cloud Identity
                 </div>
               </div>
 
-              {/* Portal Link */}
-              <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+              {/* Portal & Sign Out Links */}
+              <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "6px" }}>
                 <Link
                   href="/users"
                   onClick={() => setUserDropdownOpen(false)}
@@ -709,6 +655,35 @@ export default function SocTopBar() {
                   <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>admin_panel_settings</span>
                   <span>Manage Users &amp; RBAC Portal →</span>
                 </Link>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setUserDropdownOpen(false);
+                    await logout();
+                    router.push("/login");
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    backgroundColor: "transparent",
+                    color: "#FCA5A5",
+                    border: "1px solid rgba(239, 68, 68, 0.2)",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>logout</span>
+                  <span>Sign Out of Session</span>
+                </button>
               </div>
             </div>
           )}

@@ -1,10 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useUser } from "@/lib/userContext";
 
 export default function SocSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useUser();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -179,24 +187,44 @@ export default function SocSidebar() {
 
         {/* Footer Links */}
         <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", flexDirection: "column", gap: "4px" }}>
-          {bottomItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "6px 12px",
-                fontSize: "12px",
-                color: "#8E909B",
-                transition: "color 0.15s ease",
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          <Link
+            href="/"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "6px 12px",
+              fontSize: "12px",
+              color: "#8E909B",
+              transition: "color 0.15s ease",
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>public</span>
+            <span>Landing Page</span>
+          </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "6px 12px",
+              fontSize: "12px",
+              color: "#8E909B",
+              backgroundColor: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              width: "100%",
+              transition: "color 0.15s ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#8E909B")}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>logout</span>
+            <span>Log out</span>
+          </button>
         </div>
       </div>
     </aside>

@@ -540,7 +540,7 @@ export default function StitchLayout() {
           Acknowledge
         </button>
 <button className="px-4 py-2 rounded-full bg-[#23232A] text-white hover:bg-white/20 border border-white/20 text-xs font-bold flex items-center gap-1.5 transition-all" onClick={() => {}}>
-<span className="material-symbols-outlined text-[15px]">emergency</span>
+<span className="material-symbols-outlined text-[15px]">warning</span>
           Escalate to IR
         </button>
 <button className="px-5 py-2 rounded-full bg-white text-black hover:bg-[#E1E4EA] text-xs font-bold flex items-center gap-1.5 shadow transition-all" onClick={() => {}}>
