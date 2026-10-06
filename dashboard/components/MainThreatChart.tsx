@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -11,6 +12,15 @@ import {
   YAxis,
 } from "recharts";
 import type { Alert } from "@/lib/types";
+
+type TimeRange = "1H" | "6H" | "24H" | "7D";
+
+const RANGE_DURATIONS: Record<TimeRange, number> = {
+  "1H": 1 * 60 * 60 * 1000,
+  "6H": 6 * 60 * 60 * 1000,
+  "24H": 24 * 60 * 60 * 1000,
+  "7D": 7 * 24 * 60 * 60 * 1000,
+};
 
 interface MainThreatChartProps {
   alerts: Alert[];
@@ -24,11 +34,35 @@ interface BucketData {
 }
 
 export default function MainThreatChart({ alerts }: MainThreatChartProps) {
-  const buckets = useMemo<BucketData[]>(() => {
+  const [selectedRange, setSelectedRange] = useState<TimeRange>("24H");
+
+  const filteredAlerts = useMemo(() => {
     if (alerts.length === 0) return [];
 
+    const duration = RANGE_DURATIONS[selectedRange];
+    const timestamps = alerts
+      .map((a) => new Date(a.timestamp).getTime())
+      .filter((t) => !isNaN(t));
+
+    if (timestamps.length === 0) return alerts;
+
+    const maxTime = Math.max(...timestamps);
+    const now = Date.now();
+    // Anchor to now if recent/live, or anchor to newest alert for offline/seeded demos
+    const anchor = Math.abs(now - maxTime) < 24 * 60 * 60 * 1000 && now >= maxTime ? now : maxTime;
+    const cutoff = anchor - duration;
+
+    return alerts.filter((a) => {
+      const t = new Date(a.timestamp).getTime();
+      return !isNaN(t) && t >= cutoff;
+    });
+  }, [alerts, selectedRange]);
+
+  const buckets = useMemo<BucketData[]>(() => {
+    if (filteredAlerts.length === 0) return [];
+
     // Order chronologically from oldest to newest
-    const sorted = [...alerts].sort(
+    const sorted = [...filteredAlerts].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
@@ -58,7 +92,14 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
       });
 
       const repTime = slice[slice.length - 1]?.timestamp ?? "";
-      const timeLabel = repTime.length >= 19 ? `${repTime.slice(11, 19)} #${i + 1}` : `Window #${i + 1}`;
+      let timeLabel = `Window #${i + 1}`;
+      if (repTime.length >= 19) {
+        if (selectedRange === "7D") {
+          timeLabel = `${repTime.slice(5, 10)} ${repTime.slice(11, 16)} #${i + 1}`;
+        } else {
+          timeLabel = `${repTime.slice(11, 19)} #${i + 1}`;
+        }
+      }
 
       return {
         timeLabel,
@@ -67,7 +108,7 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
         topFamily,
       };
     });
-  }, [alerts]);
+  }, [filteredAlerts, selectedRange]);
 
   return (
     <div
@@ -96,19 +137,77 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
             Network Alert Volume &amp; Severity Distribution
           </h2>
           <p style={{ fontSize: "12px", color: "#8E909B", margin: "2px 0 0" }}>
-            {alerts.length > 0
-              ? `Real-time aggregate ingress packets scrutinized across edge gateways`
+            {filteredAlerts.length > 0
+              ? `Real-time aggregate ingress packets scrutinized across edge gateways (${filteredAlerts.length} in ${selectedRange})`
+              : alerts.length > 0
+              ? `No alerts recorded within the last ${selectedRange} (${alerts.length} total outside range)`
               : "Awaiting live alerts from GET /alerts and WS /ws/alerts"}
           </p>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           {/* Range Selector Pills */}
-          <div style={{ display: "flex", backgroundColor: "#050508", padding: "4px", borderRadius: "9999px", border: "1px solid rgba(255, 255, 255, 0.1)", fontSize: "12px" }}>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>1H</button>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>6H</button>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "#FFFFFF", color: "#000000", fontWeight: 600, border: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", cursor: "pointer" }}>24H</button>
-            <button style={{ padding: "4px 12px", borderRadius: "9999px", background: "transparent", color: "#8E909B", border: "none", cursor: "pointer" }}>7D</button>
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+              backgroundColor: "#050508",
+              padding: "4px",
+              borderRadius: "9999px",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              fontSize: "12px",
+              userSelect: "none",
+            }}
+          >
+            {(["1H", "6H", "24H", "7D"] as const).map((range) => {
+              const active = selectedRange === range;
+              return (
+                <button
+                  key={range}
+                  type="button"
+                  onClick={() => setSelectedRange(range)}
+                  style={{
+                    position: "relative",
+                    padding: "4px 12px",
+                    borderRadius: "9999px",
+                    background: "transparent",
+                    color: active ? "#000000" : "#8E909B",
+                    fontWeight: active ? 600 : 400,
+                    border: "none",
+                    cursor: "pointer",
+                    transition: "color 0.18s ease",
+                    outline: "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.color = "#FFFFFF";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.color = "#8E909B";
+                  }}
+                >
+                  {active && (
+                    <motion.div
+                      layoutId="activeThreatRangePill"
+                      transition={{
+                        type: "spring",
+                        stiffness: 450,
+                        damping: 32,
+                      }}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        borderRadius: "9999px",
+                        backgroundColor: "#FFFFFF",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+                        zIndex: 1,
+                      }}
+                    />
+                  )}
+                  <span style={{ position: "relative", zIndex: 2 }}>{range}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Legend */}
@@ -141,7 +240,9 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
               textAlign: "center",
             }}
           >
-            No live alerts recorded yet. Run the API and traffic replayer.
+            {alerts.length === 0
+              ? "No live alerts recorded yet. Run the API and traffic replayer."
+              : `No alerts recorded in the selected ${selectedRange} window (${alerts.length} total alerts outside this range).`}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
