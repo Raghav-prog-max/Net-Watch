@@ -1,0 +1,257 @@
+/* ==========================================================================
+   Layro theme — shadcn/ui token format
+
+   Import once, after Tailwind:
+
+     @import "tailwindcss";
+     @import "./layro.css";
+
+   Every Layro component reads its colours from these variables, so this file
+   is the whole theme. It uses the shadcn/ui names (background, card,
+   foreground, muted, primary, border, ring, destructive…), so an existing
+   shadcn project can keep its own globals.css and the components follow it.
+   Layro adds three status colours shadcn does not define — success, warning,
+   info — plus a type scale, motion and layering tokens.
+
+   The values are the Layro look: Tailwind's neutral scale, hairline borders
+   drawn as translucent ink so they sit on any surface, red for danger only.
+   Every status colour clears 4.5:1 as text on the card and on its own 12%
+   tint, in both themes. In dark mode the status colours are light, so a
+   solid destructive button uses `dark:bg-destructive/60` to keep white text
+   legible — the same trick shadcn/ui uses.
+
+   Dark mode is class-based. `.dark` on any element themes its subtree, and
+   `.light` inside a dark page switches one region back — that is how a docs
+   page shows a light and a dark preview side by side.
+   ========================================================================== */
+
+@custom-variant dark (&:is(.dark *));
+
+:root,
+.light {
+  --radius: 0.625rem;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.205 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.205 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.205 0 0);
+
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.52 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+
+  /* Hairlines are translucent ink, not a grey: they read the same on a card,
+     on a muted row and on a tinted status panel. */
+  --border: oklch(0 0 0 / 0.12);
+  --input: oklch(0 0 0 / 0.18);
+  --ring: oklch(0.205 0 0 / 0.5);
+
+  --destructive: oklch(0.53 0.225 27.4);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.508 0.118 165.612);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.525 0.155 48);
+  --warning-fill: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.205 0 0);
+  --info: oklch(0.546 0.245 262.881);
+  --info-foreground: oklch(0.985 0 0);
+
+  /* Chart series, in fixed order — never cycled. Validated as a set for
+     colour-vision deficiency (adjacent ΔE ≥ 8). Slots 3–5 sit under 3:1 on
+     light, so charts always carry a legend, a tooltip and a data table. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+
+  color-scheme: light;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+
+  --primary: oklch(0.97 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.97 0 0);
+
+  --border: oklch(1 0 0 / 0.16);
+  --input: oklch(1 0 0 / 0.22);
+  --ring: oklch(1 0 0 / 0.3);
+
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.765 0.177 163.223);
+  --success-foreground: oklch(0.205 0 0);
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-fill: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.205 0 0);
+  --info: oklch(0.707 0.165 254.624);
+  --info-foreground: oklch(0.205 0 0);
+
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+
+  color-scheme: dark;
+}
+
+@theme {
+  /* The components read the theme font; Layro sets Inter. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-fill: var(--warning-fill);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Radius — shadcn steps, plus the Layro surface steps by name. */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-surface: 18px;
+  --radius-panel: 14px;
+  --radius-row: 12px;
+  --radius-control: 10px;
+  --radius-chip: 8px;
+
+  /* Type — product surfaces, not reading surfaces. Mirrors TYPE in tokens.ts. */
+  --text-figure: 27px;
+  --text-title: 15px;
+  --text-body: 13.5px;
+  --text-sub: 13px;
+  --text-dense: 12.5px;
+  --text-meta: 11.5px;
+  --text-chip: 11px;
+  --text-micro: 10.5px;
+
+  /* Elevation. Shadows are for things that float; resting surfaces use a
+     hairline ring instead. */
+  --shadow-float: 0 1px 2px oklch(0 0 0 / 0.06), 0 8px 24px oklch(0 0 0 / 0.1);
+  --shadow-overlay: 0 2px 6px oklch(0 0 0 / 0.08), 0 24px 64px oklch(0 0 0 / 0.18);
+
+  /* Motion. Mirrors DURATION in tokens.ts; springs live in JS. */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+}
+
+/* Layering. Mirrors LAYER in tokens.ts — popovers under dialogs under toasts. */
+:root {
+  --z-popover: 60;
+  --z-dialog: 70;
+  --z-toast: 80;
+}
+
+/* Enter and exit. Radix stamps data-state="open" / "closed" on overlays and
+   holds them in the DOM until the exit animation ends, so these are the whole
+   of the motion for menus, popovers, tooltips, dialogs and toasts. The
+   components apply them behind `motion-safe:`, so reduced motion gets none. */
+@theme {
+  --animate-fade-in: layro-fade-in 180ms var(--ease-out-soft);
+  --animate-fade-out: layro-fade-out 120ms ease-in;
+  --animate-pop-in: layro-pop-in 160ms var(--ease-out-soft);
+  --animate-pop-out: layro-pop-out 110ms ease-in;
+  --animate-dialog-in: layro-dialog-in 220ms var(--ease-out-soft);
+  --animate-dialog-out: layro-dialog-out 140ms ease-in;
+  --animate-toast-in: layro-toast-in 260ms var(--ease-out-soft);
+  --animate-toast-out: layro-toast-out 160ms ease-in;
+
+  @keyframes layro-fade-in { from { opacity: 0; } }
+  @keyframes layro-fade-out { to { opacity: 0; } }
+  @keyframes layro-pop-in { from { opacity: 0; transform: scale(0.96) translateY(var(--pop-y, -4px)); } }
+  @keyframes layro-pop-out { to { opacity: 0; transform: scale(0.97); } }
+  @keyframes layro-dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } }
+  @keyframes layro-dialog-out { to { opacity: 0; transform: translateY(4px) scale(0.98); } }
+  @keyframes layro-toast-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+  @keyframes layro-toast-out { to { opacity: 0; transform: translateX(var(--radix-toast-swipe-end-x, 24px)); } }
+}
+
+/* Height and slide, for Accordion / Collapsible and Drawer. */
+@theme {
+  --animate-accordion-down: layro-accordion-down 200ms var(--ease-out-soft);
+  --animate-accordion-up: layro-accordion-up 160ms ease-in;
+  --animate-sheet-in-right: layro-sheet-in-right 260ms var(--ease-out-soft);
+  --animate-sheet-out-right: layro-sheet-out-right 180ms ease-in;
+  --animate-sheet-in-left: layro-sheet-in-left 260ms var(--ease-out-soft);
+  --animate-sheet-out-left: layro-sheet-out-left 180ms ease-in;
+  --animate-sheet-in-bottom: layro-sheet-in-bottom 280ms var(--ease-out-soft);
+  --animate-sheet-out-bottom: layro-sheet-out-bottom 180ms ease-in;
+  --animate-skeleton: layro-skeleton 1.6s ease-in-out infinite;
+
+  @keyframes layro-accordion-down { from { height: 0; } to { height: var(--radix-accordion-content-height); } }
+  @keyframes layro-accordion-up { from { height: var(--radix-accordion-content-height); } to { height: 0; } }
+  @keyframes layro-sheet-in-right { from { transform: translateX(100%); } }
+  @keyframes layro-sheet-out-right { to { transform: translateX(100%); } }
+  @keyframes layro-sheet-in-left { from { transform: translateX(-100%); } }
+  @keyframes layro-sheet-out-left { to { transform: translateX(-100%); } }
+  @keyframes layro-sheet-in-bottom { from { transform: translateY(100%); } }
+  @keyframes layro-sheet-out-bottom { to { transform: translateY(100%); } }
+  @keyframes layro-skeleton { 50% { opacity: 0.55; } }
+}
+
+/* AI surfaces. Four small motions shared by every chat and agent component:
+   a sheen that sweeps across "Thinking…", the caret at the end of a streaming
+   answer, the fade each new word arrives with, and the three waiting dots.
+   All are applied behind `motion-safe:`. */
+@theme {
+  --animate-shimmer: layro-shimmer 2.2s linear infinite;
+  --animate-caret: layro-caret 1.05s steps(1, end) infinite;
+  --animate-word-in: layro-word-in 380ms var(--ease-out-soft) both;
+  --animate-dot: layro-dot 1.25s ease-in-out infinite;
+
+  @keyframes layro-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @keyframes layro-caret { 50% { opacity: 0; } }
+  @keyframes layro-word-in { from { opacity: 0; filter: blur(3px); } }
+  @keyframes layro-dot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
+}
