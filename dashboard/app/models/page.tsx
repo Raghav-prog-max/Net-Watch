@@ -47,14 +47,20 @@ export default function ModelsPage() {
   const [selectedVersion, setSelectedVersion] = useState<string>("All");
 
   useEffect(() => {
-    getModelRegistryInfo()
-      .then((data) => {
-        setInfo(data);
-        setError(null);
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : "Could not reach GET /models");
-      });
+    const load = () =>
+      getModelRegistryInfo()
+        .then((data) => {
+          setInfo(data);
+          setError(null);
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : "Could not reach GET /models");
+        });
+    load();
+    // the feedback counts change as analysts triage, often in another tab:
+    // reload them when this one comes back into view
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
 
   // served by GET /models; there is no copy in the dashboard to go stale

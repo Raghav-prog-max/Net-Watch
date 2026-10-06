@@ -32,6 +32,8 @@ export interface Alert {
   analyst_label: string | null;
   analyst_note: string | null;
   model_version: string;
+  // flows of this family folded into the alert while it was open (api/routes/score.py)
+  flow_count: number;
 }
 
 export interface DriftHistoryPoint {
@@ -84,9 +86,25 @@ export interface EvaluationReport {
     threshold: number;
     fpr_at_threshold: number;
     recall_at_threshold: number;
+    // the classifier's share of the budget (train.classifier_fpr_budget); before
+    // 30 Sep 2026 the classifier had the whole budget and this was all of it
     fpr_budget: number;
   };
+  // the classifier alone; what analysts see is `system`
   main: SummaryMetrics;
+  // What analysts see: an alert from the classifier OR the anomaly detector, on
+  // the benign test flows, against the whole budget (train.fpr_budget).
+  // Absent in reports from before 30 Sep 2026. Read it through lib/falseAlerts.ts.
+  system?: {
+    benign_flows: number;
+    false_positive_rate: number;
+    false_alerts_per_10k_benign_flows: number;
+    from_classifier_per_10k: number;
+    from_detector_only_per_10k: number;
+    attack_flows_alerted: number | null;
+    budget_per_10k: number;
+    within_budget: boolean;
+  };
   random_forest_baseline?: SummaryMetrics;
   naive_comparison?: {
     split?: string;
@@ -156,4 +174,56 @@ export interface ModelRegistryInfo {
   version_history?: ModelVersionEntry[];
   version_history_note?: string;
 }
+
+/* ── USER MANAGEMENT & RBAC ────────────────────────────────────────── */
+
+export type UserRole = "admin" | "tier_3" | "tier_2" | "tier_1" | "auditor";
+export type UserStatus = "active" | "suspended" | "pending";
+
+export interface UserPermission {
+  id: string;
+  name: string;
+  description: string;
+  category: "Alert Operations" | "Incident Response" | "Model Governance" | "Administration";
+}
+
+export interface RoleDefinition {
+  id: UserRole;
+  title: string;
+  tier: string;
+  shortLabel: string;
+  description: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  permissions: string[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  department: string;
+  twoFactorEnabled: boolean;
+  avatarColor: string;
+  initials: string;
+  lastActive: string;
+  createdAt: string;
+  shift?: string;
+  assignedAlertsCount?: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  actorRole: UserRole;
+  action: string;
+  target: string;
+  details: string;
+  severity: "info" | "warning" | "critical";
+}
+
 

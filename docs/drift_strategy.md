@@ -14,8 +14,19 @@
 
 All thresholds and sizes are read from `drift:` in `ml/config.yaml`.
 
+The drift set (handbook: "a held-out day, plus a perturbed copy of test with scaled
+packet sizes and stretched durations, to trigger the drift monitor on demand") is two
+replayer scenarios. `--scenario drift` takes the test split's benign flows and scales
+their packet sizes and stretches their durations by the same factor, so packets per
+second fall and bytes per second stay put; the factor climbs to a 1.2x hold, then to
+3x, so the status walks stable -> warning -> drift. `--scenario day` replays the day
+`make train` held out (`data/splits/drift.pkl`, CICIDS2017's Monday) unchanged.
+
 PSI bins come from 10 quantile edges computed on benign validation traffic at
-training time and saved to `models/v1/reference_stats.json`.
+training time and saved to `models/v1/reference_stats.json`. The two outer bins
+are open-ended: a flow below the lowest edge or above the highest counts in the
+first or last bin, so traffic that moves past anything seen in training raises
+PSI instead of dropping out of the count (`bin_counts` in `ml/drift/monitor.py`).
 Only flows that did **not** alert are counted, so a busy attack hour does not
 read as distribution drift.
 
@@ -44,10 +55,13 @@ rule applies as the handbook describes.
 
 1. Dashboard shows Drift status and lists the top drifting features.
 2. Build a new training set: original training data **plus** analyst-labelled alerts.
-3. Train v2 using `make train` (same settings, same splits).
-4. Evaluate v2 on the same test and LOFO sets as v1.
-5. Promote v2 only if macro-F1 improves **and** FPR stays within the 0.5% budget.
-6. Keep v1 for rollback; do not delete it.
+3. Train v2 using `make retrain` (same settings, same splits) into `models/v2`.
+4. Evaluate v2 on the same test and LOFO sets as the active model.
+5. Promote v2 only if macro-F1 improves **and** FPR stays within the 0.5% budget:
+   `make promote VERSION=v2` checks both, then points `models/ACTIVE` at v2. The
+   API serves that version's models and its report together after a restart.
+6. Keep v1 for rollback: promotion copies and deletes nothing, and
+   `make rollback` points `models/ACTIVE` back at v1.
 
 A person approves every model change. Nothing retrains automatically.
 

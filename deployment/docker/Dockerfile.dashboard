@@ -1,0 +1,67 @@
+# ==============================================================================
+# NetWatch AI SOC — Production Dashboard Dockerfile (Next.js 16 + React 18)
+# ==============================================================================
+# Multi-stage optimized production build with non-root security context.
+# ==============================================================================
+
+# ── Stage 1: Dependencies ─────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install dependencies based on preferred lockfile
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci
+
+# ── Stage 2: Builder ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY dashboard/ ./
+
+# Disable Next.js telemetry during build
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+# Where the browser reaches the API. Next.js bakes NEXT_PUBLIC_* into the bundle
+# at build time, so this is a build argument: setting it on the running container
+# changes nothing. Behind nginx the API is under /api on the same host, and the
+# dashboard derives the WebSocket address from it (ws://<host>/api/ws/alerts).
+ARG NEXT_PUBLIC_API_URL=http://localhost/api
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+# Build Next.js application
+RUN npm run build
+
+# ── Stage 3: Production Runner ────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Install curl for container health checking
+RUN apk add --no-cache curl
+
+# Create non-root system group and user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Built pages and dependencies. The dashboard has no public/ directory, and the
+# line that copied one used shell syntax COPY does not have: it failed the build.
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+USER nextjs
+
+EXPOSE 3000
+
+# Health check against landing page
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://127.0.0.1:3000/ || exit 1
+
+CMD ["npm", "run", "start"]

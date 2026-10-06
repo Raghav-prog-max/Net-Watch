@@ -68,6 +68,9 @@ make dashboard
 ```
 *(Available at `http://localhost:3000`)*
 
+For the 3-minute pitch demo, follow [`docs/demo_script.md`](docs/demo_script.md): six replayer runs, with
+what to show at each.
+
 ---
 
 ## 4. Offline Demo Mode
@@ -125,6 +128,8 @@ repository root with the virtual environment's Python:
 | `make dashboard` | `cd dashboard && npm install && npm run dev` |
 | `make seed` | `.venv\Scripts\python scripts/seed_db.py --count 80 --scenario known` |
 | `make retrain` | `.venv\Scripts\python scripts/retrain.py --out models/v2` |
+| `make promote VERSION=v2` | `.venv\Scripts\python scripts/promote.py v2` |
+| `make rollback` | `.venv\Scripts\python scripts/promote.py v1 --rollback` |
 | `make test` | `.venv\Scripts\python -m pytest -q` |
 | `make nslkdd` | `.venv\Scripts\python scripts/nslkdd_check.py` |
 | `make eda` | `.venv\Scripts\python -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb` |

@@ -56,7 +56,8 @@ def render():
     budget = cfg["train"]["fpr_budget"]
     realised = main["false_positive_rate"]
     attacks = [c for c in per if c != "Benign"]
-    weakest = min(attacks, key=lambda c: per[c]["recall"])
+    # a family with no test flows has recall 0 by default, not because it was missed
+    weakest = min((c for c in attacks if per[c]["support"] > 0), key=lambda c: per[c]["recall"])
 
     # where the classifier's false alerts on benign traffic end up
     b = labels.index("Benign")
@@ -111,7 +112,8 @@ def render():
     source = "Synthetic traffic shaped like CICIDS2017" if synthetic else "CICIDS2017 flow records"
     w(f"{source}: {len(flows):,} flows after cleaning, {m['features']} features. "
       f"Split into {cfg['split']['block_minutes']}-minute time blocks so no block appears "
-      "in two splits; a test fails the build if one does.")
+      "in two splits, divided within each attack family so every family is in test; "
+      "a test fails the build if either breaks.")
     w("")
     w("| Split | Flows | Note |")
     w("| --- | ---: | --- |")
@@ -151,11 +153,15 @@ def render():
       f"Measured as a full system (classifier + anomaly detector), it produced "
       f"**{sys_m.get('false_alerts_per_10k_benign_flows', main['false_alerts_per_10k_benign_flows']):.1f} false alerts per 10,000 benign "
       f"flows** ({pct(sys_realised, 2)})."
-      f" This is " + ("over the 0.5% budget." if sys_realised > budget else "within budget."))
+      f" This is " + (f"over the {pct(budget)} budget." if sys_realised > budget else f"within the {pct(budget)} budget."))
     w("")
+    # The classifier's threshold comes from its share of the budget, chosen on
+    # validation; the test flows can land either side of that share.
+    clf_budget = thr.get("classifier_fpr_budget", budget)
     w(f"As a component, the classifier alone scored Macro-F1 {main['macro_f1']:.3f} and produced "
-      f"{main['false_alerts_per_10k_benign_flows']:.1f} false alerts/10k ({pct(realised, 2)}), "
-      f"meeting its isolated budget constraint of {pct(budget)} at threshold {thr['attack_threshold']:.4f}.")
+      f"{main['false_alerts_per_10k_benign_flows']:.1f} false alerts/10k ({pct(realised, 2)}) at threshold "
+      f"{thr['attack_threshold']:.4f}, set on validation for its {pct(clf_budget)} share of the budget"
+      + ("." if realised <= clf_budget else "; on the test flows it is over that share."))
     w("")
     w("No accuracy figure is reported: about 80% of traffic is benign, so a model that "
       "never alerts would score about 80%.")
@@ -215,8 +221,9 @@ def render():
 
     nf = m.get("novel_families")
     if nf:
-        w(f"Families withheld from training altogether ({', '.join(nf['families'])}, "
-          f"{nf['flows']:,} test flows): {pct(nf.get('alerted', nf['caught_by_anomaly_detector']))} "
+        w(f"Families withheld from training altogether ({', '.join(nf['families'])}; "
+          f"all {nf['flows']:,} of their flows, as none were trained on): "
+          f"{pct(nf.get('alerted', nf['caught_by_anomaly_detector']))} "
           f"raised an alert, and **{pct(nf['shown_as_unknown'])} were shown to the analyst as "
           "Unknown** rather than under a known family's name.")
         w("")

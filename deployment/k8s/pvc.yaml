@@ -1,0 +1,16 @@
+# The alert store (SQLite), mounted by the single API pod. ReadWriteOnce is all
+# it needs. Models are not on a volume: they ship in the API image, so a new
+# model is a new image (make train, scripts/promote.py, docker build).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netwatch-data-pvc
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

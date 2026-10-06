@@ -16,8 +16,9 @@ class ScoredFlow(BaseModel):
     # CIC-IDS2017 column name -> value. A feature the model expects but the caller
     # leaves out is scored as 0.0, so send them all (replay/replayer.py does).
     features: Dict[str, float]
-    # Shown to the analyst as the alert's `flow` (ports, IPs, ground truth in demos).
-    # Never used for scoring.
+    # Display-only facts for the alert's `flow` (api/services/scorer.py flow_facts):
+    # IPs, or a port or protocol the features lack. Never used for scoring, and a
+    # ground-truth label sent here is dropped, not shown.
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 class ScoreRequest(BaseModel):
@@ -52,7 +53,8 @@ class Mitre(BaseModel):
 
 class AlertBase(BaseModel):
     timestamp: datetime
-    # the request's `meta`, as strings (see ScoredFlow)
+    # handbook: dst_port, protocol, duration_ms, fwd_packets, bwd_packets, each left
+    # out when the data does not carry it, plus any display-only `meta` (ScoredFlow)
     flow: Dict[str, Any]
     prediction: Prediction
     anomaly_score: float
@@ -72,6 +74,10 @@ class Alert(AlertBase):
 
 class ScoreResponse(BaseModel):
     scored: int
+    # flows that raised an alert, new or folded into an open one: the alert rate.
+    # `alerts` is shorter, as a burst of one family is one alert.
+    alerted: int = 0
+    # alerts opened by this request, and growing ones re-sent (at most every 5 s)
     alerts: List[Alert]
 
 class AlertCreate(AlertBase):

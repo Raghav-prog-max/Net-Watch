@@ -29,6 +29,7 @@ from api.db.models import AlertModel
 from api.db.session import Base, SessionLocal, engine
 from api.services.scorer import Scorer
 from ml.features.select import feature_columns
+from replay.replayer import pick, replay_pool
 
 
 def seed(count: int = 50, scenario: str = "known") -> None:
@@ -37,24 +38,19 @@ def seed(count: int = 50, scenario: str = "known") -> None:
     if not processed.exists():
         raise SystemExit("run `make data` first — data/processed/flows.pkl not found")
 
-    df = pd.read_pickle(processed).sample(frac=1.0, random_state=42)
+    # the replayer's flows and scenarios, so seeded alerts come from traffic the
+    # models were not fitted on, as live ones do
+    df = replay_pool(pd.read_pickle(processed)).sample(frac=1.0, random_state=42)
     features = feature_columns(df)
-
-    if scenario == "known":
-        rows = df[df["family"].isin(["DDoS", "PortScan", "DoS"])].head(count)
-    elif scenario == "novel":
-        rows = df[~df["family"].isin(["Benign", "DoS", "DDoS", "PortScan", "BruteForce", "WebAttack", "Bot"])].head(count)
-    else:
-        rows = df.head(count)
+    rows = pick(df, scenario).head(count)
 
     if rows.empty:
         raise SystemExit(f"no rows matched scenario={scenario!r}")
 
     scorer = Scorer()
     flows = [{f: float(r[f]) for f in features} for _, r in rows.iterrows()]
-    metas = [{"dst_port": str(int(r.get("Destination Port", 0))),
-              "truth": str(r["family"])} for _, r in rows.iterrows()]
-    alerts = scorer.score(flows, metas)
+    # flow facts come from the features, as for live alerts; no ground-truth label
+    alerts = scorer.score(flows)
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -76,8 +72,9 @@ def seed(count: int = 50, scenario: str = "known") -> None:
                 analyst_label=a["analyst_label"],
                 analyst_note=a["analyst_note"],
                 model_version=a["model_version"],
-                # so seeded alerts can be triaged into training rows too
-                features=a.get("features"),
+                # so seeded alerts can be triaged into training rows too; a
+                # list, as api/routes/score.py stores them
+                features=[a["features"]] if a.get("features") else None,
             ))
         db.commit()
         print(f"seeded {len(alerts)} alerts from {len(flows)} flows (scenario={scenario!r})")

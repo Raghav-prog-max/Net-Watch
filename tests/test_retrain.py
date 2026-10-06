@@ -32,3 +32,5 @@ def test_old_alert_store_gains_the_features_column(tmp_path):
     ensure_schema(db)                     # idempotent
     cols = {r[1] for r in sqlite3.connect(db).execute("PRAGMA table_info(alerts)")}
     assert "features" in cols
+    # a store from before alert grouping failed on every insert and select
+    assert "flow_count" in cols

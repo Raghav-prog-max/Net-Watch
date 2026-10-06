@@ -1,0 +1,88 @@
+# One replica, replaced rather than rolled. The API keeps state in its process:
+# alert grouping, WebSocket clients, the drift window and the /metrics counters
+# (api/routes/score.py, api/services/). Its alert store is SQLite on a
+# ReadWriteOnce volume. A second pod would group, stream and count only its own
+# share of the traffic, and could not mount the volume on another node. The
+# image runs one uvicorn worker for the same reason. Hence no autoscaler
+# (hpa.yaml), and a short gap in service on each deploy.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netwatch-api
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch-api
+    app.kubernetes.io/part-of: netwatch-soc
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netwatch-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netwatch-api
+      annotations:
+        # for a Prometheus that discovers pods; deployment/monitoring/prometheus.yml
+        # scrapes the same path
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: api
+          image: ghcr.io/satveek-gupta/netwatch-api:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 8000
+              name: http-api
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: netwatch-config
+            # nothing in the API reads these yet (secrets.template.yaml)
+            - secretRef:
+                name: netwatch-secrets
+                optional: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1024Mi
+            limits:
+              cpu: 2000m
+              memory: 3072Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data/db
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: netwatch-data-pvc

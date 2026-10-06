@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score
 
 from ml.data.labels import TRAIN_FAMILIES, LOFO_FAMILIES
 from ml.data.load import load_processed
-from ml.data.split import add_blocks, make_splits, downsample_benign
+from ml.data.split import add_blocks, make_splits, downsample_benign, split_out_novel
 from ml.drift.monitor import reference_stats
 from ml.evaluate import lofo, metrics, naive, system
 from ml.evaluate.thresholds import pick_threshold
@@ -24,7 +24,7 @@ from ml.models import classifier as clf_mod
 from ml.models.anomaly import AnomalyDetector
 from ml.models.novelty import FamilyNovelty
 
-def _run_imbalance_study(train_df, val_df, features, random_state=42):
+def _run_imbalance_study(train_df, val_df, features, random_state=42, reports_dir="reports"):
     from sklearn.metrics import f1_score
     from imblearn.over_sampling import SMOTE
     from imblearn.under_sampling import RandomUnderSampler
@@ -101,7 +101,8 @@ def _run_imbalance_study(train_df, val_df, features, random_state=42):
                         "recall": {c: round(float(r), 4) for c, r in zip(le.classes_, rec)}})
         print(f"  {name:20s}  macro-F1={macro:.4f}")
 
-    out = Path("reports/model_comparison.json")
+    # into this run's reports: a retrain (reports/v2) wrote over v1's study
+    out = Path(reports_dir) / "model_comparison.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w") as fh:
         json.dump(results, fh, indent=2)
@@ -144,10 +145,12 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     features = feature_columns(train)
 
-    # Rare families are never trained on. They exist to test the anomaly detector.
-    novel_mask = ~train["family"].isin(TRAIN_FAMILIES)
-    train = train[~novel_mask]
-    val = val[val["family"].isin(TRAIN_FAMILIES)]
+    # Rare families are never trained on. They exist to test the anomaly detector,
+    # so all of their flows are evaluated, whichever split their time block fell
+    # in. Keeping only the share in test threw ~85% away: CICIDS2017 has 47 such
+    # flows, and the model card scored 2. The splits are unchanged, so no other
+    # figure moves.
+    train, val, novel = split_out_novel(train, val, test, TRAIN_FAMILIES)
     if holdout:
         # Demo model: this family is removed from training so the anomaly detector
         # has to catch it. This is what makes "Unknown / novel" appear on stage.
@@ -168,7 +171,8 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     # on macro-F1 and per-class recall, and show the ones not chosen too
     imbalance = None
     if imbalance_study and not holdout:
-        imbalance = _run_imbalance_study(train, val, features, cfg["split"]["random_state"])
+        imbalance = _run_imbalance_study(train, val, features, cfg["split"]["random_state"],
+                                         cfg["paths"]["reports_dir"])
 
     # --- classifier -------------------------------------------------------
     kind, model = clf_mod.build(cfg["train"]["classifier"], cfg["split"]["random_state"])
@@ -288,8 +292,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
         "benign_relabelled_unknown": int((alerted & ~attacks & known_ood).sum()),
     }
 
-    # novel families the classifier never saw
-    novel = test[~test["family"].isin(TRAIN_FAMILIES)]
+    # novel families the classifier never saw: all of their flows (see above)
     if len(novel):
         Xn = matrix(novel, features)
         flagged = det.is_anomalous(det.score(Xn))

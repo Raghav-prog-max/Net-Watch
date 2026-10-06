@@ -1,0 +1,23 @@
+# The dashboard only. The API runs one replica (api-deployment.yaml says why),
+# so it has no autoscaler.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: netwatch-dashboard-hpa
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch-dashboard
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: netwatch-dashboard
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

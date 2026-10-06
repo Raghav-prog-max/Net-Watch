@@ -12,8 +12,10 @@ accuracy. We report macro-F1, PR-AUC per class, and FPR instead.
 ## Splits
 
 Time-block splits (5-minute windows) ensure no burst of near-duplicate flows
-appears in both training and test. The leakage test (`tests/test_split_leakage.py`)
-fails the build if one block crosses a split boundary.
+appears in both training and test. Blocks are divided within each attack family, so
+a family that fills only a few blocks (DDoS: 5 of 398) still has some in validation
+and test. The leakage test (`tests/test_split_leakage.py`) fails the build if one
+block crosses a split boundary or a family is missing from one.
 
 ## Leave-one-family-out (LOFO)
 
@@ -23,7 +25,10 @@ and the held-out family is replayed at the full system. The table in the model
 card shows how much the anomaly detector catches on its own.
 
 Infiltration and Heartbleed are never trained on and serve as the hardest test:
-unknown families the system has never seen even in LOFO experiments.
+unknown families the system has never seen even in LOFO experiments. Every one of
+their flows is scored, whichever split its time block fell in
+(`split_out_novel` in `ml/data/split.py`): CICIDS2017 has only 47 of them, and
+scoring just the share that landed in test left a handful.
 
 ## Naive vs honest split
 

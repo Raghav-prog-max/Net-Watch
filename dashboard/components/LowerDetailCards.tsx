@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
+import { falseAlerts } from "@/lib/falseAlerts";
 
 interface Props {
   alerts: Alert[];
@@ -224,7 +225,15 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
               <span style={{ fontSize: "11px", color: "#8E909B" }}>Operating Threshold</span>
               <span style={{ fontSize: "11px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF" }}>
-                {report ? `${report.threshold.threshold.toFixed(3)} (FPR ≤ ${Math.round(report.threshold.fpr_budget * 10000)}/10k)` : "—"}
+                {report
+                  ? (() => {
+                      const fa = falseAlerts(report);
+                      // the threshold is set from the classifier's share of the whole budget
+                      return fa.fromDetectorPer10k == null
+                        ? `${report.threshold.threshold.toFixed(3)} (≤ ${fa.budgetPer10k}/10k)`
+                        : `${report.threshold.threshold.toFixed(3)} (≤ ${fa.classifierBudgetPer10k} of ${fa.budgetPer10k}/10k)`;
+                    })()
+                  : "—"}
               </span>
             </div>
 

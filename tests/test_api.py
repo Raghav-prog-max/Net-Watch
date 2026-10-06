@@ -109,7 +109,7 @@ def test_model_inputs_are_stored_for_retraining_but_not_returned():
     assert "features" not in client.get(f"/alerts/{alert['id']}").json()
     db = _TestSession()
     stored = db.query(AlertModel).filter(AlertModel.id == alert["id"]).first()
-    assert stored.features == {"Flow Duration": 12.0}
+    assert stored.features == [{"Flow Duration": 12.0}]
     db.close()
 
 def test_scored_alert_is_stored():
@@ -156,6 +156,96 @@ def test_every_flow_in_a_batch_is_counted_in_its_group():
     assert alerts["DoS"]["flow_count"] == 1
     for family, n in (("PortScan", 3), ("DoS", 1)):
         assert client.get(f"/alerts/{alerts[family]['id']}").json()["flow_count"] == n
+    assert res.json()["alerted"] == 4, "the alert rate counts flows, not alerts"
+
+def test_alert_list_carries_the_flow_count():
+    """GET /alerts built its items from a dict without flow_count; the code that
+    added it sat after the return and never ran."""
+    res = client.post("/score", json={"flows": [flow("Bot"), flow("Bot")]})
+    alert_id = res.json()["alerts"][0]["id"]
+    items = client.get("/alerts", params={"family": "Bot", "size": 100}).json()["items"]
+    assert {a["id"]: a for a in items}[alert_id]["flow_count"] == 2
+
+def test_flows_after_triage_open_a_new_alert():
+    """A DDoS alert marked false positive kept absorbing the DDoS flows that
+    followed, so a live attack stayed hidden inside a dismissed alert."""
+    first = client.post("/score", json={"flows": [flow("DDoS")]}).json()["alerts"][0]
+    client.patch(f"/alerts/{first['id']}", json={"status": "false_positive"})
+    again = client.post("/score", json={"flows": [flow("DDoS"), flow("DDoS")]}).json()["alerts"]
+    assert [a["id"] for a in again] != [first["id"]]
+    assert again[0]["status"] == "open" and again[0]["flow_count"] == 2
+    dismissed = client.get(f"/alerts/{first['id']}").json()
+    assert dismissed["status"] == "false_positive" and dismissed["flow_count"] == 1
+
+@pytest.mark.parametrize("status", ["acknowledged", "escalated", "resolved"])
+def test_any_triage_closes_the_group(status):
+    first = client.post("/score", json={"flows": [flow("WebAttack")]}).json()["alerts"][0]
+    client.patch(f"/alerts/{first['id']}", json={"status": status})
+    again = client.post("/score", json={"flows": [flow("WebAttack")]}).json()["alerts"]
+    assert len(again) == 1 and again[0]["id"] != first["id"]
+
+def test_an_alert_shows_its_most_severe_flow():
+    """The group kept its first flow's severity, so a Critical flow joining a
+    Low alert stayed listed as Low."""
+    class BySeverity(StubScorer):
+        def score(self, flows, metas=None):
+            out = super().score(flows, metas)
+            for a, m in zip(out, [m for m in metas if m.get("stub_family")]):
+                a["severity"] = {"score": int(m["score"]), "level": m["level"]}
+                a["explanation"] = [{"feature": m["level"], "value": 1.0, "impact": 1.0}]
+            return out
+    app.dependency_overrides[scorer_dependency] = lambda: BySeverity()
+    batch = [flow("DoS", score=30, level="Low"), flow("DoS", score=95, level="Critical"),
+             flow("DoS", score=50, level="Medium")]
+    alert = client.post("/score", json={"flows": batch}).json()["alerts"][0]
+    stored = client.get(f"/alerts/{alert['id']}").json()
+    for a in (alert, stored):
+        assert a["severity"] == {"score": 95, "level": "Critical"}
+        assert a["explanation"][0]["feature"] == "Critical"
+        assert a["flow_count"] == 3
+    # a later rise is re-sent at once, not after the 5 s throttle; no rise, no re-send
+    assert client.post("/score", json={"flows": [flow("DoS", score=20, level="Low")]}).json()["alerts"] == []
+    bump = client.post("/score", json={"flows": [flow("DoS", score=99, level="Critical")]}).json()["alerts"]
+    assert [(a["id"], a["severity"]["score"], a["flow_count"]) for a in bump] == [(alert["id"], 99, 5)]
+
+def test_a_resent_alert_keeps_what_the_analyst_wrote():
+    """A growing alert was re-sent built from the newest flow: status "open" and
+    no note, so the dashboard wiped the analyst's work on screen."""
+    times = iter(["2026-09-28T10:00:00Z", "2026-09-28T10:00:06Z"])
+
+    class Ticking(StubScorer):
+        def score(self, flows, metas=None):
+            out = super().score(flows, metas)
+            for a in out:
+                a["timestamp"] = next(times)
+            return out
+    app.dependency_overrides[scorer_dependency] = lambda: Ticking()
+    first = client.post("/score", json={"flows": [flow("BruteForce")]}).json()["alerts"][0]
+    client.patch(f"/alerts/{first['id']}", json={"analyst_note": "watching this host"})
+    update = client.post("/score", json={"flows": [flow("BruteForce")]}).json()["alerts"][0]
+    assert update["id"] == first["id"]
+    assert update["analyst_note"] == "watching this host"
+    assert update["flow_count"] == 2
+
+def test_a_group_keeps_model_inputs_for_retraining(monkeypatch):
+    """Only the first flow's inputs were stored, so a false positive on a
+    burst of 500 flows gave retraining one row."""
+    from api.routes import score as score_route
+    monkeypatch.setattr(score_route, "MAX_GROUP_SAMPLES", 2)
+
+    class WithFeatures(StubScorer):
+        def score(self, flows, metas=None):
+            out = super().score(flows, metas)
+            for i, a in enumerate(out):
+                a["features"] = {"Flow Duration": float(i)}
+            return out
+    app.dependency_overrides[scorer_dependency] = lambda: WithFeatures()
+    res = client.post("/score", json={"flows": [flow("PortScan")] * 3})
+    db = _TestSession()
+    stored = db.query(AlertModel).filter(AlertModel.id == res.json()["alerts"][0]["id"]).first()
+    assert stored.flow_count == 3
+    assert stored.features == [{"Flow Duration": 0.0}, {"Flow Duration": 1.0}], "capped"
+    db.close()
 
 def test_rejected_label_survives_the_round_trip():
     class Rejecting(StubScorer):
@@ -428,3 +518,75 @@ def test_drift_reports_the_analyst_false_positive_share():
     body = client.get("/metrics/drift").json()
     assert set(body["fp_share"]) == {"share", "false_positives", "alerts"}
     assert body["history"] == []
+
+
+# ------------------------------------------------------------------------ CORS
+
+def test_allowed_origins_parses_the_env_var():
+    from api.main import allowed_origins
+    assert allowed_origins(None) == ["*"]
+    assert allowed_origins("") == ["*"]
+    assert allowed_origins("https://a.example, https://b.example,") == ["https://a.example",
+                                                                        "https://b.example"]
+
+
+def test_any_origin_may_read_the_api_but_never_with_credentials():
+    """It allowed every origin *with* credentials: any site could call the API
+    with a visitor's cookies."""
+    res = client.get("/", headers={"Origin": "https://elsewhere.example"})
+    assert res.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in res.headers
+
+
+# ------------------------------------------------------------- GET /metrics
+
+def _metric(text, name):
+    import re
+    m = re.search(rf"^{re.escape(name)} (\S+)$", text, re.M)
+    return float(m.group(1)) if m else 0.0
+
+
+def test_metrics_count_scored_flows_alerts_and_latency():
+    """Prometheus scraped /metrics before it existed: every target was down and
+    the Grafana dashboard empty."""
+    before = client.get("/metrics").text
+    client.post("/score", json={"flows": [flow("DDoS"), flow("DDoS"), flow(None)]})
+    after = client.get("/metrics")
+    assert after.status_code == 200
+    assert after.headers["content-type"].startswith("text/plain; version=0.0.4")
+    delta = lambda name: _metric(after.text, name) - _metric(before, name)
+    assert delta("netwatch_flows_scored_total") == 3
+    assert delta("netwatch_flows_alerted_total") == 2
+    assert delta('netwatch_alerts_opened_total{family="DDoS"}') == 1, "a burst is one alert"
+    assert delta("netwatch_score_request_seconds_count") == 1
+    assert _metric(after.text, 'netwatch_alerts{status="open"}') >= 1
+    assert "_created" not in after.text
+
+
+def test_metrics_report_drift_and_need_no_models():
+    from api.routes.metrics import optional_scorer
+
+    class Drifting:
+        drift_cfg = {"warn_psi": 0.1, "drift_psi": 0.25, "fp_share_alerts": 500}
+
+        def drift(self):
+            return {"status": "warning", "top_features": [{"feature": "Flow Duration", "psi": 0.17}],
+                    "unexplained_alert_rate": 0.002, "baseline_unexplained_alert_rate": 0.001,
+                    "flows_seen": 4200}
+    app.dependency_overrides[optional_scorer] = lambda: Drifting()
+    try:
+        text = client.get("/metrics").text
+    finally:
+        app.dependency_overrides.pop(optional_scorer, None)
+    assert _metric(text, 'netwatch_drift_status{status="warning"}') == 1
+    assert _metric(text, 'netwatch_drift_status{status="drift"}') == 0
+    assert _metric(text, "netwatch_drift_max_psi") == 0.17
+    assert _metric(text, "netwatch_drift_flows_seen") == 4200
+
+    app.dependency_overrides[optional_scorer] = lambda: None     # before `make train`
+    try:
+        res = client.get("/metrics")
+    finally:
+        app.dependency_overrides.pop(optional_scorer, None)
+    assert res.status_code == 200 and "netwatch_flows_scored_total" in res.text
+    assert "netwatch_drift_status" not in res.text

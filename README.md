@@ -28,6 +28,7 @@ All extensive documentation and architectural explanations have been moved to th
 | [`docs/evaluation.md`](docs/evaluation.md) | ML evaluation methodology (Metrics, LOFO, Thresholds). |
 | [`docs/drift_strategy.md`](docs/drift_strategy.md) | Drift monitoring strategy (PSI, KS Test, Alert-rate logic). |
 | [`docs/model_card.md`](docs/model_card.md) | Auto-generated Model Card containing performance metrics. |
+| [`docs/demo_script.md`](docs/demo_script.md) | The 3-minute demo, step by step, with the commands and what to point at. |
 
 ## 📂 Repository Structure
 

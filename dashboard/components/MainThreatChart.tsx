@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -11,6 +12,15 @@ import {
   YAxis,
 } from "recharts";
 import type { Alert } from "@/lib/types";
+
+type TimeRange = "1H" | "6H" | "24H" | "7D";
+
+const RANGE_DURATIONS: Record<TimeRange, number> = {
+  "1H": 1 * 60 * 60 * 1000,
+  "6H": 6 * 60 * 60 * 1000,
+  "24H": 24 * 60 * 60 * 1000,
+  "7D": 7 * 24 * 60 * 60 * 1000,
+};
 
 interface MainThreatChartProps {
   alerts: Alert[];
@@ -51,6 +61,28 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
   const buckets = useMemo<BucketData[]>(() => {
     if (filteredAlerts.length === 0) return [];
 
+    const duration = RANGE_DURATIONS[selectedRange];
+    const timestamps = alerts
+      .map((a) => new Date(a.timestamp).getTime())
+      .filter((t) => !isNaN(t));
+
+    if (timestamps.length === 0) return alerts;
+
+    const maxTime = Math.max(...timestamps);
+    const now = Date.now();
+    // Anchor to now if recent/live, or anchor to newest alert for offline/seeded demos
+    const anchor = Math.abs(now - maxTime) < 24 * 60 * 60 * 1000 && now >= maxTime ? now : maxTime;
+    const cutoff = anchor - duration;
+
+    return alerts.filter((a) => {
+      const t = new Date(a.timestamp).getTime();
+      return !isNaN(t) && t >= cutoff;
+    });
+  }, [alerts, selectedRange]);
+
+  const buckets = useMemo<BucketData[]>(() => {
+    if (filteredAlerts.length === 0) return [];
+
     // Order chronologically from oldest to newest
     const sorted = [...filteredAlerts].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -82,7 +114,14 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
       });
 
       const repTime = slice[slice.length - 1]?.timestamp ?? "";
-      const timeLabel = repTime.length >= 19 ? `${repTime.slice(11, 19)} #${i + 1}` : `Window #${i + 1}`;
+      let timeLabel = `Window #${i + 1}`;
+      if (repTime.length >= 19) {
+        if (selectedRange === "7D") {
+          timeLabel = `${repTime.slice(5, 10)} ${repTime.slice(11, 16)} #${i + 1}`;
+        } else {
+          timeLabel = `${repTime.slice(11, 19)} #${i + 1}`;
+        }
+      }
 
       return {
         timeLabel,

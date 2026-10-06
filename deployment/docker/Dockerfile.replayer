@@ -1,0 +1,27 @@
+# ==============================================================================
+# NetWatch AI SOC — Network Traffic Flow Replayer Container
+# ==============================================================================
+# Streams held-out flows at the API (replay/replayer.py), one scenario per run.
+# ==============================================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# what replay/replayer.py and the ml modules it imports need
+RUN pip install --no-cache-dir numpy pandas pyyaml
+
+COPY replay /app/replay
+COPY ml /app/ml
+# data/ is mounted at run time (docker-compose.prod.yml). It is large and
+# gitignored, and the root .dockerignore keeps data/processed out of every build
+# context, so a copy baked in here was empty and the replayer had nothing to send.
+
+# The replayer's own flags. It has no --delay: that flag stopped every start.
+ENV PYTHONUNBUFFERED=1 \
+    REPLAY_URL=http://api:8000/score \
+    REPLAY_SCENARIO=mixed \
+    REPLAY_RATE=40 \
+    REPLAY_LIMIT=5000
+
+CMD ["sh", "-c", "python replay/replayer.py --url \"$REPLAY_URL\" --scenario \"$REPLAY_SCENARIO\" --rate \"$REPLAY_RATE\" --limit \"$REPLAY_LIMIT\""]

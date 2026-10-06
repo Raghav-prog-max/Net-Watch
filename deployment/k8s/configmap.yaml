@@ -1,0 +1,17 @@
+# Runtime settings for the API, the only ones it reads (api/db/session.py,
+# api/main.py). Model thresholds and the false-alert budget ship in the image
+# (ml/config.yaml, models/). The dashboard's API address is not set here: Next.js
+# fixes NEXT_PUBLIC_API_URL when the image is built (see deployment/README.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netwatch-config
+  namespace: netwatch
+  labels:
+    app.kubernetes.io/name: netwatch
+data:
+  # the alert store, on netwatch-data-pvc
+  NETWATCH_DB: "/data/db/netwatch.db"
+  # the dashboard calls the API on its own origin through the ingress, so this
+  # only matters for other origins
+  ALLOWED_ORIGINS: "https://netwatch.yourdomain.com"

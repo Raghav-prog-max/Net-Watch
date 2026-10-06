@@ -17,11 +17,14 @@ learns "traffic from 172.16.0.1 is an attack", which scores brilliantly and gene
 to nothing.
 
 ## ml/data/split.py
-`add_blocks` stamps every flow with `day + 5-minute bucket`; `make_splits` uses
-`GroupShuffleSplit` on that column. Flows inside one attack burst are near-duplicates,
-so a random split scatters copies across train and test. `tests/test_split_leakage.py`
-fails the build if a block ends up in two splits. `downsample_benign` touches the
-training set only, never validation or test.
+`add_blocks` stamps every flow with `day + 5-minute bucket`; `make_splits` divides
+whole blocks between train, validation and test. Flows inside one attack burst are
+near-duplicates, so a random split scatters copies across train and test. Each attack
+family fills only a few blocks (DDoS: 5), so blocks are shuffled and divided within
+each family (`block_strata`); shuffled all together, DDoS had none in test.
+`tests/test_split_leakage.py` fails the build if a block ends up in two splits or a
+family misses one. `downsample_benign` touches the training set only, never validation
+or test.
 
 ## ml/models/classifier.py
 LightGBM when installed, `HistGradientBoostingClassifier` otherwise, Random Forest as a

@@ -6,6 +6,7 @@ import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
 import { getAlert, triage } from "@/lib/api";
 import type { Alert } from "@/lib/types";
+import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
 const ACTIONS: { label: string; status: Alert["status"]; btnClass: string }[] = [
   { label: "Acknowledge", status: "acknowledged", btnClass: "nw-btn-dark" },
@@ -22,6 +23,7 @@ export default function AlertDetailPage() {
   const [saving, setSaving] = useState(false);
   const [analystNote, setAnalystNote] = useState("");
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [falsePositives, refreshFalsePositives] = useFalsePositiveCount();
 
   useEffect(() => {
     getAlert(id)
@@ -42,6 +44,7 @@ export default function AlertDetailPage() {
         analystNote || undefined
       );
       setAlert(updated);
+      refreshFalsePositives();
       setSuccessToast(`Disposition updated to ${status.replace("_", " ")}`);
       setTimeout(() => setSuccessToast(null), 3000);
     } catch {
@@ -85,6 +88,7 @@ export default function AlertDetailPage() {
 
         <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
           Alert ID: <span className="mono" style={{ color: "#FFFFFF" }}>{alert.id}</span> · {alert.timestamp}
+          {alert.flow_count > 1 && <> · {alert.flow_count.toLocaleString()} flows, last at this time</>}
         </div>
       </div>
 
@@ -284,7 +288,8 @@ export default function AlertDetailPage() {
           </div>
 
           <div style={{ marginTop: "14px", fontSize: "11px", color: "var(--nw-text-muted)", borderTop: "1px solid #26262C", paddingTop: "10px" }}>
-            Note: Marking a false positive adds a verified supervision label for v2 retraining.
+            Note: Marking a false positive adds a verified supervision label for v2 retraining
+            {falsePositives !== null && ` (${falsePositives.toLocaleString()} so far)`}.
             In accordance with doctrine, no network device or firewall rule is touched automatically.
           </div>
         </div>

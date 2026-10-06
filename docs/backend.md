@@ -33,10 +33,24 @@ The API strictly fulfills the frozen Day 2 API contract:
 ### Scoring & Flow Ingestion
 - `POST /score`
   - Purpose: Score one flow or a batch; returns alerts created.
-  - Request: `{"flows": [{"features": {"Flow Duration": 1234.0, ...}, "meta": {"dst_port": "80"}}]}`.
+  - Request: `{"flows": [{"features": {"Flow Duration": 1234.0, ...}, "meta": {"src_ip": "10.0.0.5"}}]}`.
     `features` are CIC-IDS2017 columns fed to the models (missing ones score as 0.0);
-    `meta` is display-only and comes back as the alert's `flow`. This is what `replay/replayer.py` sends.
-  - Response: `{"scored": <flows received>, "alerts": [Alert, ...]}`; benign flows produce no alert.
+    `meta` is optional and display-only. The replayer sends features only.
+  - The alert's `flow` is the handbook's flow facts, read off the features (`flow_facts` in
+    `api/services/scorer.py`): `dst_port` (Destination Port), `protocol` (Protocol: 6 TCP,
+    17 UDP, 1 ICMP), `duration_ms` (Flow Duration, which is in microseconds), `fwd_packets`
+    and `bwd_packets`. A fact the data lacks is left out, not null (the synthetic data has
+    no Protocol). `meta` can supply or override them and add others such as IPs; a
+    ground-truth label (`truth`, `label`, `family`) is dropped, never shown to the analyst.
+  - Response: `{"scored": <flows received>, "alerted": <flows that raised an alert>, "alerts": [Alert, ...]}`;
+    benign flows produce no alert. `alerted / scored` is the alert rate; `alerts` is shorter (see grouping).
+  - Grouping (not in the handbook; added so a burst is one row, not thousands):
+    a flow joins the alert of its family when that alert is still `open` and last grew under
+    60 s ago; `flow_count` says how many flows it holds. Once an analyst acknowledges,
+    escalates, dismisses or resolves it, the next flow opens a new alert. The alert shows its
+    most severe flow (severity, explanation, MITRE, flow facts), keeps the model inputs of up
+    to 100 flows for `scripts/retrain.py`, and is re-sent over the WebSocket as stored at most
+    every 5 s while it grows. Constants at the top of `api/routes/score.py`.
   - Integration: Runs the trained models from `models/v1`. LightGBM classifier, Isolation Forest, and the family novelty check, combined by `ml/models/combine.py`; SHAP explanations; persists alerts and broadcasts over WebSocket.
     Returns 503 until `make train` has produced the models.
 
@@ -58,7 +72,8 @@ The API strictly fulfills the frozen Day 2 API contract:
 
 ### Real-Time Streaming
 - `WS /ws/alerts`
-  - Purpose: Live stream of new alerts as they are created via `POST /score`.
+  - Purpose: Live stream of new alerts as they are created via `POST /score`, and of growing
+    alerts re-sent with their new `flow_count` (same `id`: replace, don't append).
 
 ## Testing Suite
 An exhaustive test suite is located in `tests/` to guarantee structural integrity:

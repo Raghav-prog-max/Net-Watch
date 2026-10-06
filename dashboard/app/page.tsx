@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
+import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
 import { SplineSceneBasic } from "@/components/ui/demo";
 
 
@@ -80,8 +81,8 @@ export default function LandingPage() {
   const unknownPct = report
     ? (report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100
     : 0;
-  const falsePer10k = report?.main.false_alerts_per_10k_benign_flows ?? 0;
-  const budgetPer10k = report ? Math.round(report.threshold.fpr_budget * 10000) : 0;
+  // classifier and anomaly detector together: what an analyst actually gets
+  const fa = report ? falseAlerts(report) : null;
   const dataLabel = !report
     ? "evaluation report unavailable"
     : `live report${report.synthetic_data ? " · synthetic data" : ""}`;
@@ -105,16 +106,17 @@ export default function LandingPage() {
       <section
         style={{
           width: "100%",
-          height: "100vh",
+          minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           position: "relative",
           zIndex: 10,
         }}
+        className="lg:h-screen"
       >
         {/* ── SPLINE 3D INTERACTIVE HERO ─────────────────────── */}
-        <div className="reveal-init stagger-2 w-full h-full">
+        <div className="reveal-init stagger-2 w-full h-full flex-1 flex flex-col">
           <SplineSceneBasic />
         </div>
       </section>
@@ -193,10 +195,12 @@ export default function LandingPage() {
               False Alerts per 10k Normal Flows
             </div>
             <div style={{ fontSize: "40px", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.03em", marginBottom: "6px" }}>
-              {report ? falsePer10k : "—"}
+              {fa ? fa.per10k : "—"}
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
-              The alert threshold is set from a budget of {report ? budgetPer10k : "—"} per 10k, not left at 0.5.
+              {fa
+                ? `${falseAlertsBreakdown(fa)}. Thresholds come from that budget, not a default 0.5.`
+                : "Thresholds come from a false-alert budget, not a default 0.5."}
             </div>
           </div>
 
@@ -516,7 +520,8 @@ export default function LandingPage() {
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.5 }}>
                   When an automated blocker misclassifies database syncs as DDoS, critical revenue stops.
-                  NetWatch tunes thresholds against an analyst false-positive budget (&le;50 per 10k flows).
+                  NetWatch tunes thresholds against an analyst false-alert budget
+                  {fa ? ` (≤ ${fa.budgetPer10k} per 10k normal flows, classifier and anomaly detector together)` : ""}.
                 </div>
               </div>
 

@@ -20,5 +20,6 @@ httpx>=0.27.0          # for FastAPI test client
 httpx2>=0.27.0         # httpx wrapper used by Starlette TestClient
 
 sqlalchemy
+prometheus-client>=0.20   # GET /metrics (api/services/telemetry.py)
 requests
 websockets

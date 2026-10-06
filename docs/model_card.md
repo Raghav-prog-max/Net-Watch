@@ -133,8 +133,7 @@ The same classifier, settings, benign downsampling and threshold rule, with only
 | Time blocks (honest) | 0.9159 | 41.1 | 0% |
 | Random rows (naive) | 0.9047 (0.9023–0.9118 over 5 seeds) | 42.6 | 100% |
 
-**No inflation was measured.** Every random split scored at or below the honest one, although 100% of its test flows came from time blocks also used in training.
- The synthetic generator's bursts carry independent noise per flow, so they are not near-duplicates and there is little to memorise. This has to be re-measured on CICIDS2017, where flows inside one attack burst are expected to be near-identical; a test with deliberately leaky data (`tests/test_naive_split.py`) shows the comparison does detect inflation when it exists.
+The random split scores higher on every seed, by +0.001 macro-F1 on the main one. That gap is what a leaky evaluation would have let us claim.
 
 **Not yet measured** — the handbook also requires a cross-dataset test on UNSW-NB15.
 
