@@ -39,9 +39,8 @@ spec:
             - containerPort: 3000
               name: http-web
               protocol: TCP
-          envFrom:
-            - configMapRef:
-                name: netwatch-config
+          # No runtime settings: the API address (NEXT_PUBLIC_API_URL) is fixed
+          # when the image is built, and setting it here would change nothing.
           resources:
             requests:
               cpu: 250m

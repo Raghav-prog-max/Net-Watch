@@ -175,3 +175,55 @@ export interface ModelRegistryInfo {
   version_history_note?: string;
 }
 
+/* ── USER MANAGEMENT & RBAC ────────────────────────────────────────── */
+
+export type UserRole = "admin" | "tier_3" | "tier_2" | "tier_1" | "auditor";
+export type UserStatus = "active" | "suspended" | "pending";
+
+export interface UserPermission {
+  id: string;
+  name: string;
+  description: string;
+  category: "Alert Operations" | "Incident Response" | "Model Governance" | "Administration";
+}
+
+export interface RoleDefinition {
+  id: UserRole;
+  title: string;
+  tier: string;
+  shortLabel: string;
+  description: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  permissions: string[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  department: string;
+  twoFactorEnabled: boolean;
+  avatarColor: string;
+  initials: string;
+  lastActive: string;
+  createdAt: string;
+  shift?: string;
+  assignedAlertsCount?: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  actorRole: UserRole;
+  action: string;
+  target: string;
+  details: string;
+  severity: "info" | "warning" | "critical";
+}
+
+
