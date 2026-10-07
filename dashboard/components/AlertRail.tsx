@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTriagePermission } from "@/lib/permissions";
 import type { Alert } from "@/lib/types";
 
 interface AlertRailProps {
@@ -15,6 +16,7 @@ export default function AlertRail({
   onTriage,
 }: AlertRailProps) {
   const [filter, setFilter] = useState<"All" | "Critical" | "Novel">("All");
+  const { can, why } = useTriagePermission();
 
   const filtered = alerts.filter((a) => {
     if (filter === "Critical") return a.severity.level === "Critical";
@@ -218,6 +220,9 @@ export default function AlertRail({
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <button
                       onClick={() => onTriage(alert.id, "false_positive")}
+                      disabled={!can("false_positive")}
+                      title={why("false_positive")}
+                      data-role-locked={!can("false_positive")}
                       style={{
                         padding: "4px 10px",
                         borderRadius: "9999px",

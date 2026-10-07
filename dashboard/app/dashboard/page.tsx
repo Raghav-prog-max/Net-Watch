@@ -6,7 +6,8 @@ import MainThreatChart from "@/components/MainThreatChart";
 import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
-import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, listAlerts } from "@/lib/api";
+import { useTriagePermission } from "@/lib/permissions";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
@@ -28,6 +29,7 @@ export default function DashboardPage() {
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [drift, setDrift] = useState<DriftStatus | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
+  const { triage } = useTriagePermission();
   const [apiDown, setApiDown] = useState(false);
   const [fpTotal, refreshFpTotal] = useFalsePositiveCount();
   // Totals over the whole alert store. The alert list below holds only the latest
