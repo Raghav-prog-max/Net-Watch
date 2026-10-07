@@ -20,6 +20,7 @@ import { ConfusionMatrix } from "@/components/ConfusionMatrix";
 import { PRROCCurves } from "@/components/PRROCCurves";
 import { PerClassMetrics } from "@/components/PerClassMetrics";
 import { LOFOChart } from "@/components/LOFOChart";
+import { supportText } from "@/lib/support";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -88,7 +89,8 @@ export default function EvaluationPage() {
   }));
 
   const lofoChartData = (report.lofo ?? []).map((r) => ({
-    family: r.family,
+    // the flow count beside the name: a rate from 23 flows is not one from 1,000
+    family: `${r.family} (n=${r.test_flows.toLocaleString()})`,
     "Classifier Alone": Number((r.caught_by_classifier_alone * 100).toFixed(1)),
     "Hybrid Ensemble": Number((r.caught_by_full_system * 100).toFixed(1)),
   }));
@@ -173,6 +175,11 @@ export default function EvaluationPage() {
             {(novel.families || []).join(" & ")} · {(novel.flows ?? 0).toLocaleString()} flows
             {novel.alerted !== undefined ? ` · ${pct(novel.alerted)} alerted` : ""}
           </div>
+          {supportText(novel.shown_as_unknown_support) && (
+            <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
+              {supportText(novel.shown_as_unknown_support)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -379,6 +386,11 @@ export default function EvaluationPage() {
                     </td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)", fontWeight: 700 }}>
                       {pct(r.caught_by_full_system)}
+                      {supportText(r.caught_by_full_system_support) && (
+                        <div style={{ fontSize: "10px", fontWeight: 400, color: "var(--nw-text-muted)" }}>
+                          {supportText(r.caught_by_full_system_support)}
+                        </div>
+                      )}
                     </td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)", fontWeight: 700 }}>
                       +{pct(r.caught_by_full_system - r.caught_by_classifier_alone)}
@@ -396,11 +408,26 @@ export default function EvaluationPage() {
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>—</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)", fontWeight: 700 }}>
                       {report.novel_families.alerted !== undefined ? pct(report.novel_families.alerted) : "—"}
+                      {supportText(report.novel_families.alerted_support) && (
+                        <div style={{ fontSize: "10px", fontWeight: 400, color: "var(--nw-text-muted)" }}>
+                          {supportText(report.novel_families.alerted_support)}
+                        </div>
+                      )}
                     </td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)" }}>
                       {report.novel_families.shown_as_unknown !== undefined
                         ? `${pct(report.novel_families.shown_as_unknown)} as Unknown`
                         : "—"}
+                      {supportText(report.novel_families.shown_as_unknown_support) && (
+                        <div style={{ fontSize: "10px", color: "var(--nw-text-muted)" }}>
+                          {supportText(report.novel_families.shown_as_unknown_support)}
+                        </div>
+                      )}
+                      {report.novel_families.per_family?.map((f) => (
+                        <div key={f.family} style={{ fontSize: "10px", color: "var(--nw-text-muted)" }}>
+                          {f.family}: {supportText(f.shown_as_unknown_support)}
+                        </div>
+                      ))}
                     </td>
                     <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{pct(fa.falsePositiveRate)}</td>
                   </tr>

@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import copy
 from collections import Counter
 from pathlib import Path
 
@@ -96,54 +95,71 @@ def prometheus_metrics(scorer=Depends(optional_scorer), db: Session = Depends(ge
     return Response(telemetry.exposition(state), media_type=telemetry.CONTENT_TYPE)
 
 
+# A measured figure on the Models page: the rate with the flows it rests on, when
+# the report has them (ml/evaluate/metrics.py support); "—" when the report has no
+# such figure, never "0.0%".
+def _figure(rate, support=None):
+    if rate is None:
+        return "—"
+    flows = f" ({support['hits']:,} of {support['of']:,} flows)" if support else ""
+    return f"{100 * rate:.1f}%{flows}"
+
+
+def _lofo_row(r, family):
+    return next((x for x in r.get("lofo", []) if x.get("family") == family), {})
+
+
 VERSION_HISTORY_NOTE = (
     "These model versions are dynamically generated from the trained model bundles on disk. "
     "The active release's figures are read directly from its reports/metrics.json."
 )
 
 
-def _version_history(report):
-    from pathlib import Path
-    import json
-    reports_dir = Path("reports")
-    models_dir = Path("models")
-    active_version = (models_dir / "ACTIVE").read_text().strip() if (models_dir / "ACTIVE").exists() else "v1"
-    
+def _version_history():
+    """One entry per trained bundle with a report (ml/registry.report_path); every
+    figure is read from that bundle's metrics.json, none is typed in here."""
+    active_version = registry.active_version()
     history = []
-    
-    # helper to find metrics.json files
-    metrics_files = list(reports_dir.glob("**/metrics.json"))
-    for p in metrics_files:
-        if p.parent == reports_dir:
-            version = "v1"
-        else:
-            version = p.parent.name
-            
+    for p in sorted(registry.REPORTS.glob("**/metrics.json")):
+        version = "v1" if p.parent == registry.REPORTS else p.parent.name
         try:
-            r = json.load(open(p))
-            sys_m = r.get("system", r.get("main", {}))
-            history.append({
-                "version": version,
-                "title": f"Model Bundle {version}",
-                "date": r.get("generated", "")[:10] if "generated" in r else "",
-                "status": "active" if version == active_version else "superseded",
-                "summary": f"System Macro-F1: {sys_m.get('macro_f1', 0):.3f} | False alerts/10k: {sys_m.get('false_alerts_per_10k_benign_flows', 0)}",
-                "highlights": [
-                    {"label": "Held-Out PortScan LOFO", "after": f"{100 * (next((x['caught_by_full_system'] for x in r.get('lofo', []) if x.get('family') == 'PortScan'), 0)):.1f}%" if r.get('lofo') else "—"},
-                    {"label": "Unseen Attacks Alerted", "after": f"{100 * r.get('novel_families', {}).get('alerted', 0):.1f}%" if r.get('novel_families') else "—"},
-                    {"label": "Unseen Shown as Unknown", "after": f"{100 * r.get('novel_families', {}).get('shown_as_unknown', 0):.1f}%" if r.get('novel_families') else "—"},
-                ],
-                "changelog": []
-            })
-        except Exception:
-            pass
+            r = json.load(open(p, encoding="utf-8"))
+        except (OSError, ValueError):
+            log.warning("unreadable report %s left out of the version history", p)
+            continue
+        main = r.get("main", {})
+        nf = r.get("novel_families", {})
+        portscan = _lofo_row(r, "PortScan")
+        # macro-F1 is the classifier's (the system report has none); false alerts
+        # are the whole system's when the report has them. An older or partial
+        # report leaves a figure out rather than failing the whole page.
+        false_alerts = (r.get("system") or main).get("false_alerts_per_10k_benign_flows")
+        parts = ([f"Macro-F1 {main['macro_f1']:.3f}"] if "macro_f1" in main else []) + (
+            [f"{false_alerts} false alerts per 10k benign flows"] if false_alerts is not None else [])
+        summary = " · ".join(parts) or "No evaluation figures in this report"
+        history.append({
+            "version": version,
+            "title": f"Model Bundle {version}",
+            "date": r.get("generated", "")[:10],
+            "status": "active" if version == active_version else "superseded",
+            "summary": summary,
+            "highlights": [
+                {"label": "Held-Out PortScan LOFO",
+                 "after": _figure(portscan.get("caught_by_full_system"),
+                                  portscan.get("caught_by_full_system_support"))},
+                {"label": "Unseen Attacks Alerted",
+                 "after": _figure(nf.get("alerted"), nf.get("alerted_support"))},
+                {"label": "Unseen Shown as Unknown",
+                 "after": _figure(nf.get("shown_as_unknown"), nf.get("shown_as_unknown_support"))},
+            ],
+            "changelog": [],
+        })
 
-    # Basic sort: v2 > v1 > 1.2 > 1.1
+    # newest first: v-prefixed bundles (v1, v2) after bare release numbers (1.2, 2.1)
     def sort_key(x):
         v = x["version"]
-        if v.startswith("v"): return (1, v)
-        return (0, v)
-        
+        return (1, v) if v.startswith("v") else (0, v)
+
     history.sort(key=sort_key, reverse=True)
     return history
 
@@ -176,7 +192,7 @@ def get_models(db: Session = Depends(get_db)):
         },
         "feedback": {s: counts.get(s, 0) for s in TRIAGE_STATUSES},
         "model_card": MODEL_CARD_PATH.read_text(encoding="utf-8") if MODEL_CARD_PATH.exists() else None,
-        "version_history": _version_history(report),
+        "version_history": _version_history(),
         "version_history_note": VERSION_HISTORY_NOTE,
     }
 

@@ -303,29 +303,27 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
         # Mirror decide() exactly: Unknown when the classifier alerts but its label
         # is rejected, or when the classifier is quiet but the detector objects.
         unknown = (n_known & ood) | (~n_known & flagged)
+        n_alerted = n_known | flagged
+        novel_family = novel["family"].to_numpy()
         report["novel_families"] = {
             "families": sorted(novel["family"].unique().tolist()),
             "flows": int(len(novel)),
-            "alerted": round(float((n_known | flagged).mean()), 4),
+            "alerted": round(float(n_alerted.mean()), 4),
+            "alerted_support": metrics.support(n_alerted.sum(), len(novel)),
             "caught_by_anomaly_detector": round(float(flagged.mean()), 4),
             "label_rejected_as_out_of_family": round(float(ood.mean()), 4),
             "shown_as_unknown": round(float(unknown.mean()), 4),
-            "breakdown": []
+            "shown_as_unknown_support": metrics.support(unknown.sum(), len(novel)),
+            # pooled, a large family hides a tiny one (CICIDS2017: 36 + 11 flows)
+            "per_family": [
+                {"family": f, "flows": int(mask.sum()),
+                 "alerted": round(float(n_alerted[mask].mean()), 4),
+                 "shown_as_unknown": round(float(unknown[mask].mean()), 4),
+                 "alerted_support": metrics.support(n_alerted[mask].sum(), mask.sum()),
+                 "shown_as_unknown_support": metrics.support(unknown[mask].sum(), mask.sum())}
+                for f, mask in ((f, novel_family == f) for f in sorted(set(novel_family)))
+            ],
         }
-        for fam in sorted(novel["family"].unique()):
-            mask = (novel["family"] == fam).to_numpy()
-            n_fam_flows = int(mask.sum())
-            if n_fam_flows == 0: continue
-            alerted_prop = float((n_known[mask] | flagged[mask]).mean())
-            import math
-            ci = 1.96 * math.sqrt((alerted_prop * (1 - alerted_prop)) / n_fam_flows) if n_fam_flows > 0 else 0
-            
-            report["novel_families"]["breakdown"].append({
-                "family": fam,
-                "flows": n_fam_flows,
-                "alerted": round(alerted_prop, 4),
-                "alerted_ci_95": round(ci, 4)
-            })
 
     if not holdout:
         # Same model, same settings, random rows instead of time blocks: the gap is

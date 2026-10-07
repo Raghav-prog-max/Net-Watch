@@ -53,6 +53,23 @@ def curves(y_true, proba, classes, points=50):
     return out
 
 
+def support(hits, n, z=1.96):
+    """What a rate on unseen attacks rests on: `hits` of `n` flows, and the 95%
+    Wilson score interval. CICIDS2017 has about 36 Infiltration and 11 Heartbleed
+    flows, so a bare percentage claims far more certainty than they hold. Wilson
+    rather than p +/- 1.96 se: at small n that runs past 0% and 100%."""
+    hits, n = int(hits), int(n)
+    if n == 0:
+        return {"hits": 0, "of": 0, "interval_95": None}
+    p = hits / n
+    d = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / d
+    half = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return {"hits": hits, "of": n,
+            "interval_95": [round(float(max(0.0, centre - half)), 4),
+                            round(float(min(1.0, centre + half)), 4)]}
+
+
 def summarise(y_true, y_pred, y_is_attack, proba, classes):
     fpr = false_positive_rate(y_true, y_is_attack)
     return {

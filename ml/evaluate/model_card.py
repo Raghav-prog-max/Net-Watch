@@ -24,6 +24,16 @@ def pct(x, nd=1):
     return f"{100 * x:.{nd}f}%"
 
 
+def caught(s):
+    """'989 of 1,009; 95% interval 96.9–98.7%' from metrics.support(), so a rate on
+    unseen attacks never stands without the flows it rests on. '' for reports
+    written before it existed."""
+    if not s or not s.get("interval_95"):
+        return ""
+    lo, hi = s["interval_95"]
+    return f"{s['hits']:,} of {s['of']:,}; 95% interval {pct(lo)}–{pct(hi)}"
+
+
 def load():
     cfg = yaml.safe_load(open(ROOT / "ml" / "config.yaml"))
     metrics = json.load(open(ROOT / cfg["paths"]["reports_dir"] / "metrics.json"))
@@ -205,17 +215,21 @@ def render():
     if lofo:
         w("Leave-one-family-out: each family is removed from training entirely, a fresh "
           "model is trained, and the held-out family is replayed at it. Each run sets its own "
-          "threshold from the same budget.")
+          "threshold from the same budget. The interval is how far the full-system rate "
+          "could move on another sample of the same size: few flows, wide interval.")
         w("")
-        w("| Held-out family | Flows | Classifier alone | Detector alone | Full system | Benign FPR |")
-        w("| --- | ---: | ---: | ---: | ---: | ---: |")
+        w("| Held-out family | Flows | Classifier alone | Detector alone | Full system | "
+          "Caught, 95% interval | Benign FPR |")
+        w("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
         for r in lofo:
             if "note" in r:
-                w(f"| {r['family']} | — | — | — | — | {r['note']} |")
+                w(f"| {r['family']} | — | — | — | — | — | {r['note']} |")
                 continue
             w(f"| {r['family']} | {r['test_flows']:,} | {pct(r['caught_by_classifier_alone'])} | "
               f"{pct(r.get('caught_by_anomaly_detector_alone', 0))} | "
-              f"{pct(r['caught_by_full_system'])} | {pct(r['benign_fpr'], 2)} |")
+              f"{pct(r['caught_by_full_system'])} | "
+              f"{caught(r.get('caught_by_full_system_support')) or '—'} | "
+              f"{pct(r['benign_fpr'], 2)} |")
         w("")
     else:
         w("Leave-one-family-out was not run for this model (`make quick` skips it). "
@@ -224,12 +238,26 @@ def render():
 
     nf = m.get("novel_families")
     if nf:
+        def paren(s):
+            return f" ({caught(s)})" if caught(s) else ""
         w(f"Families withheld from training altogether ({', '.join(nf['families'])}; "
           f"all {nf['flows']:,} of their flows, as none were trained on): "
-          f"{pct(nf.get('alerted', nf['caught_by_anomaly_detector']))} "
+          f"{pct(nf.get('alerted', nf['caught_by_anomaly_detector']))}"
+          f"{paren(nf.get('alerted_support'))} "
           f"raised an alert, and **{pct(nf['shown_as_unknown'])} were shown to the analyst as "
-          "Unknown** rather than under a known family's name.")
+          f"Unknown**{paren(nf.get('shown_as_unknown_support'))} rather than under a known "
+          "family's name.")
         w("")
+        if nf.get("per_family"):
+            w("Pooled, the larger family hides the smaller one, so each is shown on its own:")
+            w("")
+            w("| Never-trained family | Flows | Alerted | Shown as Unknown |")
+            w("| --- | ---: | ---: | ---: |")
+            for r in nf["per_family"]:
+                a, u = r["alerted_support"], r["shown_as_unknown_support"]
+                w(f"| {r['family']} | {r['flows']:,} | {pct(a['hits'] / max(a['of'], 1))} "
+                  f"({caught(a)}) | {pct(u['hits'] / max(u['of'], 1))} ({caught(u)}) |")
+            w("")
 
     trade = m.get("budget_trade_off")
     if trade:
@@ -274,7 +302,10 @@ def render():
                         key=lambda r: r["caught_by_full_system"])
         w(f"- **Novel attacks that look like normal traffic are missed.** Held out of "
           f"training, {weak_lofo['family']} is caught only "
-          f"{pct(weak_lofo['caught_by_full_system'])} of the time: it sits close enough to "
+          f"{pct(weak_lofo['caught_by_full_system'])} of the time"
+          + (f" ({caught(weak_lofo['caught_by_full_system_support'])})"
+             if caught(weak_lofo.get("caught_by_full_system_support")) else "")
+          + ": it sits close enough to "
           "benign traffic that neither model separates it.")
     # same 3-decimal form as the table: a percentage rounded separately can disagree
     # with it at the boundary (0.8065 printed as 0.806 there and 80.7% here)
@@ -295,8 +326,10 @@ def render():
               f"{fp_dest[0]:,} of {fp_total:,} ({pct(share, 0)}) were labelled {fp_dest[1]}.")
     if nf:
         w(f"- **Some novel attacks keep a confident wrong name.** "
-          f"{pct(1 - nf['shown_as_unknown'])} of never-trained-on flows are still reported "
-          "under a known family's label.")
+          f"{pct(1 - nf['shown_as_unknown'])} of never-trained-on flows"
+          + (f" ({u['of'] - u['hits']:,} of {u['of']:,})"
+             if (u := nf.get("shown_as_unknown_support")) else "")
+          + " are still reported under a known family's label.")
     lc = m.get("label_check_cost")
     if lc:
         w(f"- **The out-of-family check has a cost.** It relabels "
