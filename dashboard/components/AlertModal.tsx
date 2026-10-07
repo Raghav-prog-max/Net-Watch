@@ -1,6 +1,5 @@
 "use client";
 
-import { useTriagePermission } from "@/lib/permissions";
 import type { Alert } from "@/lib/types";
 
 interface AlertModalProps {
@@ -10,7 +9,6 @@ interface AlertModalProps {
 }
 
 export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps) {
-  const { can, why } = useTriagePermission();
   if (!alert) return null;
 
   const isCritical = alert.severity.level === "Critical";
@@ -247,9 +245,6 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
         }}>
           <button
             onClick={() => { onTriage(alert.id, "false_positive"); onClose(); }}
-            disabled={!can("false_positive")}
-            title={why("false_positive")}
-            data-role-locked={!can("false_positive")}
             style={{
               padding: "8px 16px",
               borderRadius: "9999px",
@@ -275,9 +270,6 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <button
               onClick={() => { onTriage(alert.id, "acknowledged"); onClose(); }}
-              disabled={!can("acknowledged")}
-              title={why("acknowledged")}
-              data-role-locked={!can("acknowledged")}
               style={{
                 padding: "8px 16px",
                 borderRadius: "9999px",
@@ -302,9 +294,6 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
             </button>
             <button
               onClick={() => { onTriage(alert.id, "escalated"); onClose(); }}
-              disabled={!can("escalated")}
-              title={why("escalated")}
-              data-role-locked={!can("escalated")}
               style={{
                 padding: "8px 16px",
                 borderRadius: "9999px",
@@ -343,9 +332,6 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
             </button>
             <button
               onClick={() => { onTriage(alert.id, "resolved"); onClose(); }}
-              disabled={!can("resolved")}
-              title={why("resolved")}
-              data-role-locked={!can("resolved")}
               style={{
                 padding: "8px 20px",
                 borderRadius: "9999px",

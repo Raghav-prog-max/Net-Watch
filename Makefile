@@ -11,7 +11,7 @@ PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK
 UVICORN := $(PYTHON) -m uvicorn
 PIP     := $(PYTHON) -m pip
 
-.PHONY: venv setup synthetic data train evaluate api demo seed retrain promote rollback test check-secrets quick holdout eda nslkdd clean
+.PHONY: venv setup synthetic data train evaluate api demo seed retrain promote rollback test check-secrets quick holdout nslkdd clean
 
 venv:           ## create the virtual environment
 	$(PY_FALLBACK) -m venv .venv
@@ -59,9 +59,6 @@ promote:        ## serve a retrained bundle if it passes the check: make promote
 
 rollback:       ## serve v1 again (or VERSION=...); restart the API after either
 	$(PYTHON) scripts/promote.py $(or $(VERSION),v1) --rollback
-
-eda:            ## re-run the EDA notebook on data/processed (needs requirements-dev.txt)
-	$(PYTHON) -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb
 
 nslkdd:         ## NSL-KDD sanity check of the metrics code (needs data/raw/nsl-kdd/)
 	$(PYTHON) scripts/nslkdd_check.py

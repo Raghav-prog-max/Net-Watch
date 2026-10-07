@@ -2,9 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/userContext";
-import { ROLE_DEFINITIONS } from "@/lib/users";
-import { listAlerts } from "@/lib/api";
-import { useTriagePermission } from "@/lib/permissions";
+import { listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert } from "@/lib/types";
 import { NotificationPanel, type NotificationItem } from "@/components/ui/notification-panel";
@@ -15,7 +13,6 @@ const NAV_ITEMS = [
   { label: "ML Models & Registry", href: "/models", icon: "neurology", desc: "LightGBM & Isolation Forest v1" },
   { label: "Feature Drift Monitor", href: "/drift", icon: "monitoring", desc: "PSI & KS-test tracking" },
   { label: "Model Evaluation", href: "/evaluation", icon: "analytics", desc: "PR/ROC-AUC & LOFO tests" },
-  { label: "SOC Team Roles", href: "/users", icon: "badge", desc: "Switch analysts & permissions" },
 ];
 
 function formatAlertTime(isoStr: string): string {
@@ -37,7 +34,6 @@ function formatAlertTime(isoStr: string): string {
 export default function SocTopBar() {
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const { can, triage } = useTriagePermission();
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
@@ -127,9 +123,11 @@ export default function SocTopBar() {
       else if (isNovel) kind = "created";
       else if (isHigh) kind = "edit";
 
-      const src = alert.flow?.src_ip ?? "192.168.1.x";
-      const dstPort = alert.flow?.dst_port ?? "443";
-      const protocol = alert.flow?.protocol ?? "TCP";
+      // only what the alert carries: CICIDS2017 has IPs and protocol, the
+      // synthetic data has neither, so a missing fact reads "—", never a guess
+      const src = alert.flow?.src_ip ?? "—";
+      const dstPort = alert.flow?.dst_port ?? "—";
+      const protocol = alert.flow?.protocol;
 
       return {
         id: alert.id,
@@ -144,8 +142,8 @@ export default function SocTopBar() {
         ],
         time: formatAlertTime(alert.timestamp),
         context: [
-          `${src} → :${dstPort} (${protocol})`,
-          isNovel ? "Novel Vector" : alert.mitre?.tactic ?? "Edge Gateway",
+          `${src} → :${dstPort}${protocol ? ` (${protocol})` : ""}`,
+          isNovel ? "Novel Vector" : alert.mitre?.tactic ?? "—",
         ],
         unread: !readIds.has(alert.id),
         archived: archivedIds.has(alert.id),
@@ -153,14 +151,11 @@ export default function SocTopBar() {
         count: alert.flow_count > 1 ? alert.flow_count : undefined,
         actions: [
           { id: "inspect", label: "Inspect", tone: "primary", resolved: "Inspecting threat" },
-          // offered only to roles that may acknowledge (lib/permissions.ts)
-          ...(can("acknowledged")
-            ? [{ id: "ack", label: "Acknowledge", tone: "quiet" as const, resolved: "Acknowledged alert" }]
-            : []),
+          { id: "ack", label: "Acknowledge", tone: "quiet", resolved: "Acknowledged alert" },
         ],
       };
     });
-  }, [recentAlerts, readIds, archivedIds, can]);
+  }, [recentAlerts, readIds, archivedIds]);
 
   const hasUnread = notificationItems.some((n) => n.unread && !n.archived);
 
@@ -184,7 +179,6 @@ export default function SocTopBar() {
     ).slice(0, 5);
   }, [searchQuery, recentAlerts]);
 
-  const roleDef = (currentUser?.role && ROLE_DEFINITIONS[currentUser.role as keyof typeof ROLE_DEFINITIONS]) || ROLE_DEFINITIONS.tier_2;
 
   return (
     <header
@@ -340,7 +334,7 @@ export default function SocTopBar() {
                           <span style={{ fontSize: "9px", padding: "1px 4px", borderRadius: "3px", backgroundColor: "#FFFFFF", color: "#000000", fontWeight: 700 }}>ZERO-DAY</span>
                         )}
                         <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
-                          {alert.flow?.src_ip ?? "192.168.1.x"}
+                          {alert.flow?.src_ip ?? "—"}
                         </span>
                       </div>
                       <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
@@ -564,7 +558,7 @@ export default function SocTopBar() {
                 {currentUser?.name || "Analyst"}
               </div>
               <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
-                {roleDef.title}
+                {currentUser?.department || "SecOps Team"}
               </div>
             </div>
             <span
@@ -600,66 +594,24 @@ export default function SocTopBar() {
               <div style={{ paddingBottom: "12px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", marginBottom: "12px" }}>
                 <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>{currentUser?.name || "Analyst"}</div>
                 <div style={{ fontSize: "11px", color: "#8E909B", marginBottom: "6px" }}>{currentUser?.email || "No session"}</div>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      fontSize: "10px",
-                      fontWeight: 700,
-                      fontFamily: "var(--font-mono)",
-                      letterSpacing: "0.04em",
-                      backgroundColor: roleDef.badgeBg,
-                      color: roleDef.badgeText,
-                      border: `1px solid ${roleDef.badgeBorder}`,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {roleDef.shortLabel}
-                  </span>
-                  <span style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
-                    {roleDef.title}
-                  </span>
-                  <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
-                    {currentUser?.department || "SecOps Team"}
-                  </span>
+                <div style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
+                  {currentUser?.department || "SecOps Team"}
+                  {currentUser?.shift ? ` · ${currentUser.shift}` : ""}
                 </div>
               </div>
 
               {/* Verified Session Info */}
               <div style={{ marginBottom: "12px", padding: "8px 10px", borderRadius: "8px", backgroundColor: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
                 <div style={{ fontSize: "9px", color: "#8E909B", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>
-                  Active Authentication Realm
+                  Session
                 </div>
-                <div style={{ fontSize: "11px", color: "#10B981", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10B981" }} />
-                  Firebase Cloud Identity
+                <div style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
+                  Seeded roster, no password
                 </div>
               </div>
 
               {/* Portal & Sign Out Links */}
               <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "6px" }}>
-                <Link
-                  href="/users"
-                  onClick={() => setUserDropdownOpen(false)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "#FFFFFF",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>admin_panel_settings</span>
-                  <span>Manage Users &amp; RBAC Portal →</span>
-                </Link>
 
                 <button
                   type="button"

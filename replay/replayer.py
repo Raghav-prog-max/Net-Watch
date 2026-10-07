@@ -178,11 +178,24 @@ def post(url, batch, api_key=None):
         return json.loads(r.read())
 
 
+# display-only columns the cleaner keeps (ml/data/clean.py) -> the alert's flow facts
+DISPLAY_META = {"Source IP": "src_ip", "Destination IP": "dst_ip"}
+
+
 def build_batch(chunk, features):
     """Rows -> the POST /score payload items (api/schemas.py ScoredFlow)."""
-    # no meta: the API reads the flow facts off the features, and the family is
-    # the answer the system is being tested on, not something to show analysts
-    return [{"features": {f: float(r[f]) for f in features}} for _, r in chunk.iterrows()]
+    # The API reads the flow facts off the features; meta adds only the IPs,
+    # which the model never sees. Never the family: that is the answer the
+    # system is being tested on, not something to show analysts.
+    items = []
+    for _, r in chunk.iterrows():
+        item = {"features": {f: float(r[f]) for f in features}}
+        meta = {key: str(r[col]) for col, key in DISPLAY_META.items()
+                if col in r.index and pd.notna(r[col])}
+        if meta:
+            item["meta"] = meta
+        items.append(item)
+    return items
 
 
 def main(a):

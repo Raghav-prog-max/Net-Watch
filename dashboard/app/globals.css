@@ -149,13 +149,6 @@ a {
   transform: translateY(-1px);
 }
 
-/* a triage action the signed-in role may not take (lib/permissions.ts); the
-   reason is in the button's title */
-button[data-role-locked="true"] {
-  opacity: 0.35;
-  cursor: not-allowed !important;
-  transform: none !important;
-}
 
 .nw-btn-primary {
   background-color: #FFFFFF;

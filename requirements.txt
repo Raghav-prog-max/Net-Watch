@@ -9,7 +9,6 @@ fastapi>=0.110
 uvicorn[standard]>=0.27   # includes websockets for /ws/alerts
 pydantic>=2.6
 sqlalchemy
-prometheus-client>=0.20   # GET /metrics (api/services/telemetry.py)
 # optional, each has a working fallback in the code
 lightgbm>=4.7      # falls back to sklearn HistGradientBoosting
 shap>=0.44         # falls back to z-score explanations

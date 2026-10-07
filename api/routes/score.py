@@ -4,13 +4,11 @@ try:
     from sqlalchemy.orm import Session
 except ImportError:
     Session = Any  # type: ignore[misc,assignment]
-import time
 from datetime import datetime, timezone
 
 from ..schemas import ScoreRequest, ScoreResponse
 from ..db.session import get_db
 from ..db.models import AlertModel
-from ..services import telemetry
 from ..services.auth import require_api_key
 from ..services.scorer import ModelsNotFound, get_scorer
 from .alerts import alert_to_dict
@@ -74,7 +72,6 @@ def _join(row, alert_data, feats):
 @router.post("/score", response_model=ScoreResponse, dependencies=[Depends(require_api_key)])
 async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
                       scorer=Depends(scorer_dependency)):
-    started = time.perf_counter()
     alerts = scorer.score([f.features for f in req.flows], [f.meta for f in req.flows])
     # model inputs are stored for retraining, not sent to analysts
     features = [a.pop("features", None) for a in alerts]
@@ -124,7 +121,6 @@ async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
         db.flush()
         _RECENT_ALERTS[family] = {"id": row.id, "last_seen": ts_float, "last_broadcast": ts_float}
         touched[row.id] = row
-        telemetry.ALERTS_OPENED.labels(family).inc()
 
     db.commit()
     # Sent as stored, not as the flow that just arrived: a re-send built from the
@@ -132,7 +128,4 @@ async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
     returned = [alert_to_dict(row) for row in touched.values()]
     for alert in returned:
         await manager.broadcast(alert)
-    telemetry.FLOWS_SCORED.inc(len(req.flows))
-    telemetry.FLOWS_ALERTED.inc(len(alerts))
-    telemetry.SCORE_SECONDS.observe(time.perf_counter() - started)
     return {"scored": len(req.flows), "alerted": len(alerts), "alerts": returned}
