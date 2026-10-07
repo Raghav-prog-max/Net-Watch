@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,6 +14,9 @@ import {
 } from "recharts";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
 import { falseAlerts } from "@/lib/falseAlerts";
+import { getModelRegistryInfo } from "@/lib/api";
+
+const CLASSIFIER_NAME: Record<string, string> = { lightgbm: "LightGBM", rf: "Random Forest" };
 
 interface Props {
   alerts: Alert[];
@@ -24,6 +28,11 @@ interface Props {
 const MONO_COLORS = ["#FFFFFF", "#C4C6CB", "#8E909B", "#656773", "#35353F"];
 
 export default function LowerDetailCards({ alerts, report, drift, falsePositivesTotal }: Props) {
+  // the bundle models/ACTIVE serves (GET /models), not a version typed into the page
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  useEffect(() => {
+    getModelRegistryInfo().then((m) => setActiveModel(m.active)).catch(() => setActiveModel(null));
+  }, []);
   const counts = new Map<string, number>();
   alerts.forEach((a) => counts.set(a.prediction.family, (counts.get(a.prediction.family) ?? 0) + 1));
   const families = Array.from(counts.entries())
@@ -212,14 +221,14 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
               fontSize: "10px",
               fontWeight: 700,
             }}>
-              v4.8.2-PROD
+              {activeModel ? `${activeModel} · ACTIVE` : "—"}
             </span>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
               <span style={{ fontSize: "11px", color: "#8E909B" }}>Ensemble Architecture</span>
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>LightGBM + Isolation Forest</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>{report ? `${CLASSIFIER_NAME[report.classifier] ?? report.classifier} + Isolation Forest` : "—"}</span>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
@@ -239,7 +248,7 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
 
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
               <span style={{ fontSize: "11px", color: "#8E909B" }}>Validation Setup</span>
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>Temporal Block (No Leakage)</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#E1E4EA" }}>Time-Ordered Blocks + Purge Gap</span>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#141418", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
