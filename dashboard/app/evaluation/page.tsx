@@ -16,6 +16,10 @@ import {
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
 import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
+import { ConfusionMatrix } from "@/components/ConfusionMatrix";
+import { PRROCCurves } from "@/components/PRROCCurves";
+import { PerClassMetrics } from "@/components/PerClassMetrics";
+import { LOFOChart } from "@/components/LOFOChart";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -24,7 +28,6 @@ export default function EvaluationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [curveFamily, setCurveFamily] = useState<string | null>(null);
-  const [cmCounts, setCmCounts] = useState(false);
 
   useEffect(() => {
     getModelMetrics()
@@ -74,7 +77,7 @@ export default function EvaluationPage() {
   const naive = report.naive_comparison;
   // the headline is the whole system; `m` (and the comparisons below) is the classifier alone
   const fa = falseAlerts(report);
-  const novel = report.novel_families;
+  const novel = report.novel_families || { families: [], flows: 0, caught_by_anomaly_detector: 0 };
   const novelShown = novel.shown_as_unknown ?? novel.caught_by_anomaly_detector;
 
   const perClassChartData = Object.entries(m.per_class).map(([family, c]) => ({
@@ -167,7 +170,7 @@ export default function EvaluationPage() {
             {pct(novelShown)}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
-            {novel.families.join(" & ")} · {novel.flows.toLocaleString()} flows
+            {(novel.families || []).join(" & ")} · {(novel.flows ?? 0).toLocaleString()} flows
             {novel.alerted !== undefined ? ` · ${pct(novel.alerted)} alerted` : ""}
           </div>
         </div>
@@ -279,56 +282,12 @@ export default function EvaluationPage() {
         </div>
         <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginBottom: "18px" }}>
           {report.rows
-            ? `Evaluated over ${report.rows.test.toLocaleString()} held-out flows from time blocks the model never trained on`
+            ? `Evaluated over ${(report.rows.test ?? 0).toLocaleString()} held-out flows from time blocks the model never trained on`
             : "Evaluated over held-out time blocks the model never trained on"}
         </div>
 
         {/* Recharts Grouped BarChart */}
-        <div
-          style={{
-            width: "100%",
-            height: "240px",
-            backgroundColor: "#111114",
-            borderRadius: "16px",
-            padding: "16px 16px 8px 4px",
-            marginBottom: "20px",
-          }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={perClassChartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
-              <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="family"
-                stroke="#8A8A93"
-                tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
-                axisLine={{ stroke: "#26262C" }}
-                tickLine={false}
-              />
-              <YAxis
-                domain={[0, 100]}
-                unit="%"
-                stroke="#8A8A93"
-                tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
-                contentStyle={{
-                  backgroundColor: "#17171B",
-                  border: "1px solid #2E2E38",
-                  borderRadius: "12px",
-                  fontSize: "12px",
-                  color: "#FFFFFF",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
-              <Bar dataKey="Precision" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="Recall" fill="#FFFFFF" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="F1" fill="#C7DB6E" radius={[4, 4, 0, 0]} maxBarSize={22} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <PerClassMetrics data={perClassChartData} />
 
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
@@ -370,7 +329,7 @@ export default function EvaluationPage() {
                     <td className="mono" style={{ padding: "12px 14px" }}>{c["f1-score"].toFixed(3)}</td>
                     <td className="mono" style={{ padding: "12px 14px" }}>{aucInfo?.pr_auc !== undefined ? aucInfo.pr_auc.toFixed(3) : "—"}</td>
                     <td className="mono" style={{ padding: "12px 14px" }}>{aucInfo?.roc_auc !== undefined ? aucInfo.roc_auc.toFixed(3) : "—"}</td>
-                    <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{c.support.toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{(c.support ?? 0).toLocaleString()}</td>
                   </tr>
                 );
               })}
@@ -396,52 +355,7 @@ export default function EvaluationPage() {
             Each family was completely excised from classifier training, then tested against the combined dual-engine system.
           </div>
 
-          {lofoChartData.length > 0 && (
-            <div
-              style={{
-                width: "100%",
-                height: "220px",
-                backgroundColor: "#111114",
-                borderRadius: "16px",
-                padding: "16px 16px 8px 4px",
-                marginBottom: "20px",
-              }}
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={lofoChartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
-                  <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="family"
-                    stroke="#8A8A93"
-                    tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
-                    axisLine={{ stroke: "#26262C" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    unit="%"
-                    stroke="#8A8A93"
-                    tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
-                    contentStyle={{
-                      backgroundColor: "#17171B",
-                      border: "1px solid #2E2E38",
-                      borderRadius: "12px",
-                      fontSize: "12px",
-                      color: "#FFFFFF",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
-                  <Bar dataKey="Classifier Alone" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="Hybrid Ensemble" fill="#FFFFFF" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          <LOFOChart data={lofoChartData} />
 
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
@@ -459,7 +373,7 @@ export default function EvaluationPage() {
                 {report.lofo.map((r) => (
                   <tr key={r.family} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
                     <td style={{ padding: "12px 14px", fontWeight: 600 }}>{r.family}</td>
-                    <td className="mono" style={{ padding: "12px 14px" }}>{r.test_flows.toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "12px 14px" }}>{(r.test_flows ?? 0).toLocaleString()}</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>
                       {pct(r.caught_by_classifier_alone)}
                     </td>
@@ -478,7 +392,7 @@ export default function EvaluationPage() {
                       {report.novel_families.families.join(" + ")}{" "}
                       <span style={{ color: "var(--nw-text-muted)", fontWeight: 400 }}>(never trained)</span>
                     </td>
-                    <td className="mono" style={{ padding: "12px 14px" }}>{report.novel_families.flows.toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "12px 14px" }}>{(report.novel_families?.flows ?? 0).toLocaleString()}</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>—</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)", fontWeight: 700 }}>
                       {report.novel_families.alerted !== undefined ? pct(report.novel_families.alerted) : "—"}
@@ -498,50 +412,14 @@ export default function EvaluationPage() {
       )}
 
       {/* ── PR AND ROC CURVES ─────────────────────────────────── */}
-      {m.curves && Object.keys(m.curves).length > 0 && (() => {
-        const fams = Object.keys(m.curves!);
-        const fam = curveFamily && fams.includes(curveFamily) ? curveFamily : fams.find((f) => f !== "Benign") ?? fams[0];
-        const c = m.curves![fam];
-        const pr = c.pr.map(([x, y]) => ({ x, y }));
-        const roc = c.roc.map(([x, y]) => ({ x, y }));
-        const chart = (data: { x: number; y: number }[], xl: string, yl: string, color: string) => (
-          <div style={{ flex: "1 1 360px", height: "260px", backgroundColor: "#111114", borderRadius: "16px", padding: "12px 12px 4px 0" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
-                <CartesianGrid stroke="#26262C" strokeDasharray="3 3" />
-                <XAxis dataKey="x" type="number" domain={[0, 1]} stroke="#8A8A93" tick={{ fontSize: 10 }}
-                  label={{ value: xl, position: "insideBottom", offset: -8, fill: "#8A8A93", fontSize: 11 }} />
-                <YAxis type="number" domain={[0, 1]} stroke="#8A8A93" tick={{ fontSize: 10 }}
-                  label={{ value: yl, angle: -90, position: "insideLeft", fill: "#8A8A93", fontSize: 11 }} />
-                <Tooltip contentStyle={{ backgroundColor: "#17171B", border: "1px solid #2E2E38", borderRadius: "12px", fontSize: "12px" }} />
-                <Line type="stepAfter" dataKey="y" stroke={color} dot={false} strokeWidth={2} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        );
-        return (
-          <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "24px", padding: "24px", marginBottom: "26px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "14px" }}>
-              <div>
-                <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>PR and ROC Curves // {fam}</div>
-                <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-                  One-vs-rest on the held-out test set. Read PR first: ROC flatters imbalanced data.
-                  PR-AUC {m.auc[fam]?.pr_auc?.toFixed(3) ?? "—"} · ROC-AUC {m.auc[fam]?.roc_auc?.toFixed(3) ?? "—"}
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {fams.map((f) => (
-                  <button key={f} onClick={() => setCurveFamily(f)} className={`nw-btn-pill ${f === fam ? "nw-btn-purple" : "nw-btn-dark"}`}>{f}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-              {chart(pr, "Recall", "Precision", "#FFFFFF")}
-              {chart(roc, "False positive rate", "True positive rate", "#A78BFA")}
-            </div>
-          </div>
-        );
-      })()}
+      {m.curves && Object.keys(m.curves).length > 0 && (
+        <PRROCCurves
+          curves={m.curves as Record<string, any>}
+          aucInfo={m.auc as Record<string, any>}
+          curveFamily={curveFamily}
+          setCurveFamily={setCurveFamily}
+        />
+      )}
 
       {/* ── MODEL COMPARISON ──────────────────────────────────── */}
       {(report.random_forest_baseline || report.imbalance_study) && (
@@ -614,72 +492,11 @@ export default function EvaluationPage() {
       )}
 
       {/* ── CONFUSION MATRIX ──────────────────────────────────── */}
-      <div
-        style={{
-          backgroundColor: "var(--nw-bg-panel)",
-          borderRadius: "24px",
-          padding: "24px",
-        }}
-      >
-        <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)", marginBottom: "4px" }}>
-          Confusion Matrix Heatmap
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "18px" }}>
-          <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-            {cmCounts ? "Flow counts" : "Row-normalised: share of each actual class"} across held-out evaluation flows
-          </div>
-          <button onClick={() => setCmCounts(!cmCounts)} className="nw-btn-pill nw-btn-dark">
-            {cmCounts ? "Show row %" : "Show counts"}
-          </button>
-        </div>
-
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", textAlign: "center" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #26262C" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--nw-text-muted)" }}>Actual \ Pred</th>
-                {m.confusion_matrix.labels.map((l) => (
-                  <th key={l} style={{ padding: "10px 14px", color: "var(--nw-text-muted)" }}>{l}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {m.confusion_matrix.rows.map((row, i) => {
-                const total = row.reduce((a, b) => a + b, 0) || 1;
-                return (
-                  <tr key={m.confusion_matrix.labels[i]} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
-                    <td style={{ padding: "12px 14px", textAlign: "left", fontWeight: 600 }}>
-                      {m.confusion_matrix.labels[i]}
-                    </td>
-                    {row.map((val, j) => {
-                      const frac = val / total;
-                      const isDiag = i === j;
-                      return (
-                        <td
-                          key={j}
-                          className="mono"
-                          style={{
-                            padding: "12px 14px",
-                            backgroundColor: isDiag ? `rgba(167, 139, 250, ${0.12 + frac * 0.35})` : "transparent",
-                            color: isDiag ? "#FFFFFF" : "var(--nw-text-muted)",
-                            fontWeight: isDiag ? 700 : 400,
-                          }}
-                        >
-                          {cmCounts ? val.toLocaleString() : `${(frac * 100).toFixed(1)}%`}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ marginTop: "16px", fontSize: "12px", color: "var(--nw-text-muted)", borderTop: "1px solid #26262C", paddingTop: "12px" }}>
-          Note: Accuracy is {m.accuracy_for_reference_only} and is intentionally listed last for reference only: because most network flows are benign, a useless model that never fired would still score a high accuracy.
-        </div>
-      </div>
+      <ConfusionMatrix
+        labels={m.confusion_matrix.labels}
+        rows={m.confusion_matrix.rows}
+        accuracyForReferenceOnly={m.accuracy_for_reference_only}
+      />
     </div>
   );
 }

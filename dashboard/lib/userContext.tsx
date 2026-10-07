@@ -165,14 +165,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  // Firebase email login (Real credentials only)
+  // Firebase email login (Real credentials only if configured, fallback to mock auth otherwise)
   const loginWithEmail = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedEmail = email.trim().toLowerCase();
 
+    // HACKATHON FALLBACK: If Firebase isn't configured, just mock authenticate using local users
     if (!isFirebaseConfigured || !auth) {
+      const match = users.find((u) => u.email.toLowerCase() === trimmedEmail);
+      if (match) {
+        setCurrentUser(match);
+        return { success: true };
+      }
       return {
         success: false,
-        error: "Firebase Authentication is not configured. Please verify your credentials in .env.local.",
+        error: "Firebase Authentication is not configured, and user was not found in the local roster.",
       };
     }
 
@@ -420,7 +426,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         users,
         auditLogs,
         firebaseUser,
-        isAuthenticated: Boolean(firebaseUser && currentUser),
+        isAuthenticated: isFirebaseConfigured ? Boolean(firebaseUser && currentUser) : Boolean(currentUser),
         isFirebaseConfigured,
         authLoading,
         loginWithEmail,
