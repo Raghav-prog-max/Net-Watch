@@ -37,3 +37,7 @@ deployment/.env.production
 deployment/nginx/ssl/*
 !deployment/nginx/ssl/.gitkeep
 backups/
+# Written on every run, never source: scripts/retrain.py's config copy and the
+# TypeScript build cache
+ml/config_retrain.yaml
+dashboard/tsconfig.tsbuildinfo

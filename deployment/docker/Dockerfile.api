@@ -9,9 +9,9 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# No compiler: every requirement ships a wheel for Python 3.11 (the root
-# Dockerfile, which CI builds, installs them without one). build-essential cost
-# ~100 MB of downloads per build and was never used.
+# No compiler: every requirement ships a wheel for Python 3.11 (CI builds this
+# image on every PR). build-essential cost ~100 MB of downloads per build and
+# was never used.
 COPY requirements.txt .
 
 # Install wheels into isolated directory

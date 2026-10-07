@@ -20,11 +20,8 @@ All extensive documentation and architectural explanations have been moved to th
 
 | Document | Description |
 |---|---|
-| [`docs/PLAN.md`](docs/PLAN.md) | Day-by-day plan with owners and acceptance checks. |
 | [`docs/DATA_SETUP.md`](docs/DATA_SETUP.md) | Instructions for downloading and verifying the real CICIDS2017 files. |
 | [`docs/CODE_TOUR.md`](docs/CODE_TOUR.md) | Understanding why each module does what it does. |
-| [`docs/implementation.md`](docs/implementation.md) | The 8-step build process from empty repo to a fully deployed system. |
-| [`docs/backend.md`](docs/backend.md) | FastAPI backend architecture, API contracts, and endpoints (Tag D). |
 | [`docs/evaluation.md`](docs/evaluation.md) | ML evaluation methodology (Metrics, LOFO, Thresholds). |
 | [`docs/drift_strategy.md`](docs/drift_strategy.md) | Drift monitoring strategy (PSI, KS Test, Alert-rate logic). |
 | [`docs/model_card.md`](docs/model_card.md) | Auto-generated Model Card containing performance metrics. |

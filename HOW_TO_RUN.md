@@ -13,7 +13,7 @@ Create your virtual environment and install all dependencies:
 make venv
 ```
 > [!NOTE]
-> This creates a local `.venv` folder in the project root and installs everything from `requirements.txt`. All `make` commands will automatically detect and use this environment.
+> This creates a local `.venv` folder in the project root and installs `requirements-dev.txt`: the runtime packages in `requirements.txt` plus the test runner and tools. Docker images install only `requirements.txt`. All `make` commands will automatically detect and use this environment.
 
 ---
 
@@ -128,7 +128,7 @@ repository root with the virtual environment's Python:
 
 | Make target | Command |
 |---|---|
-| `make venv` | `python -m venv .venv` then `.venv\Scripts\python -m pip install -r requirements.txt` |
+| `make venv` | `python -m venv .venv` then `.venv\Scripts\python -m pip install -r requirements-dev.txt` |
 | `make synthetic` | `.venv\Scripts\python scripts/make_synthetic.py --rows 60000` |
 | `make data` | `.venv\Scripts\python -m ml.prepare --config ml/config.yaml` |
 | `make train` | `.venv\Scripts\python -m ml.train --config ml/config.yaml` |

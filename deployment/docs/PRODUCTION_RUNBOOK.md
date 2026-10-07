@@ -50,7 +50,7 @@ kubectl rollout restart deployment/netwatch-dashboard -n netwatch
      bash deployment/scripts/backup.sh  # check available backups
      # Or regenerate models:
      python -m ml.train
-     python -m ml.evaluate.report
+     python -m ml.evaluate.model_card
      ```
   3. Restart the API container to re-trigger the warm-up lifespan:
      ```bash
