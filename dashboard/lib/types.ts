@@ -8,10 +8,24 @@ export interface Explanation {
   impact: number;
 }
 
+/** What the API sends as an alert's `flow` (api/services/scorer.py flow_facts):
+ *  numbers for the port and counts, text for the rest; any fact the data lacks
+ *  is left out. Typed as text, a search called .includes() on the port and crashed. */
+export interface FlowFacts {
+  dst_port?: number;
+  protocol?: string;
+  duration_ms?: number;
+  fwd_packets?: number;
+  bwd_packets?: number;
+  src_ip?: string;
+  dst_ip?: string;
+  [extra: string]: string | number | undefined;
+}
+
 export interface Alert {
   id: string;
   timestamp: string;
-  flow: Record<string, string>;
+  flow: FlowFacts;
   prediction: {
     family: string;
     confidence: number;
@@ -52,6 +66,8 @@ export interface DriftStatus {
   recommendation?: string;
   alert_rate?: number;
   flows_seen: number;
+  // while warming up: how many unflagged flows the monitor needs (api/services/scorer.py)
+  warmup_flows?: number;
   flows_scored?: number;
   bands?: { warning: number; drift: number };
   // one snapshot every `history_every` flows scored (ml/config.yaml), oldest first
@@ -85,6 +101,26 @@ export interface Support {
   of: number;
   interval_95: [number, number] | null;
 }
+
+/** One leave-one-family-out run (ml/evaluate/lofo.py). */
+export interface LofoResult {
+  family: string;
+  test_flows: number;
+  attack_threshold?: number;
+  caught_by_classifier_alone: number;
+  caught_by_anomaly_detector_alone?: number;
+  caught_by_full_system: number;
+  caught_by_full_system_support?: Support;
+  benign_fpr: number;
+}
+
+/** A family the run could not test: ml/evaluate/lofo.py returns only a note. */
+export interface LofoNote {
+  family: string;
+  note: string;
+}
+
+export const isLofoResult = (r: LofoResult | LofoNote): r is LofoResult => "test_flows" in r;
 
 export interface EvaluationReport {
   generated?: string;
@@ -129,16 +165,8 @@ export interface EvaluationReport {
     macro_f1_gap?: number;
     inflated?: boolean;
   };
-  lofo: {
-    family: string;
-    test_flows: number;
-    attack_threshold?: number;
-    caught_by_classifier_alone: number;
-    caught_by_anomaly_detector_alone?: number;
-    caught_by_full_system: number;
-    caught_by_full_system_support?: Support;
-    benign_fpr: number;
-  }[];
+  // a family with no test flows comes back as a note, with no figures
+  lofo: (LofoResult | LofoNote)[];
   novel_families: {
     families: string[];
     flows: number;

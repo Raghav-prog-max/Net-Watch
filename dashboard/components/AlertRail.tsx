@@ -26,7 +26,7 @@ export default function AlertRail({
   const novelCount = alerts.filter((a) => a.is_novel).length;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {/* ── HEADER ──────────────────────────── */}
       <div style={{
         padding: "16px",
@@ -120,8 +120,11 @@ export default function AlertRail({
       </div>
 
       {/* ── SCROLLABLE ALERT CARDS ──────────── */}
+      {/* minHeight 0: a flex child will not shrink below its content without it,
+          so the list overflowed the rail instead of scrolling inside it */}
       <div style={{
         flex: 1,
+        minHeight: 0,
         overflowY: "auto",
         padding: "16px",
         display: "flex",

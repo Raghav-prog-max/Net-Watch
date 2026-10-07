@@ -98,6 +98,30 @@ export default function DriftMonitorPage() {
       </div>
 
       {/* ── RETRAIN RECOMMENDED CALLOUT ───────────────────────── */}
+      {drift?.status === "warming_up" && (
+        // attack-only replays alert on nearly every flow, so the window never
+        // filled and the page sat on WARMING UP with no reason given
+        <div
+          role="status"
+          style={{
+            backgroundColor: "var(--nw-bg-panel)",
+            borderRadius: "20px",
+            padding: "16px 24px",
+            marginBottom: "24px",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            fontSize: "13px",
+            color: "var(--nw-text-muted)",
+            lineHeight: 1.6,
+          }}
+        >
+          Drift is measured only on flows that did <strong>not</strong> raise an alert, so an attack burst
+          cannot read as the network changing. {(drift.flows_seen ?? 0).toLocaleString()} of{" "}
+          {(drift.warmup_flows ?? 500).toLocaleString()} collected so far. Attack-only traffic will not fill it:
+          replay normal or drifted traffic, e.g. <code>python replay/replayer.py --scenario normal</code>{" "}
+          or <code>--scenario drift</code>.
+        </div>
+      )}
+
       {isDrift && (
         <div
           style={{
@@ -161,7 +185,7 @@ export default function DriftMonitorPage() {
               : isDrift
               ? "Retrain recommended"
               : drift.status === "warming_up"
-              ? "Collecting 500 benign flows"
+              ? `${(drift.flows_seen ?? 0).toLocaleString()} of ${(drift.warmup_flows ?? 500).toLocaleString()} unflagged flows collected`
               : "Operating within limits"}
           </div>
         </div>

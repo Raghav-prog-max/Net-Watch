@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { Alert } from "@/lib/types";
 
 interface AlertModalProps {
@@ -9,6 +10,24 @@ interface AlertModalProps {
 }
 
 export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  // the caller passes a new onClose every render; keyed on it, the effect below
+  // re-ran on every live alert and pulled focus back to the close button
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const openId = alert?.id;
+
+  // a dialog: Escape closes it, and focus moves into it when it opens
+  useEffect(() => {
+    if (!openId) return;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openId]);
+
   if (!alert) return null;
 
   const isCritical = alert.severity.level === "Critical";
@@ -45,6 +64,9 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
           border: "1px solid rgba(255, 255, 255, 0.15)",
         }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="alert-modal-title"
       >
         {/* ── HEADER ──────────────────────────── */}
         <div style={{
@@ -85,7 +107,7 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
                 #{alert.id.slice(0, 8)}
               </span>
             </div>
-            <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#FFFFFF", margin: 0, letterSpacing: "-0.02em" }}>
+            <h2 id="alert-modal-title" style={{ fontSize: "20px", fontWeight: 700, color: "#FFFFFF", margin: 0, letterSpacing: "-0.02em" }}>
               {alert.prediction.family} {alert.is_novel && "· Novel Zero-Day"}
             </h2>
             <span style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
@@ -93,6 +115,9 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
             </span>
           </div>
           <button
+            ref={closeRef}
+            type="button"
+            aria-label="Close alert details"
             onClick={onClose}
             style={{
               width: "32px",

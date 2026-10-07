@@ -1,19 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useUser } from "@/lib/userContext";
+import { usePathname } from "next/navigation";
 
 export default function SocSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { logout } = useUser();
-
-  const handleLogout = async () => {
-    await logout();
-    router.push("/login");
-  };
-
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
     { href: "/alerts", label: "Alerts", icon: "notifications_active", badge: true },
@@ -24,7 +15,6 @@ export default function SocSidebar() {
 
   const bottomItems = [
     { href: "/", label: "Landing Page", icon: "public" },
-    { href: "#", label: "Log out", icon: "logout" },
   ];
 
   return (
@@ -201,29 +191,6 @@ export default function SocSidebar() {
             <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>public</span>
             <span>Landing Page</span>
           </Link>
-          <button
-            type="button"
-            onClick={handleLogout}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              padding: "6px 12px",
-              fontSize: "12px",
-              color: "#8E909B",
-              backgroundColor: "transparent",
-              border: "none",
-              cursor: "pointer",
-              textAlign: "left",
-              width: "100%",
-              transition: "color 0.15s ease",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "#8E909B")}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>logout</span>
-            <span>Log out</span>
-          </button>
         </div>
       </div>
     </aside>

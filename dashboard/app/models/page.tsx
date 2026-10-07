@@ -171,7 +171,7 @@ export default function ModelsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
           <div>
             <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>
-              Release Progression (v1.0 &rarr; v1.1 &rarr; v1.2 &rarr; v2.0 planned)
+              Code Release Notes (v1.0 &rarr; v1.1 &rarr; v1.2 &rarr; v2.0 planned)
             </div>
             <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginTop: "2px", maxWidth: "760px" }}>
               {info?.version_history_note ??
@@ -213,15 +213,15 @@ export default function ModelsPage() {
                 <th style={{ padding: "10px 14px" }}>Status</th>
                 <th style={{ padding: "10px 14px" }}>Anomaly Feature Scaling</th>
                 <th style={{ padding: "10px 14px" }}>Out-of-Family Gate</th>
-                <th style={{ padding: "10px 14px" }}>PortScan LOFO Recall</th>
-                <th style={{ padding: "10px 14px" }}>Unseen &rarr; Unknown</th>
+                <th style={{ padding: "10px 14px" }}>PortScan LOFO Recall (served bundle)</th>
+                <th style={{ padding: "10px 14px" }}>Unseen &rarr; Unknown (served bundle)</th>
                 <th style={{ padding: "10px 14px", textAlign: "right" }}>SHAP Engine</th>
               </tr>
             </thead>
             <tbody>
               <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)", backgroundColor: "rgba(199, 219, 110, 0.04)" }}>
                 <td className="mono" style={{ padding: "12px 14px", fontWeight: 800, color: "var(--nw-card-3)" }}>v1.2</td>
-                <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-lime" style={{ fontSize: "10px" }}>ACTIVE</span></td>
+                <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-lime" style={{ fontSize: "10px" }} title="The code in this repository. Its figures are the served bundle's report.">CURRENT CODE</span></td>
                 <td className="mono" style={{ padding: "12px 14px", color: "#FFFFFF" }}>sign(X) * log1p(|X|) + StandardScaler</td>
                 <td style={{ padding: "12px 14px" }}>Independent IQR z-score (keep 99%)</td>
                 <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-3)", fontWeight: 700 }}>{liveFigure("Held-Out PortScan LOFO", "—")}</td>

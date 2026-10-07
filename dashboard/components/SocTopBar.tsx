@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/userContext";
 import { listAlerts, triage } from "@/lib/api";
-import { subscribeToAlerts } from "@/lib/socket";
+import { subscribeToAlerts, useFeedStatus } from "@/lib/socket";
 import type { Alert } from "@/lib/types";
 import { NotificationPanel, type NotificationItem } from "@/components/ui/notification-panel";
 
@@ -40,7 +40,9 @@ export default function SocTopBar() {
   const notifRef = useRef<HTMLDivElement>(null);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { currentUser, logout } = useUser();
+  const { currentUser, roster, switchAnalyst } = useUser();
+  // the live feed's real state; this read NODE-ONLINE whatever happened
+  const feedStatus = useFeedStatus();
 
   // Search input & command palette state
   const [searchQuery, setSearchQuery] = useState("");
@@ -170,12 +172,11 @@ export default function SocTopBar() {
   const filteredThreats = useMemo(() => {
     if (!searchQuery.trim()) return recentAlerts.slice(0, 4);
     const q = searchQuery.toLowerCase();
+    // every field as text: the port is a number, and .includes() on it crashed the page
+    const fields = (a: Alert) => [a.prediction.family, a.flow?.src_ip, a.flow?.dst_ip,
+      a.flow?.dst_port, a.flow?.protocol, a.severity.level, a.mitre?.tactic];
     return recentAlerts.filter((a) =>
-      a.prediction.family.toLowerCase().includes(q) ||
-      (a.flow?.src_ip && a.flow.src_ip.includes(q)) ||
-      (a.flow?.dst_port && a.flow.dst_port.includes(q)) ||
-      a.severity.level.toLowerCase().includes(q) ||
-      (a.mitre?.tactic && a.mitre.tactic.toLowerCase().includes(q))
+      fields(a).some((f) => f != null && String(f).toLowerCase().includes(q))
     ).slice(0, 5);
   }, [searchQuery, recentAlerts]);
 
@@ -203,7 +204,7 @@ export default function SocTopBar() {
             Hello, {currentUser?.name || "Analyst"}
           </h1>
           <span style={{ fontSize: "12px", color: "#8E909B" }}>•</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#8E909B" }}>NODE-ONLINE</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#8E909B" }}>{feedStatus === "live" ? "FEED LIVE" : feedStatus === "reconnecting" ? "FEED RECONNECTING" : "FEED CONNECTING"}</span>
         </div>
         <p style={{ margin: 0, fontSize: "11px", color: "#8E909B" }}>
           Real-time network intrusion monitoring &amp; automated triage
@@ -606,41 +607,46 @@ export default function SocTopBar() {
                   Session
                 </div>
                 <div style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
-                  Seeded roster, no password
+                  Seeded roster, no sign-in
                 </div>
               </div>
 
-              {/* Portal & Sign Out Links */}
-              <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "6px" }}>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setUserDropdownOpen(false);
-                    await logout();
-                    router.push("/login");
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    backgroundColor: "transparent",
-                    color: "#FCA5A5",
-                    border: "1px solid rgba(239, 68, 68, 0.2)",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "all 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>logout</span>
-                  <span>Sign Out of Session</span>
-                </button>
+              {/* Switch analyst: there is no sign-in page, the console opens as the last analyst chosen */}
+              <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ fontSize: "9px", color: "#8E909B", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 2px 2px" }}>
+                  Switch analyst
+                </div>
+                {roster.filter((u) => u.id !== currentUser.id).map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      switchAnalyst(u.id);
+                      setUserDropdownOpen(false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "6px 8px",
+                      borderRadius: "8px",
+                      backgroundColor: "transparent",
+                      color: "#E1E4EA",
+                      border: "none",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: u.avatarColor, color: "#FFFFFF", fontSize: "9px", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {u.initials}
+                    </span>
+                    <span>{u.name}</span>
+                    <span style={{ marginLeft: "auto", color: "#8E909B", fontSize: "10px" }}>{u.department}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}

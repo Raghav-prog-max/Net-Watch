@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import StatCard from "@/components/StatCard";
 import MainThreatChart from "@/components/MainThreatChart";
 import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
-import { ApiUnreachable, countAlerts, getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, apiDownMessage, countAlerts, getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
@@ -29,10 +29,21 @@ export default function DashboardPage() {
   const [drift, setDrift] = useState<DriftStatus | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
   const [apiDown, setApiDown] = useState(false);
+  const apiDownRef = useRef(false);
   const [fpTotal, refreshFpTotal] = useFalsePositiveCount();
   // Totals over the whole alert store. The alert list below holds only the latest
   // 100, so counting it would cap every card at 100.
   const [counts, setCounts] = useState<AlertCounts | null>(null);
+
+  const loadAlerts = useCallback(() => {
+    listAlerts({ limit: "100" })
+      .then((a) => { setAlerts(a); apiDownRef.current = false; setApiDown(false); })
+      .catch((e) => {
+        setAlerts([]);
+        apiDownRef.current = e instanceof ApiUnreachable;
+        setApiDown(apiDownRef.current);
+      });
+  }, []);
 
   const refreshCounts = useCallback(() => {
     // novel alerts are exactly the ones shown as "Unknown" (ml/models/combine.py)
@@ -42,9 +53,23 @@ export default function DashboardPage() {
       countAlerts({ status: "open" }),
       countAlerts({ family: "Unknown" }),
     ])
-      .then(([total, critical, open, novel]) => setCounts({ total, critical, open, novel }))
-      .catch(() => setCounts(null));
-  }, []);
+      .then(([total, critical, open, novel]) => {
+        setCounts({ total, critical, open, novel });
+        // back after an outage: reload what the failed first load missed
+        if (apiDownRef.current) loadAlerts();
+        apiDownRef.current = false;
+        setApiDown(false);
+      })
+      .catch((e) => {
+        setCounts(null);
+        // the banner follows this 5 s poll; it was set once at page load and
+        // never appeared later nor cleared when the API came back
+        if (e instanceof ApiUnreachable) {
+          apiDownRef.current = true;
+          setApiDown(true);
+        }
+      });
+  }, [loadAlerts]);
 
   // polled rather than bumped per websocket alert: a replay sends ~60 alerts/s
   useEffect(() => {
@@ -54,9 +79,7 @@ export default function DashboardPage() {
   }, [refreshCounts]);
 
   useEffect(() => {
-    listAlerts({ limit: "100" })
-      .then((a) => { setAlerts(a); setApiDown(false); })
-      .catch((e) => { setAlerts([]); setApiDown(e instanceof ApiUnreachable); });
+    loadAlerts();
     getModelMetrics().then(setReport).catch(() => setReport(null));
     getDrift().then(setDrift).catch(() => setDrift(null));
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
@@ -72,9 +95,9 @@ export default function DashboardPage() {
       setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
       refreshCounts();
       refreshFpTotal();
-      if (selectedAlert?.id === id) {
-        setSelectedAlert(updated);
-      }
+      // refresh the open alert only if it is still open: the modal closes as the
+      // analyst clicks, and setting the value captured at click time reopened it
+      setSelectedAlert((current) => (current?.id === id ? updated : current));
     } catch (e) {
       setTriageError(
         `Could not update ${id}: ${e instanceof Error ? e.message : "unknown error"}. Nothing was saved.`
@@ -100,7 +123,7 @@ export default function DashboardPage() {
             color: "#FFFFFF", fontSize: "12px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px"
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>warning</span>
-            The API is not reachable on :8000. Start it with <code>make api</code> to see live data.
+            {apiDownMessage()}
           </div>
         )}
 

@@ -66,7 +66,7 @@ Boot up the frontend UI to watch the alerts roll in.
 ```bash
 make dashboard
 ```
-*(Available at `http://localhost:3000`. Sign in by picking an analyst from the seeded roster in `dashboard/lib/users.ts`, or typing their email; there is no password, so this names who triages, it does not secure the console.)*
+*(Available at `http://localhost:3000`. There is no sign-in: it opens as the first analyst on the seeded roster in `dashboard/lib/users.ts`, and the profile menu switches analyst. This names who triages; it does not secure the console.)*
 
 For the 3-minute pitch demo, follow [`docs/demo_script.md`](docs/demo_script.md): six replayer runs, with
 what to show at each.

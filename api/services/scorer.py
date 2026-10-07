@@ -86,6 +86,11 @@ def flow_facts(features: Dict[str, float], meta: Dict[str, Any]) -> Dict[str, An
     return facts
 
 
+# Drift is measured on flows that did not raise an alert (an attack burst must not
+# read as the network changing), and only once this many have been seen.
+WARMUP_FLOWS = 500
+
+
 class ModelsNotFound(RuntimeError):
     """No trained artefacts at the model directory; run `make train`."""
 
@@ -231,8 +236,9 @@ class Scorer:
 
     def _status(self) -> Dict[str, Any]:
         c = self.drift_cfg
-        if len(self.window) < 500:
-            return {"status": "warming_up", "flows_seen": len(self.window)}
+        if len(self.window) < WARMUP_FLOWS:
+            # warmup_flows lets the dashboard say how far along it is
+            return {"status": "warming_up", "flows_seen": len(self.window), "warmup_flows": WARMUP_FLOWS}
         psi = window_psi(np.array(self.window), self.features, self.reference)
         alert_rate = round(float(np.mean(self.alert_history)), 4)
         unexplained = (round(float(np.mean(self.unexplained_history)), 4)

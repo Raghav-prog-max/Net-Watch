@@ -4,13 +4,21 @@ export type { EvaluationReport, ModelRegistryInfo } from "./types";
 
 // 127.0.0.1, not localhost: on Windows "localhost" can stall ~2 s on IPv6 first,
 // which is past the 2 s timeout below and reads as "API offline"
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const BASE = API_BASE;
 // The API's NETWATCH_API_KEY, sent on writes (api/services/auth.py). NEXT_PUBLIC_*
 // is baked into the browser bundle, so anyone who can load the dashboard can read
 // it: it keeps out clients that skip the dashboard, not the dashboard's users.
 const API_KEY = process.env.NEXT_PUBLIC_NETWATCH_API_KEY;
 // GET /alerts pages at most 100 alerts (api/routes/alerts.py)
-const MAX_PAGE_SIZE = 100;
+export const MAX_PAGE_SIZE = 100;
+
+/** What to tell the analyst when nothing answers: where the dashboard looked,
+ *  and how to start the API when it is the local one. */
+export function apiDownMessage(): string {
+  const local = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(API_BASE);
+  return `The API is not reachable at ${API_BASE}.` + (local ? " Start it with `make api`." : "");
+}
 
 /** The API keeps `also_abnormal` inside `prediction`; the UI reads it at the top level. */
 export function normalizeAlert(raw: Alert): Alert {
@@ -18,6 +26,12 @@ export function normalizeAlert(raw: Alert): Alert {
     ...raw,
     also_abnormal: Boolean(raw.also_abnormal ?? raw.prediction?.also_abnormal ?? false),
   };
+}
+
+export class AlertNotFound extends Error {
+  constructor(id: string) {
+    super(`No alert ${id}`);
+  }
 }
 
 export class ApiUnreachable extends Error {
@@ -62,6 +76,7 @@ export async function countAlerts(filter: Record<string, string> = {}): Promise<
 
 export async function getAlert(id: string): Promise<Alert> {
   const res = await get(`/alerts/${id}`);
+  if (res.status === 404) throw new AlertNotFound(id);
   if (!res.ok) throw new Error(`GET /alerts/${id} ${res.status}`);
   return normalizeAlert(await res.json());
 }
@@ -99,14 +114,21 @@ export async function triage(
   analyst_note?: string,
 ): Promise<Alert> {
   let res: Response;
+  // a write gets longer than a read, but not forever: a hung request kept the
+  // triage buttons disabled with no message
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     res = await fetch(`${BASE}/alerts/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
       body: JSON.stringify({ status, analyst_label, analyst_note }),
+      signal: controller.signal,
     });
   } catch {
     throw new ApiUnreachable(`/alerts/${id}`);
+  } finally {
+    clearTimeout(timeout);
   }
   // The API answered but refused: say so. Pretending it saved would lose the
   // analyst's label, which is the training data for the next model.

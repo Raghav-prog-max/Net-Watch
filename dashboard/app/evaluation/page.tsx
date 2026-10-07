@@ -14,7 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { getModelMetrics } from "@/lib/api";
-import type { EvaluationReport } from "@/lib/types";
+import { isLofoResult, type EvaluationReport } from "@/lib/types";
 import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
 import { ConfusionMatrix } from "@/components/ConfusionMatrix";
 import { PRROCCurves } from "@/components/PRROCCurves";
@@ -88,7 +88,8 @@ export default function EvaluationPage() {
     F1: Number((c["f1-score"] * 100).toFixed(1)),
   }));
 
-  const lofoChartData = (report.lofo ?? []).map((r) => ({
+  // only families with figures: a note row (no test flows) has nothing to plot
+  const lofoChartData = (report.lofo ?? []).filter(isLofoResult).map((r) => ({
     // the flow count beside the name: a rate from 23 flows is not one from 1,000
     family: `${r.family} (n=${r.test_flows.toLocaleString()})`,
     "Classifier Alone": Number((r.caught_by_classifier_alone * 100).toFixed(1)),
@@ -377,10 +378,15 @@ export default function EvaluationPage() {
                 </tr>
               </thead>
               <tbody>
-                {report.lofo.map((r) => (
+                {report.lofo.map((r) => !isLofoResult(r) ? (
                   <tr key={r.family} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
                     <td style={{ padding: "12px 14px", fontWeight: 600 }}>{r.family}</td>
-                    <td className="mono" style={{ padding: "12px 14px" }}>{(r.test_flows ?? 0).toLocaleString()}</td>
+                    <td colSpan={5} style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>{r.note}</td>
+                  </tr>
+                ) : (
+                  <tr key={r.family} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600 }}>{r.family}</td>
+                    <td className="mono" style={{ padding: "12px 14px" }}>{r.test_flows.toLocaleString()}</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>
                       {pct(r.caught_by_classifier_alone)}
                     </td>
