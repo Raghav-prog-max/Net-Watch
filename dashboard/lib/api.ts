@@ -5,6 +5,10 @@ export type { EvaluationReport, ModelRegistryInfo } from "./types";
 // 127.0.0.1, not localhost: on Windows "localhost" can stall ~2 s on IPv6 first,
 // which is past the 2 s timeout below and reads as "API offline"
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// The API's NETWATCH_API_KEY, sent on writes (api/services/auth.py). NEXT_PUBLIC_*
+// is baked into the browser bundle, so anyone who can load the dashboard can read
+// it: it keeps out clients that skip the dashboard, not the dashboard's users.
+const API_KEY = process.env.NEXT_PUBLIC_NETWATCH_API_KEY;
 // GET /alerts pages at most 100 alerts (api/routes/alerts.py)
 const MAX_PAGE_SIZE = 100;
 
@@ -98,7 +102,7 @@ export async function triage(
   try {
     res = await fetch(`${BASE}/alerts/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
       body: JSON.stringify({ status, analyst_label, analyst_note }),
     });
   } catch {

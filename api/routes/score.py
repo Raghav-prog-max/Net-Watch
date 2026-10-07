@@ -1,6 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, Security
-from ..dependencies import verify_api_key
+from fastapi import APIRouter, Depends, HTTPException
 try:
     from sqlalchemy.orm import Session
 except ImportError:
@@ -12,6 +11,7 @@ from ..schemas import ScoreRequest, ScoreResponse
 from ..db.session import get_db
 from ..db.models import AlertModel
 from ..services import telemetry
+from ..services.auth import require_api_key
 from ..services.scorer import ModelsNotFound, get_scorer
 from .alerts import alert_to_dict
 from .ws import manager
@@ -71,10 +71,9 @@ def _join(row, alert_data, feats):
     return escalated
 
 
-@router.post("/score", response_model=ScoreResponse)
+@router.post("/score", response_model=ScoreResponse, dependencies=[Depends(require_api_key)])
 async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
-                      scorer=Depends(scorer_dependency),
-                      api_key: str = Security(verify_api_key)):
+                      scorer=Depends(scorer_dependency)):
     started = time.perf_counter()
     alerts = scorer.score([f.features for f in req.flows], [f.meta for f in req.flows])
     # model inputs are stored for retraining, not sent to analysts

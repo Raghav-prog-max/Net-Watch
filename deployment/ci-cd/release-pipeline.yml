@@ -114,10 +114,12 @@ jobs:
           context: .
           file: deployment/docker/Dockerfile.dashboard
           platforms: linux/amd64,linux/arm64
-          # Next.js fixes the API address at build time; the site's URL is a
-          # repository variable, e.g. https://netwatch.yourdomain.com
+          # Next.js fixes the API address and key at build time; the site's URL
+          # is a repository variable (e.g. https://netwatch.yourdomain.com), the
+          # key a repository secret matching the API's NETWATCH_API_KEY
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.PUBLIC_URL }}/api
+            NEXT_PUBLIC_NETWATCH_API_KEY=${{ secrets.NETWATCH_API_KEY }}
           push: true
           tags: ${{ env.DASHBOARD_IMAGE }}:latest,${{ env.DASHBOARD_IMAGE }}:${{ github.sha }}
           cache-from: type=gha

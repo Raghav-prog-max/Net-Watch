@@ -9,7 +9,6 @@ from api.db.session import Base, get_db
 from api.db.models import AlertModel
 from api.routes.score import scorer_dependency
 from api.services.scorer import ModelsNotFound
-from api.dependencies import verify_api_key
 import uuid
 
 # The tests get their own in-memory database. Writing to ./netwatch.db mixed test
@@ -29,7 +28,6 @@ def _test_db():
 
 
 app.dependency_overrides[get_db] = _test_db
-app.dependency_overrides[verify_api_key] = lambda: None
 client = TestClient(app)
 
 
@@ -60,6 +58,15 @@ class StubScorer:
                 "model_version": "stub",
             })
         return alerts
+
+
+@pytest.fixture(scope="module", autouse=True)
+def no_api_key():
+    """The tests below call the write endpoints without a key; a NETWATCH_API_KEY
+    in the developer's shell must not turn them into 401s."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv("NETWATCH_API_KEY", raising=False)
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -354,6 +361,55 @@ def test_patch_alert(setup_alerts, new_status, new_label, new_note):
     if new_status: assert patched_data["status"] == new_status
     if new_label: assert patched_data["analyst_label"] == new_label
     if new_note: assert patched_data["analyst_note"] == new_note
+
+
+# ── NETWATCH_API_KEY on the write endpoints (api/services/auth.py) ──────────
+# Unlabelled writes poison retraining: a false_positive label makes the flow a
+# Benign training row (scripts/retrain.py).
+
+@pytest.fixture
+def api_key(monkeypatch):
+    key = "test-" + uuid.uuid4().hex
+    monkeypatch.setenv("NETWATCH_API_KEY", key)
+    return key
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-API-Key": "wrong"}])
+def test_score_needs_the_key_when_set(api_key, headers):
+    res = client.post("/score", json={"flows": [flow("DoS")]}, headers=headers)
+    assert res.status_code == 401
+
+
+def test_score_accepts_the_key(api_key):
+    res = client.post("/score", json={"flows": [flow("DoS")]}, headers={"X-API-Key": api_key})
+    assert res.status_code == 200
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-API-Key": "wrong"}])
+def test_triage_needs_the_key_when_set(setup_alerts, api_key, headers):
+    alert_id = client.get("/alerts?size=1").json()["items"][0]["id"]
+    res = client.patch(f"/alerts/{alert_id}", json={"status": "false_positive"}, headers=headers)
+    assert res.status_code == 401
+
+
+def test_rejected_triage_changes_nothing(setup_alerts, api_key):
+    alert_id = client.get("/alerts?size=1").json()["items"][0]["id"]
+    before = client.get(f"/alerts/{alert_id}").json()
+    client.patch(f"/alerts/{alert_id}", json={"status": "false_positive", "analyst_note": "x"})
+    after = client.get(f"/alerts/{alert_id}").json()
+    assert (after["status"], after["analyst_note"]) == (before["status"], before["analyst_note"])
+
+
+def test_triage_accepts_the_key(setup_alerts, api_key):
+    alert_id = client.get("/alerts?size=1").json()["items"][0]["id"]
+    res = client.patch(f"/alerts/{alert_id}", json={"status": "acknowledged"},
+                       headers={"X-API-Key": api_key})
+    assert res.status_code == 200
+    assert res.json()["status"] == "acknowledged"
+
+
+def test_reads_stay_open_with_a_key(setup_alerts, api_key):
+    assert client.get("/alerts").status_code == 200
 
 
 # ── /metrics/model, /metrics/drift, /models ──────────────────────────────────

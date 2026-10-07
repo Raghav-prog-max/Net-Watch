@@ -71,6 +71,16 @@ make dashboard
 For the 3-minute pitch demo, follow [`docs/demo_script.md`](docs/demo_script.md): six replayer runs, with
 what to show at each.
 
+### Requiring an API key for writes
+
+`POST /score` and `PATCH /alerts/{id}` accept any caller unless the API is
+started with `NETWATCH_API_KEY` set; then both need it in an `X-API-Key` header
+and answer 401 without it. Give the same key to the replayer (it reads
+`NETWATCH_API_KEY` from its environment, or `--api-key`) and to the dashboard as
+`NEXT_PUBLIC_NETWATCH_API_KEY` in `dashboard/.env.local`. The dashboard's copy is
+readable in the browser, so the key keeps out clients that bypass the dashboard,
+not people who can open it.
+
 ---
 
 ## 4. Offline Demo Mode
