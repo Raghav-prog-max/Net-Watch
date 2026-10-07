@@ -132,7 +132,7 @@ export default function AlertFeed() {
             title="Alerts marked false positive: each one becomes a training label for the next model"
             style={{ fontSize: "11px", textDecoration: "none" }}
           >
-            Analyst feedback: {falsePositives === null ? "—" : falsePositives.toLocaleString()} false
+            Analyst feedback: {falsePositives == null ? "—" : falsePositives.toLocaleString()} false
             {falsePositives === 1 ? " positive" : " positives"}
           </Link>
           <button
@@ -348,10 +348,10 @@ export default function AlertFeed() {
                   {alert.flow_count > 1 && (
                     <span
                       className="mono"
-                      title={`${alert.flow_count.toLocaleString()} flows grouped into this alert`}
+                      title={`${(alert.flow_count ?? 1).toLocaleString()} flows grouped into this alert`}
                       style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}
                     >
-                      ×{alert.flow_count.toLocaleString()}
+                      ×{(alert.flow_count ?? 1).toLocaleString()}
                     </span>
                   )}
                 </div>

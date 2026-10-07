@@ -106,7 +106,7 @@ export function DriftTimeline({ history, warnBand, driftBand, driftStatus, drift
                     }}
                   >
                     <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-                      {pt.flows.toLocaleString()} flows scored · {pt.time}
+                      {(pt.flows ?? 0).toLocaleString()} flows scored · {pt.time}
                     </div>
                     <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF", marginTop: "2px" }}>
                       Max PSI: {pt.psi.toFixed(4)}

@@ -1,6 +1,6 @@
 # Model card — NetWatch v1
 
-Generated from `reports/metrics.json` (2026-10-06T22:37:29Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
+Generated from `reports/metrics.json` (2026-10-07T02:56:56Z) by `python -m ml.evaluate.model_card`. Do not edit by hand: retrain, then regenerate.
 
 ## What it does
 

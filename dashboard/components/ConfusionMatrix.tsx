@@ -63,7 +63,7 @@ export function ConfusionMatrix({ labels, rows, accuracyForReferenceOnly }: Conf
                           fontWeight: isDiag ? 700 : 400,
                         }}
                       >
-                        {cmCounts ? val.toLocaleString() : `${(frac * 100).toFixed(1)}%`}
+                        {cmCounts ? (val ?? 0).toLocaleString() : `${((frac || 0) * 100).toFixed(1)}%`}
                       </td>
                     );
                   })}

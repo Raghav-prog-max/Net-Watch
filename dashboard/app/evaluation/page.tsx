@@ -77,7 +77,7 @@ export default function EvaluationPage() {
   const naive = report.naive_comparison;
   // the headline is the whole system; `m` (and the comparisons below) is the classifier alone
   const fa = falseAlerts(report);
-  const novel = report.novel_families;
+  const novel = report.novel_families || { families: [], flows: 0, caught_by_anomaly_detector: 0 };
   const novelShown = novel.shown_as_unknown ?? novel.caught_by_anomaly_detector;
 
   const perClassChartData = Object.entries(m.per_class).map(([family, c]) => ({
@@ -170,7 +170,7 @@ export default function EvaluationPage() {
             {pct(novelShown)}
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
-            {novel.families.join(" & ")} · {novel.flows.toLocaleString()} flows
+            {(novel.families || []).join(" & ")} · {(novel.flows ?? 0).toLocaleString()} flows
             {novel.alerted !== undefined ? ` · ${pct(novel.alerted)} alerted` : ""}
           </div>
         </div>
@@ -282,7 +282,7 @@ export default function EvaluationPage() {
         </div>
         <div style={{ fontSize: "12px", color: "var(--nw-text-muted)", marginBottom: "18px" }}>
           {report.rows
-            ? `Evaluated over ${report.rows.test.toLocaleString()} held-out flows from time blocks the model never trained on`
+            ? `Evaluated over ${(report.rows.test ?? 0).toLocaleString()} held-out flows from time blocks the model never trained on`
             : "Evaluated over held-out time blocks the model never trained on"}
         </div>
 
@@ -329,7 +329,7 @@ export default function EvaluationPage() {
                     <td className="mono" style={{ padding: "12px 14px" }}>{c["f1-score"].toFixed(3)}</td>
                     <td className="mono" style={{ padding: "12px 14px" }}>{aucInfo?.pr_auc !== undefined ? aucInfo.pr_auc.toFixed(3) : "—"}</td>
                     <td className="mono" style={{ padding: "12px 14px" }}>{aucInfo?.roc_auc !== undefined ? aucInfo.roc_auc.toFixed(3) : "—"}</td>
-                    <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{c.support.toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "12px 14px", textAlign: "right" }}>{(c.support ?? 0).toLocaleString()}</td>
                   </tr>
                 );
               })}
@@ -373,7 +373,7 @@ export default function EvaluationPage() {
                 {report.lofo.map((r) => (
                   <tr key={r.family} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
                     <td style={{ padding: "12px 14px", fontWeight: 600 }}>{r.family}</td>
-                    <td className="mono" style={{ padding: "12px 14px" }}>{r.test_flows.toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "12px 14px" }}>{(r.test_flows ?? 0).toLocaleString()}</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>
                       {pct(r.caught_by_classifier_alone)}
                     </td>
@@ -392,7 +392,7 @@ export default function EvaluationPage() {
                       {report.novel_families.families.join(" + ")}{" "}
                       <span style={{ color: "var(--nw-text-muted)", fontWeight: 400 }}>(never trained)</span>
                     </td>
-                    <td className="mono" style={{ padding: "12px 14px" }}>{report.novel_families.flows.toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "12px 14px" }}>{(report.novel_families?.flows ?? 0).toLocaleString()}</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>—</td>
                     <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)", fontWeight: 700 }}>
                       {report.novel_families.alerted !== undefined ? pct(report.novel_families.alerted) : "—"}
