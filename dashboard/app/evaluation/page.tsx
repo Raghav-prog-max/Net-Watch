@@ -18,6 +18,8 @@ import type { EvaluationReport } from "@/lib/types";
 import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
 import { ConfusionMatrix } from "@/components/ConfusionMatrix";
 import { PRROCCurves } from "@/components/PRROCCurves";
+import { PerClassMetrics } from "@/components/PerClassMetrics";
+import { LOFOChart } from "@/components/LOFOChart";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -285,51 +287,7 @@ export default function EvaluationPage() {
         </div>
 
         {/* Recharts Grouped BarChart */}
-        <div
-          style={{
-            width: "100%",
-            height: "240px",
-            backgroundColor: "#111114",
-            borderRadius: "16px",
-            padding: "16px 16px 8px 4px",
-            marginBottom: "20px",
-          }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={perClassChartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
-              <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="family"
-                stroke="#8A8A93"
-                tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
-                axisLine={{ stroke: "#26262C" }}
-                tickLine={false}
-              />
-              <YAxis
-                domain={[0, 100]}
-                unit="%"
-                stroke="#8A8A93"
-                tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
-                contentStyle={{
-                  backgroundColor: "#17171B",
-                  border: "1px solid #2E2E38",
-                  borderRadius: "12px",
-                  fontSize: "12px",
-                  color: "#FFFFFF",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
-              <Bar dataKey="Precision" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="Recall" fill="#FFFFFF" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="F1" fill="#C7DB6E" radius={[4, 4, 0, 0]} maxBarSize={22} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <PerClassMetrics data={perClassChartData} />
 
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
@@ -397,52 +355,7 @@ export default function EvaluationPage() {
             Each family was completely excised from classifier training, then tested against the combined dual-engine system.
           </div>
 
-          {lofoChartData.length > 0 && (
-            <div
-              style={{
-                width: "100%",
-                height: "220px",
-                backgroundColor: "#111114",
-                borderRadius: "16px",
-                padding: "16px 16px 8px 4px",
-                marginBottom: "20px",
-              }}
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={lofoChartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
-                  <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="family"
-                    stroke="#8A8A93"
-                    tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
-                    axisLine={{ stroke: "#26262C" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    unit="%"
-                    stroke="#8A8A93"
-                    tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
-                    contentStyle={{
-                      backgroundColor: "#17171B",
-                      border: "1px solid #2E2E38",
-                      borderRadius: "12px",
-                      fontSize: "12px",
-                      color: "#FFFFFF",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
-                  <Bar dataKey="Classifier Alone" fill="#A78BFA" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="Hybrid Ensemble" fill="#FFFFFF" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          <LOFOChart data={lofoChartData} />
 
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
