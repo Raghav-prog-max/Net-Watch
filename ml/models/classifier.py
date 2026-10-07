@@ -32,7 +32,7 @@ try:
     _LGBM_AVAILABLE = True
 except ImportError:
     _LGBM_AVAILABLE = False
-    print("[classifier] ⚠️  lightgbm not installed – LightGBM training unavailable.")
+    print("[classifier] [WARN] lightgbm not installed - LightGBM training unavailable.")
 
 
 # ── Default hyperparameters ────────────────────────────────────────────────────
