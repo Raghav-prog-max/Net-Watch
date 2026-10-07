@@ -1,7 +1,7 @@
 # Demo script (3 minutes)
 
 The handbook's six steps, adapted to alert grouping: a burst of one family is one alert whose
-`×count` climbs, not a feed full of rows (rules in [backend.md](backend.md#scoring--flow-ingestion)).
+`×count` climbs, not a feed full of rows (rules in [`api/routes/score.py`](../api/routes/score.py)).
 Each step is one replayer run, so the demo repeats. The replayer sends only flows the models were
 not fitted on: the test split, plus every flow of the never-trained families. Rehearsed end to end
 on 2026-10-04 against a fresh API, synthetic data; the counts below are from that run.

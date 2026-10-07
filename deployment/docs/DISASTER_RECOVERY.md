@@ -58,7 +58,7 @@ If a file of the served bundle (`models/<ACTIVE>/`, v1 without the pointer) beco
 2. Or rebuild models from baseline data:
    ```bash
    python -m ml.train
-   python -m ml.evaluate.report
+   python -m ml.evaluate.model_card
    ```
 3. Restart API service to trigger the model warm-up lifespan:
    ```bash

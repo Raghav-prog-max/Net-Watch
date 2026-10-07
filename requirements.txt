@@ -1,25 +1,17 @@
+# What the API and the ML pipeline import. Tests and tools are in
+# requirements-dev.txt, so the production image does not carry them.
 pandas>=2.0
 numpy>=1.24
 scikit-learn>=1.3
 joblib>=1.3
 pyyaml>=6.0
 fastapi>=0.110
-uvicorn[standard]>=0.27
+uvicorn[standard]>=0.27   # includes websockets for /ws/alerts
 pydantic>=2.6
+sqlalchemy
+prometheus-client>=0.20   # GET /metrics (api/services/telemetry.py)
 # optional, each has a working fallback in the code
 lightgbm>=4.7      # falls back to sklearn HistGradientBoosting
 shap>=0.44         # falls back to z-score explanations
 imbalanced-learn>=0.12
 scipy>=1.11        # KS test in ml/drift/monitor.py (has pure-numpy fallback)
-
-# ── Added from NetA ───────────────────────────────────────────────────────────
-kaggle>=1.6.0          # required for scripts/download_data.py
-pytest>=8.1.0          # for unit tests
-pytest-cov>=5.0.0
-httpx>=0.27.0          # for FastAPI test client
-httpx2>=0.27.0         # httpx wrapper used by Starlette TestClient
-
-sqlalchemy
-prometheus-client>=0.20   # GET /metrics (api/services/telemetry.py)
-requests
-websockets

@@ -11,15 +11,15 @@ PYTHON  := $(if $(wildcard $(VENV_BIN)/python*),$(VENV_BIN)/python,$(PY_FALLBACK
 UVICORN := $(PYTHON) -m uvicorn
 PIP     := $(PYTHON) -m pip
 
-.PHONY: venv setup synthetic data train evaluate card api demo seed retrain promote rollback test check-secrets quick holdout eda nslkdd clean
+.PHONY: venv setup synthetic data train evaluate api demo seed retrain promote rollback test check-secrets quick holdout eda nslkdd clean
 
 venv:           ## create the virtual environment
 	$(PY_FALLBACK) -m venv .venv
 	$(VENV_BIN)/python -m pip install --upgrade pip
-	$(VENV_BIN)/python -m pip install -r requirements.txt
+	$(VENV_BIN)/python -m pip install -r requirements-dev.txt
 
-setup:          ## install dependencies into the active venv
-	$(PIP) install -r requirements.txt
+setup:          ## install dependencies (with the test tools) into the active venv
+	$(PIP) install -r requirements-dev.txt
 
 synthetic:      ## generate fake traffic so the pipeline runs before the download finishes
 	$(PYTHON) scripts/make_synthetic.py --rows 60000
@@ -30,12 +30,8 @@ data:           ## raw CSVs -> cleaned pickle
 train:          ## train both models, pick thresholds, write reports/metrics.json
 	$(PYTHON) -m ml.train --config ml/config.yaml
 
-card:           ## regenerate docs/model_card.md from reports/metrics.json
+evaluate:       ## regenerate docs/model_card.md from reports/metrics.json (run after make train)
 	$(PYTHON) -m ml.evaluate.model_card
-
-evaluate:       ## regenerate model card + evaluation report (run after make train)
-	$(PYTHON) -m ml.evaluate.model_card
-	$(PYTHON) -m ml.evaluate.report
 
 quick:          ## train without leave-one-family-out experiments
 	$(PYTHON) -m ml.train --config ml/config.yaml --skip-lofo
