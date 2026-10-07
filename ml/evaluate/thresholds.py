@@ -27,7 +27,7 @@ def pick_threshold(
     ok = fpr <= fpr_budget
     if not ok.any():
         best_idx = int(np.argmin(fpr))
-        print(f"[thresholds] ⚠️  No point with FPR ≤ {fpr_budget:.3%}. Using min FPR.")
+        print(f"[thresholds] [WARN] No point with FPR <= {fpr_budget:.3%}. Using min FPR.")
     else:
         best_idx = int(np.argmax(tpr[ok]))
         ok_indices = np.where(ok)[0]
