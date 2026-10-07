@@ -11,9 +11,9 @@ This runbook guides site reliability engineers (SREs) and SOC platform engineers
 ### Inspect Service Status & Logs
 ```bash
 # Docker Compose production stack
-docker compose -f deployment/docker/docker-compose.prod.yml ps
-docker compose -f deployment/docker/docker-compose.prod.yml logs -f --tail=100 api
-docker compose -f deployment/docker/docker-compose.prod.yml logs -f --tail=100 dashboard
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs -f --tail=100 api
+docker compose -f docker-compose.yml logs -f --tail=100 dashboard
 
 # Kubernetes cluster
 kubectl get pods,svc,ingress -n netwatch
@@ -24,8 +24,8 @@ kubectl logs -f deployment/netwatch-dashboard -n netwatch --tail=100
 ### Restart Failing Services
 ```bash
 # Docker Compose
-docker compose -f deployment/docker/docker-compose.prod.yml restart api
-docker compose -f deployment/docker/docker-compose.prod.yml restart dashboard
+docker compose -f docker-compose.yml restart api
+docker compose -f docker-compose.yml restart dashboard
 
 # Kubernetes
 kubectl rollout restart deployment/netwatch-api -n netwatch
@@ -54,7 +54,7 @@ kubectl rollout restart deployment/netwatch-dashboard -n netwatch
      ```
   3. Restart the API container to re-trigger the warm-up lifespan:
      ```bash
-     docker compose -f deployment/docker/docker-compose.prod.yml restart api
+     docker compose -f docker-compose.yml restart api
      ```
 
 ### Incident B: False Alert Rate Spikes (> 50 / 10k Flows)
@@ -69,7 +69,7 @@ kubectl rollout restart deployment/netwatch-dashboard -n netwatch
   1. Review analyst triage labels in SQLite:
      ```bash
      # the alert store is in the netwatch-db-data volume, not ./netwatch.db
-     docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production exec -T api python -c "import sqlite3; print(sqlite3.connect('/data/db/netwatch.db').execute('SELECT status, analyst_label, COUNT(*) FROM alerts GROUP BY 1, 2').fetchall())"
+     docker compose -f docker-compose.yml --env-file deployment/.env.production exec -T api python -c "import sqlite3; print(sqlite3.connect('/data/db/netwatch.db').execute('SELECT status, analyst_label, COUNT(*) FROM alerts GROUP BY 1, 2').fetchall())"
      ```
   2. Retrain with the analyst labels (section 3), and promote only if the check passes: macro-F1
      improves and false alerts stay within the budget.
@@ -119,7 +119,7 @@ flowchart LR
 3. If recommended and approved, promote and restart the API:
    ```bash
    python scripts/promote.py v2        # re-checks, then points models/ACTIVE at v2; v1 is kept
-   docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production restart api
+   docker compose -f docker-compose.yml --env-file deployment/.env.production restart api
    ```
 4. To go back: `python scripts/promote.py v1 --rollback`, then restart the API.
 

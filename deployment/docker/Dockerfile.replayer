@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir numpy pandas pyyaml
 
 COPY replay /app/replay
 COPY ml /app/ml
-# data/ is mounted at run time (docker-compose.prod.yml). It is large and
+# data/ is mounted at run time (the root docker-compose.yml). It is large and
 # gitignored, and the root .dockerignore keeps data/processed out of every build
 # context, so a copy baked in here was empty and the replayer had nothing to send.
 

@@ -20,7 +20,7 @@ ENV_FILE="${DEPLOY_DIR}/.env.production"
 BACKUP_DIR="${ROOT_DIR}/backups"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 RETENTION_DAYS=30
-COMPOSE=(docker compose -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml")
+COMPOSE=(docker compose -f "${ROOT_DIR}/docker-compose.yml")
 [ -f "${ENV_FILE}" ] && COMPOSE+=(--env-file "${ENV_FILE}")
 
 mkdir -p "${BACKUP_DIR}"

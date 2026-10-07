@@ -30,10 +30,10 @@ This plan outlines procedures to restore NetWatch operations following hardware 
 If the SQLite database fails integrity check:
 ```bash
 # 1. Test database integrity (the store is in the netwatch-db-data volume)
-docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production exec -T api python -c "import sqlite3; print(sqlite3.connect('/data/db/netwatch.db').execute('PRAGMA integrity_check').fetchone())"
+docker compose -f docker-compose.yml --env-file deployment/.env.production exec -T api python -c "import sqlite3; print(sqlite3.connect('/data/db/netwatch.db').execute('PRAGMA integrity_check').fetchone())"
 
 # 2. Stop writing services
-docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production stop api
+docker compose -f docker-compose.yml --env-file deployment/.env.production stop api
 
 # 3. Locate latest valid backup archive
 LATEST_BACKUP=$(ls -t backups/netwatch_backup_*.tar.gz | head -n 1)
@@ -45,7 +45,7 @@ docker run --rm -v netwatch-db-data:/data/db -v "$PWD/restore:/in:ro" alpine \
     sh -c 'cp /in/netwatch.db /data/db/netwatch.db && chown 10001:10001 /data/db/netwatch.db'
 
 # 5. Restart API and verify health
-docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production start api
+docker compose -f docker-compose.yml --env-file deployment/.env.production start api
 bash deployment/scripts/healthcheck.sh "${PUBLIC_URL}"
 ```
 
@@ -62,7 +62,7 @@ If a file of the served bundle (`models/<ACTIVE>/`, v1 without the pointer) beco
    ```
 3. Restart API service to trigger the model warm-up lifespan:
    ```bash
-   docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production restart api
+   docker compose -f docker-compose.yml --env-file deployment/.env.production restart api
    ```
 
 ### Scenario 3: Complete Host Failure (Cold Rebuild)
