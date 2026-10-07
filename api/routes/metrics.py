@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import copy
 from collections import Counter
 from pathlib import Path
 
@@ -96,241 +95,72 @@ def prometheus_metrics(scorer=Depends(optional_scorer), db: Session = Depends(ge
     return Response(telemetry.exposition(state), media_type=telemetry.CONTENT_TYPE)
 
 
-VERSION_HISTORY = [
-    {
-        "version": "v1.2",
-        "title": "Log-Scaled Anomaly Geometry, Batch TreeSHAP & Naive-Split Proof",
-        "date": "2026-09-29",
-        "status": "active",
-        "commit": "367d39d",
-        "summary": (
-            "Resolved the Isolation Forest missing low-magnitude quiet attacks by applying signed log1p "
-            "feature compression before standardisation, upgraded live scoring to single-call batch TreeSHAP, "
-            "and added a 5-seed naive random split benchmark beside the 5-minute time-block split."
-        ),
-        "highlights": [
-            {"label": "Held-Out PortScan LOFO", "before": "0.0% (historical synthetic)", "after": "99.7%"},
-            {"label": "Unseen Attacks Alerted", "before": "51.5% (historical synthetic)", "after": "100.0%"},
-            {"label": "Unseen Shown as Unknown", "before": "90.7% (historical synthetic)", "after": "93.2%"},
-            {"label": "SHAP Batch Scoring", "before": "Per-row", "after": "~6x faster"},
-        ],
-        "changelog": [
-            {
-                "type": "fixed",
-                "module": "ml/models/anomaly.py",
-                "text": (
-                    "Applied signed log1p compression (sign(X) * log1p(|X|)) prior to StandardScaler so heavy-tailed "
-                    "byte and duration columns no longer crush quiet probes into the 51st percentile of benign traffic."
-                ),
-            },
-            {
-                "type": "fixed",
-                "module": "ml/explain.py",
-                "text": (
-                    "Supported 3D SHAP array outputs (rows, features, classes) and replaced per-flow explanations "
-                    "with a single top_batch() call per alert batch (~6x faster during attack bursts)."
-                ),
-            },
-            {
-                "type": "added",
-                "module": "ml/evaluate/naive.py",
-                "text": (
-                    "Added 5-seed stratified random row split benchmark alongside the 5-minute temporal block split "
-                    "to measure split-leakage inflation and block overlap."
-                ),
-            },
-            {
-                "type": "changed",
-                "module": "api/services/scorer.py",
-                "text": (
-                    "Wired live POST /score directly through ml/models/combine.decide and calibrated the 5,000-flow "
-                    "benign drift ramp (PSI >= 0.10 warning, >= 0.25 drift)."
-                ),
-            },
-            {
-                "type": "tradeoff",
-                "module": "ml/evaluate/lofo.py",
-                "text": (
-                    "Recorded held-out Bot LOFO shift from 25.8% to 17.7%: compressing feature scale moves high-variance "
-                    "Bot traffic closer to benign baseline."
-                ),
-            },
-        ],
-    },
-    {
-        "version": "v1.1",
-        "title": "Out-of-Family Novelty Gate & Uncorroborated Label Rejection",
-        "date": "2026-09-23",
-        "status": "superseded",
-        "commit": "0b55f56",
-        "summary": (
-            "Added per-family out-of-distribution distance checking (FamilyNovelty) and decoupled label rejection "
-            "from anomaly detector corroboration so novel attacks are surfaced as Unknown instead of confident wrong labels."
-        ),
-        "highlights": [
-            {"label": "Heartbleed Shown as Unknown", "before": "0.0% (historical synthetic)", "after": "100.0% (historical synthetic)"},
-            {"label": "Novel Families Unknown Rate", "before": "0.0% (historical synthetic)", "after": "90.7% (historical synthetic)"},
-            {"label": "Known-Family Relabel Cost", "before": "0.50% (historical synthetic)", "after": "0.80% (historical synthetic)"},
-            {"label": "Family Keep Budget", "after": "99.0% quantile"},
-        ],
-        "changelog": [
-            {
-                "type": "added",
-                "module": "ml/models/novelty.py",
-                "text": (
-                    "Implemented FamilyNovelty using median absolute robust z-scores (per-feature median and IQR) "
-                    "calibrated at keep_rate = 0.99 per attack family on validation traffic."
-                ),
-            },
-            {
-                "type": "changed",
-                "module": "ml/models/combine.py",
-                "text": (
-                    "Removed the requirement that the Isolation Forest also flag a flow before rejecting an out-of-family "
-                    "classifier label, which previously suppressed 100% of Heartbleed rejections at a 1% benign flag rate."
-                ),
-            },
-            {
-                "type": "added",
-                "module": "ml/features/select.py",
-                "text": (
-                    "Added correlation pruning, LightGBM importance ranking, sklearn feature pipelines, and TreeSHAP explainers."
-                ),
-            },
-            {
-                "type": "verified",
-                "module": "tests/test_novelty.py",
-                "text": (
-                    "Added 14 regression and unit tests covering per-family distance calibration and all decide() branches."
-                ),
-            },
-        ],
-    },
-    {
-        "version": "v1.0",
-        "title": "Initial Dual-Engine Baseline & 5-Minute Time-Block Split",
-        "date": "2026-09-20",
-        "status": "baseline",
-        "commit": "d5fe2f7",
-        "summary": (
-            "Initial dual-engine IDS pairing a class-weighted LightGBM classifier over 6 known attack families "
-            "with an unsupervised benign-only Isolation Forest, evaluated on non-overlapping 5-minute time blocks."
-        ),
-        "highlights": [
-            {"label": "Temporal Split Granularity", "after": "5-min blocks (0% leak)"},
-            {"label": "False-Positive Budget", "after": "FPR <= 0.005 (50/10k)"},
-            {"label": "Benign Detector Flag Rate", "after": "1.0% val calibration"},
-            {"label": "Known Families Covered", "after": "6 attack families"},
-        ],
-        "changelog": [
-            {
-                "type": "added",
-                "module": "ml/data/clean.py",
-                "text": (
-                    "Dropped host identifiers (Flow ID, src_ip, dst_ip, src_port) prior to training so the classifier "
-                    "cannot memorise lab IP addresses."
-                ),
-            },
-            {
-                "type": "added",
-                "module": "ml/data/split.py",
-                "text": (
-                    "Grouped flows into 5-minute time blocks via GroupShuffleSplit; verified zero block overlap in "
-                    "tests/test_split_leakage.py."
-                ),
-            },
-            {
-                "type": "added",
-                "module": "ml/models/classifier.py",
-                "text": (
-                    "Defined attack_score as 1 - P(Benign) and selected the operating threshold from the validation ROC curve "
-                    "within fpr_budget = 0.005."
-                ),
-            },
-            {
-                "type": "added",
-                "module": "ml/models/anomaly.py",
-                "text": (
-                    "Fitted 200-tree Isolation Forest exclusively on benign training flows to detect unseen attack families."
-                ),
-            },
-        ],
-    },
-    {
-        "version": "v2.0",
-        "title": "Analyst Supervision Loop & Candidate Promotion Gate",
-        "date": "Planned",
-        "status": "planned",
-        "summary": (
-            "Retraining candidate incorporating analyst false-positive and incident confirmations from SQLite. "
-            "Promoted only if it beats v1.2 Macro-F1 on the identical 5-minute time-block test split within the FPR budget."
-        ),
-        "highlights": [
-            {"label": "Supervision Input", "after": "SQLite triage labels"},
-            {"label": "False-Positive Handling", "after": "Relabelled as Benign"},
-            {"label": "Promotion Gate", "after": "Macro-F1 > v1.2 on test"},
-            {"label": "Automated Blocking", "after": "0% (human gate only)"},
-        ],
-        "changelog": [
-            {
-                "type": "added",
-                "module": "api/routes/alerts.py",
-                "text": (
-                    "Persisted analyst status, analyst_label, and analyst_note in SQLite via PATCH /alerts/{id} "
-                    "to build the supervision dataset."
-                ),
-            },
-            {
-                "type": "changed",
-                "module": "ml/train.py",
-                "text": (
-                    "Candidate retraining folds analyst-marked false positives back into the benign training set "
-                    "and re-evaluates thresholds on the held-out time blocks."
-                ),
-            },
-        ],
-    },
-]
+# A measured figure on the Models page: the rate with the flows it rests on, when
+# the report has them (ml/evaluate/metrics.py support); "—" when the report has no
+# such figure, never "0.0%".
+def _figure(rate, support=None):
+    if rate is None:
+        return "—"
+    flows = f" ({support['hits']:,} of {support['of']:,} flows)" if support else ""
+    return f"{100 * rate:.1f}%{flows}"
 
 
-# Measured figures on the active release, read from the current report so they
-# follow retraining (e.g. on CICIDS2017) instead of staying at the numbers the
-# release commit recorded.
-# Each gives (rate, support): support is the flows the rate rests on
-# (ml/evaluate/metrics.py support), shown beside it as unseen-attack rates come
-# from few flows; None in reports written before it existed.
 def _lofo_row(r, family):
     return next((x for x in r.get("lofo", []) if x.get("family") == family), {})
 
 
-_LIVE_HIGHLIGHTS = {
-    "Held-Out PortScan LOFO": lambda r: (_lofo_row(r, "PortScan").get("caught_by_full_system"),
-                                         _lofo_row(r, "PortScan").get("caught_by_full_system_support")),
-    "Unseen Attacks Alerted": lambda r: (r.get("novel_families", {}).get("alerted"),
-                                         r.get("novel_families", {}).get("alerted_support")),
-    "Unseen Shown as Unknown": lambda r: (r.get("novel_families", {}).get("shown_as_unknown"),
-                                          r.get("novel_families", {}).get("shown_as_unknown_support")),
-}
-
 VERSION_HISTORY_NOTE = (
-    "These are code releases of the one trained model bundle on disk (see `versions`), "
-    "not separate models. 'before' figures and those of superseded releases are as recorded "
-    "in each release's commit message; the active release's measured figures are read from "
-    "reports/metrics.json. All figures so far come from synthetic data."
+    "These model versions are dynamically generated from the trained model bundles on disk. "
+    "The active release's figures are read directly from its reports/metrics.json."
 )
 
 
-def _version_history(report):
-    history = copy.deepcopy(VERSION_HISTORY)
-    for entry in history:
-        if entry["status"] != "active" or not report:
+def _version_history():
+    """One entry per trained bundle with a report (ml/registry.report_path); every
+    figure is read from that bundle's metrics.json, none is typed in here."""
+    active_version = registry.active_version()
+    history = []
+    for p in sorted(registry.REPORTS.glob("**/metrics.json")):
+        version = "v1" if p.parent == registry.REPORTS else p.parent.name
+        try:
+            r = json.load(open(p, encoding="utf-8"))
+        except (OSError, ValueError):
+            log.warning("unreadable report %s left out of the version history", p)
             continue
-        for h in entry["highlights"]:
-            value, support = _LIVE_HIGHLIGHTS.get(h["label"], lambda r: (None, None))(report)
-            if value is not None:
-                h["after"] = f"{100 * value:.1f}%" + (
-                    f" ({support['hits']:,} of {support['of']:,} flows)" if support else "")
-                h["source"] = "reports/metrics.json"
+        main = r.get("main", {})
+        nf = r.get("novel_families", {})
+        portscan = _lofo_row(r, "PortScan")
+        # macro-F1 is the classifier's (the system report has none); false alerts
+        # are the whole system's when the report has them. An older or partial
+        # report leaves a figure out rather than failing the whole page.
+        false_alerts = (r.get("system") or main).get("false_alerts_per_10k_benign_flows")
+        parts = ([f"Macro-F1 {main['macro_f1']:.3f}"] if "macro_f1" in main else []) + (
+            [f"{false_alerts} false alerts per 10k benign flows"] if false_alerts is not None else [])
+        summary = " · ".join(parts) or "No evaluation figures in this report"
+        history.append({
+            "version": version,
+            "title": f"Model Bundle {version}",
+            "date": r.get("generated", "")[:10],
+            "status": "active" if version == active_version else "superseded",
+            "summary": summary,
+            "highlights": [
+                {"label": "Held-Out PortScan LOFO",
+                 "after": _figure(portscan.get("caught_by_full_system"),
+                                  portscan.get("caught_by_full_system_support"))},
+                {"label": "Unseen Attacks Alerted",
+                 "after": _figure(nf.get("alerted"), nf.get("alerted_support"))},
+                {"label": "Unseen Shown as Unknown",
+                 "after": _figure(nf.get("shown_as_unknown"), nf.get("shown_as_unknown_support"))},
+            ],
+            "changelog": [],
+        })
+
+    # newest first: v-prefixed bundles (v1, v2) after bare release numbers (1.2, 2.1)
+    def sort_key(x):
+        v = x["version"]
+        return (1, v) if v.startswith("v") else (0, v)
+
+    history.sort(key=sort_key, reverse=True)
     return history
 
 
@@ -362,7 +192,7 @@ def get_models(db: Session = Depends(get_db)):
         },
         "feedback": {s: counts.get(s, 0) for s in TRIAGE_STATUSES},
         "model_card": MODEL_CARD_PATH.read_text(encoding="utf-8") if MODEL_CARD_PATH.exists() else None,
-        "version_history": _version_history(report),
+        "version_history": _version_history(),
         "version_history_note": VERSION_HISTORY_NOTE,
     }
 

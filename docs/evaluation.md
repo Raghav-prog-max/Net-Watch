@@ -11,11 +11,23 @@ accuracy. We report macro-F1, PR-AUC per class, and FPR instead.
 
 ## Splits
 
-Time-block splits (5-minute windows) ensure no burst of near-duplicate flows
-appears in both training and test. Blocks are divided within each attack family, so
-a family that fills only a few blocks (DDoS: 5 of 398) still has some in validation
-and test. The leakage test (`tests/test_split_leakage.py`) fails the build if one
-block crosses a split boundary or a family is missing from one.
+Flows are grouped into 5-minute time blocks and whole blocks are split. Blocks are
+divided within each attack family, so a family that fills only a few blocks (DDoS: 5
+of 398) still has some in validation and test.
+
+An attack session runs 20-60 minutes, longer than a block, so blocks shuffled at
+random still put neighbouring minutes of one session in train and test. Within each
+family the blocks therefore go in time order: the earliest train, the next validate,
+the latest test, with a block dropped at each boundary. Where two attacks overlap,
+flows can follow the other family's layout, so any trained or validation attack
+flow within 5 minutes (`split.purge_minutes`) of a later split's flow of its family
+is dropped too. The model is tested on a later stretch of each attack, at least 5
+minutes after anything it learned, and a family with several tools (DoS, BruteForce)
+on its later tools. Unseen families are what LOFO tests.
+
+The leakage test (`tests/test_split_leakage.py`) fails the build if one block
+crosses a split boundary, a family is missing from test, or a held-out attack flow
+has a trained flow of its family within 5 minutes.
 
 ## Leave-one-family-out (LOFO)
 

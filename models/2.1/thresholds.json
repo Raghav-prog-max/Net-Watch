@@ -1,0 +1,8 @@
+{
+  "attack_threshold": 0.00024002179980631144,
+  "anomaly_threshold": 0.6323487245748864,
+  "fpr_budget": 0.005,
+  "classifier_fpr_budget": 0.004,
+  "detector_flag_rate": 0.001,
+  "benign_unexplained_alert_rate": 0.0011
+}

@@ -29,41 +29,65 @@ from ml import registry
 
 def promote(version, rollback=False, budget_per_10k=50.0,
             models=registry.MODELS, reports=registry.REPORTS):
-    """Make `version` the active bundle and return the one it replaced. Raises
-    SystemExit, changing nothing, if it may not."""
-    current = registry.active_version(models)
-    if version == current:
-        raise SystemExit(f"{version} is already active")
+    """Make `version` the active bundle (by renaming it to v1, and archiving the old v1)."""
+    if version == "v1":
+        raise SystemExit(f"v1 is already production")
+    
     missing = registry.missing_files(version, models)
     if missing:
         raise SystemExit(f"{registry.model_dir(version, models)} is not a complete bundle: "
                          f"missing {', '.join(missing)}")
+                         
     if not rollback:
-        now_path, new_path = registry.report_path(current, reports), registry.report_path(version, reports)
+        now_path = registry.report_path("v1", reports)
+        new_path = registry.report_path(version, reports)
         for p in (now_path, new_path):
             if not p.exists():
                 raise SystemExit(f"{p} not found: the promotion check compares both reports")
         problems = registry.promotion_problems(json.load(open(now_path)), json.load(open(new_path)),
                                                budget_per_10k)
         if problems:
-            raise SystemExit(f"not promoting {version} over {current}: " + "; ".join(problems))
-    (models / "ACTIVE").write_text(version + "\n", encoding="utf-8")
-    return current
+            raise SystemExit(f"not promoting {version} over v1: " + "; ".join(problems))
+            
+    # Archive current v1
+    v1_model = models / "v1"
+    v1_report = reports / "metrics.json"
+    if v1_model.exists():
+        x = 1
+        while (models / f"1.{x}").exists():
+            x += 1
+        v1_model.rename(models / f"1.{x}")
+        if v1_report.exists():
+            (reports / f"1.{x}").mkdir(exist_ok=True)
+            v1_report.rename(reports / f"1.{x}" / "metrics.json")
+        print(f"Archived previous production v1 to 1.{x}")
+
+    # Move version to v1
+    (models / version).rename(models / "v1")
+    version_report_dir = reports / version
+    if version_report_dir.exists():
+        version_report_file = version_report_dir / "metrics.json"
+        if version_report_file.exists():
+            version_report_file.rename(reports / "metrics.json")
+        import shutil
+        shutil.rmtree(version_report_dir, ignore_errors=True)
+        
+    (models / "ACTIVE").write_text("v1\n", encoding="utf-8")
+    return "v1"
 
 
 def main():
     import yaml
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("version", help="a bundle under models/, e.g. v2")
+    ap.add_argument("version", help="a bundle under models/, e.g. v2 or 1.1")
     ap.add_argument("--rollback", action="store_true",
                     help="switch back without the promotion check")
     ap.add_argument("--config", default="ml/config.yaml")
     a = ap.parse_args()
     cfg = yaml.safe_load(open(ROOT / a.config))
-    replaced = promote(a.version, a.rollback, cfg["train"]["fpr_budget"] * 10000)
-    print(f"active: {a.version} (was {replaced}; models/{replaced} is kept for rollback: "
-          f"python scripts/promote.py {replaced} --rollback). Restart the API to load it.")
+    promote(a.version, a.rollback, cfg["train"]["fpr_budget"] * 10000)
+    print(f"active: v1 (was {a.version}). Restart the API to load it.")
 
 
 if __name__ == "__main__":

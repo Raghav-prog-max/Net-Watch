@@ -1,0 +1,45 @@
+anomaly:
+  benign_flag_rate: 0.001
+  family_keep_rate: 0.99
+  max_samples: 50000
+  n_estimators: 200
+classifier:
+  random_forest:
+    n_estimators: 300
+drift:
+  alert_rate_drift_multiplier: 2.0
+  alert_rate_warning_multiplier: 1.5
+  bins: 10
+  drift_psi: 0.25
+  fp_share_alerts: 500
+  history_every: 1000
+  history_keep: 100
+  top_features_ks: 15
+  warn_psi: 0.1
+  window: 5000
+imbalance_strategy: class_weight
+kaggle:
+  dataset: shadman1028/cicids2017-official-flow-feature-csv-files
+  expected_files:
+  - Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv
+  - Monday-WorkingHours.pcap_ISCX.csv
+  - Tuesday-WorkingHours.pcap_ISCX.csv
+  - Wednesday-workingHours.pcap_ISCX.csv
+  - Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv
+  - Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv
+  - Friday-WorkingHours-Morning.pcap_ISCX.csv
+  - Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv
+paths:
+  model_dir: models/v2
+  processed: data\processed\flows_with_feedback.pkl
+  raw_dir: data/raw
+  reports_dir: reports\v2
+split:
+  block_minutes: 5
+  random_state: 42
+  test_size: 0.3
+train:
+  benign_downsample: 0.2
+  classifier: auto
+  classifier_fpr_budget: 0.004
+  fpr_budget: 0.005

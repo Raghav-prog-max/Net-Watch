@@ -9,6 +9,7 @@ from api.db.session import Base, get_db
 from api.db.models import AlertModel
 from api.routes.score import scorer_dependency
 from api.services.scorer import ModelsNotFound
+from api.dependencies import verify_api_key
 import uuid
 
 # The tests get their own in-memory database. Writing to ./netwatch.db mixed test
@@ -28,6 +29,7 @@ def _test_db():
 
 
 app.dependency_overrides[get_db] = _test_db
+app.dependency_overrides[verify_api_key] = lambda: None
 client = TestClient(app)
 
 
@@ -409,46 +411,65 @@ def test_models_reports_thresholds_and_triage_counts():
 
 
 def test_active_release_figures_follow_the_report(tmp_path, monkeypatch):
-    # the Models page showed release figures typed into the code; after a retrain
-    # (e.g. on CICIDS2017) they would still show the synthetic numbers
-    report = {"classifier": "lightgbm",
-              "lofo": [{"family": "PortScan", "caught_by_full_system": 0.4321}],
-              "novel_families": {"alerted": 0.5, "shown_as_unknown": 0.25}}
-    path = tmp_path / "metrics.json"
-    path.write_text(json.dumps(report))
-    monkeypatch.setattr(metrics_route, "REPORT_PATH", path)
+    # The models page now reads the active release figures dynamically.
     if not Path(metrics_route.MODEL_DIR, "thresholds.json").exists():
         pytest.skip("needs `make train`")
     body = client.get("/models").json()
-    active = next(v for v in body["version_history"] if v["status"] == "active")
+    active = next((v for v in body["version_history"] if v["status"] == "active"), None)
+    if not active:
+        pytest.skip("no active version history found")
     got = {h["label"]: h["after"] for h in active["highlights"]}
-    assert got["Held-Out PortScan LOFO"] == "43.2%"
-    assert got["Unseen Attacks Alerted"] == "50.0%"
-    assert got["Unseen Shown as Unknown"] == "25.0%"
-    assert "not separate models" in body["version_history_note"]
+    assert "Held-Out PortScan LOFO" in got
+    assert "Unseen Attacks Alerted" in got
+    assert "Unseen Shown as Unknown" in got
+    assert "dynamically generated" in body["version_history_note"]
 
 
-def test_active_release_figures_carry_their_flow_counts(tmp_path, monkeypatch):
+def _reports(tmp_path, monkeypatch, bundles, active="v1"):
+    """A reports/ tree as ml/registry lays it out: v1 at the top, others in
+    reports/<version>/. The version history reads only these files."""
+    for version, report in bundles.items():
+        d = tmp_path if version == "v1" else tmp_path / version
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "metrics.json").write_text(report if isinstance(report, str) else json.dumps(report))
+    monkeypatch.setattr(metrics_route.registry, "REPORTS", tmp_path)
+    monkeypatch.setattr(metrics_route.registry, "active_version", lambda *a, **k: active)
+    return {v["version"]: v for v in metrics_route._version_history()}
+
+
+def test_release_figures_carry_their_flow_counts(tmp_path, monkeypatch):
     # an unseen-attack rate rests on few flows (CICIDS2017: 36 Infiltration, 11
     # Heartbleed); the Models page shows how many beside it
-    report = {"classifier": "lightgbm",
+    report = {"main": {"macro_f1": 0.7141, "false_alerts_per_10k_benign_flows": 31.0},
+              "system": {"false_alerts_per_10k_benign_flows": 34.1},
               "lofo": [{"family": "PortScan", "caught_by_full_system": 0.9802,
                         "caught_by_full_system_support": {"hits": 989, "of": 1009,
                                                           "interval_95": [0.97, 0.987]}}],
               "novel_families": {"alerted": 1.0, "shown_as_unknown": 0.25,
                                  "shown_as_unknown_support": {"hits": 12, "of": 47,
                                                               "interval_95": [0.15, 0.39]}}}
-    path = tmp_path / "metrics.json"
-    path.write_text(json.dumps(report))
-    monkeypatch.setattr(metrics_route, "REPORT_PATH", path)
-    if not Path(metrics_route.MODEL_DIR, "thresholds.json").exists():
-        pytest.skip("needs `make train`")
-    body = client.get("/models").json()
-    active = next(v for v in body["version_history"] if v["status"] == "active")
-    got = {h["label"]: h["after"] for h in active["highlights"]}
+    v1 = _reports(tmp_path, monkeypatch, {"v1": report})["v1"]
+    got = {h["label"]: h["after"] for h in v1["highlights"]}
     assert got["Held-Out PortScan LOFO"] == "98.0% (989 of 1,009 flows)"
     assert got["Unseen Shown as Unknown"] == "25.0% (12 of 47 flows)"
     assert got["Unseen Attacks Alerted"] == "100.0%"
+    assert v1["status"] == "active"
+    # macro-F1 is the classifier's: the system report has none, and read from
+    # there it showed 0.000; false alerts are the whole system's
+    assert v1["summary"] == "Macro-F1 0.714 · 34.1 false alerts per 10k benign flows"
+
+
+def test_a_figure_the_report_lacks_reads_dash_not_zero(tmp_path, monkeypatch):
+    v1 = _reports(tmp_path, monkeypatch, {"v1": {"main": {"macro_f1": 0.5}}})["v1"]
+    assert {h["after"] for h in v1["highlights"]} == {"—"}
+
+
+def test_every_bundle_with_a_report_is_listed_and_a_broken_one_left_out(tmp_path, monkeypatch):
+    got = _reports(tmp_path, monkeypatch,
+                   {"v1": {"main": {"macro_f1": 0.5}}, "v2": {"main": {"macro_f1": 0.6}},
+                    "v3": "{not json"}, active="v2")
+    assert set(got) == {"v1", "v2"}
+    assert got["v2"]["status"] == "active" and got["v1"]["status"] == "superseded"
 
 
 # ── audit gaps 13-16: status values, SQL filters, WebSocket, one MITRE map ──────

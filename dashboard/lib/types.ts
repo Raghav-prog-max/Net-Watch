@@ -151,6 +151,8 @@ export interface EvaluationReport {
     per_family?: {
       family: string;
       flows: number;
+      alerted?: number;
+      shown_as_unknown?: number;
       alerted_support: Support;
       shown_as_unknown_support: Support;
     }[];

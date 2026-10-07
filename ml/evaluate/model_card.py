@@ -122,8 +122,11 @@ def render():
     source = "Synthetic traffic shaped like CICIDS2017" if synthetic else "CICIDS2017 flow records"
     w(f"{source}: {len(flows):,} flows after cleaning, {m['features']} features. "
       f"Split into {cfg['split']['block_minutes']}-minute time blocks so no block appears "
-      "in two splits, divided within each attack family so every family is in test; "
-      "a test fails the build if either breaks.")
+      "in two splits, divided within each attack family so every family is in test. "
+      "Within a family the earliest blocks train, the next validate and the latest test, "
+      f"and no held-out attack flow is within {cfg['split']['purge_minutes']} minutes of a "
+      "trained flow of its family, so the model is tested on a later stretch of each attack, "
+      "not the minutes next to what it learned; a test fails the build if any of this breaks.")
     w("")
     w("| Split | Flows | Note |")
     w("| --- | ---: | --- |")
@@ -148,7 +151,7 @@ def render():
     w("")
     w("Surfacing suspicious traffic to a SOC analyst, who decides what happens next. Each "
       "alert carries a severity, the features that drove it and a MITRE ATT&CK technique; "
-      "the analyst's decision is stored as a label for the next model version.")
+      "the analyst's decision is stored as a label for the next model version. Analyst labels are treated as trusted input during retraining.")
     w("")
     w("**Not for:** automated blocking or rate limiting; any network the model was not "
       "retrained on; forensic attribution of an attack to a person.")

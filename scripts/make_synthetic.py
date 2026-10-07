@@ -49,7 +49,17 @@ def main(rows, out_dir, seed=7):
         df = pd.DataFrame(np.exp(base) * 100, columns=FEATURES)
         df["Destination Port"] = rng.choice([80, 443, 22, 21, 8080], size=n)
         df["Label"] = label
-        df["Timestamp"] = start + pd.to_timedelta(rng.integers(0, 8 * 3600, size=n), unit="s")
+        if label == "BENIGN":
+            offset = rng.integers(0, 8 * 3600, size=n)
+        else:
+            # one session of 20-60 minutes, as each CICIDS2017 attack runs, with
+            # its bursts back to back: a burst's near-duplicates sit in the same
+            # or neighbouring time blocks. Scattered over the day, every burst
+            # crossed every split and no split could keep them apart.
+            length = int(rng.integers(20 * 60, 60 * 60))
+            begin = int(rng.integers(0, 8 * 3600 - length))
+            offset = begin + np.sort(rng.integers(0, length, size=n))
+        df["Timestamp"] = start + pd.to_timedelta(offset, unit="s")
         frames.append(df)
 
     out = pd.concat(frames, ignore_index=True).sample(frac=1.0, random_state=seed)
