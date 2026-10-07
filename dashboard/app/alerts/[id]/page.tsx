@@ -4,7 +4,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
-import { getAlert, triage } from "@/lib/api";
+import { getAlert } from "@/lib/api";
+import { useTriagePermission } from "@/lib/permissions";
 import type { Alert } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
@@ -24,6 +25,7 @@ export default function AlertDetailPage() {
   const [analystNote, setAnalystNote] = useState("");
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [falsePositives, refreshFalsePositives] = useFalsePositiveCount();
+  const { can, why, triage } = useTriagePermission();
 
   useEffect(() => {
     getAlert(id)
@@ -278,7 +280,9 @@ export default function AlertDetailPage() {
             {ACTIONS.map((a) => (
               <button
                 key={a.status}
-                disabled={saving || alert.status === a.status}
+                disabled={saving || alert.status === a.status || !can(a.status)}
+                title={why(a.status)}
+                data-role-locked={!can(a.status)}
                 onClick={() => handleApplyTriage(a.status)}
                 className={`nw-btn-pill ${a.btnClass}`}
               >

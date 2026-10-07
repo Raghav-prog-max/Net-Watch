@@ -3,7 +3,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/userContext";
 import { ROLE_DEFINITIONS } from "@/lib/users";
-import { listAlerts, triage } from "@/lib/api";
+import { listAlerts } from "@/lib/api";
+import { useTriagePermission } from "@/lib/permissions";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert } from "@/lib/types";
 import { NotificationPanel, type NotificationItem } from "@/components/ui/notification-panel";
@@ -36,6 +37,7 @@ function formatAlertTime(isoStr: string): string {
 export default function SocTopBar() {
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const { can, triage } = useTriagePermission();
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
@@ -151,11 +153,14 @@ export default function SocTopBar() {
         count: alert.flow_count > 1 ? alert.flow_count : undefined,
         actions: [
           { id: "inspect", label: "Inspect", tone: "primary", resolved: "Inspecting threat" },
-          { id: "ack", label: "Acknowledge", tone: "quiet", resolved: "Acknowledged alert" },
+          // offered only to roles that may acknowledge (lib/permissions.ts)
+          ...(can("acknowledged")
+            ? [{ id: "ack", label: "Acknowledge", tone: "quiet" as const, resolved: "Acknowledged alert" }]
+            : []),
         ],
       };
     });
-  }, [recentAlerts, readIds, archivedIds]);
+  }, [recentAlerts, readIds, archivedIds, can]);
 
   const hasUnread = notificationItems.some((n) => n.unread && !n.archived);
 

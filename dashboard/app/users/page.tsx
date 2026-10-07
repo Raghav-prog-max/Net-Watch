@@ -18,6 +18,9 @@ export default function UsersPage() {
     hasPermission,
     resetDefaults,
   } = useUser();
+  // the Users page is the only place roles change; only manage_users_rbac may
+  const canManage = hasPermission("manage_users_rbac");
+  const manageReason = canManage ? undefined : "Your role cannot manage users and roles";
 
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<ActiveTab>("directory");
@@ -112,6 +115,7 @@ export default function UsersPage() {
   // Handle Invite Form Submission
   const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManage) return;
     if (!inviteName.trim() || !inviteEmail.trim()) {
       setInviteError("Please provide both full name and valid email address.");
       return;
@@ -156,6 +160,7 @@ export default function UsersPage() {
   // Handle Edit Submit
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManage) return;
     if (!selectedUserForAction) return;
 
     updateUser(selectedUserForAction.id, {
@@ -178,6 +183,7 @@ export default function UsersPage() {
 
   // Handle Confirm Revoke
   const handleRevokeConfirm = () => {
+    if (!canManage) return;
     if (!selectedUserForAction) return;
     deleteUser(selectedUserForAction.id);
     setIsRevokeModalOpen(false);
@@ -266,7 +272,7 @@ export default function UsersPage() {
                 letterSpacing: "-0.02em",
               }}
             >
-              SecOps User Management &amp; RBAC Portal
+              SecOps User Management &amp; Roles
             </h1>
           </div>
           <p
@@ -277,13 +283,26 @@ export default function UsersPage() {
               maxWidth: "840px",
             }}
           >
-            Manage active security analysts, enforce Role-Based Access Control (RBAC), provision emergency Tier-3 triage escalation permissions, and inspect immutable audit trails across the SOC.
+            Manage the SOC roster and each analyst&apos;s role. A role decides which triage actions this dashboard offers: an Auditor cannot triage, a Tier-1 analyst cannot mark false positives or escalate.
+          </p>
+          <p
+            style={{
+              margin: "8px 0 0",
+              color: "#F59E0B",
+              fontSize: "12px",
+              maxWidth: "840px",
+            }}
+          >
+            Roles and this audit log are stored in this browser and the API does not check them, so they are not a security boundary: anyone can change them here.
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             onClick={() => setIsInviteModalOpen(true)}
+            disabled={!canManage}
+            title={manageReason}
+            data-role-locked={!canManage}
             className="nw-btn-pill nw-btn-primary"
             style={{ display: "flex", alignItems: "center", gap: "6px" }}
           >
@@ -295,8 +314,10 @@ export default function UsersPage() {
 
           <button
             onClick={resetDefaults}
+            disabled={!canManage}
+            data-role-locked={!canManage}
             className="nw-btn-pill nw-btn-secondary"
-            title="Reset roster and audit logs to initial SOC defaults"
+            title={manageReason ?? "Reset roster and audit logs to initial SOC defaults"}
             style={{ display: "flex", alignItems: "center", gap: "6px" }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>
@@ -467,7 +488,7 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* Card 4: MFA Enforcement */}
+        {/* Card 4: MFA as recorded on the roster (NetWatch enforces no MFA) */}
         <div
           style={{
             backgroundColor: "var(--nw-bg-panel)",
@@ -478,7 +499,7 @@ export default function UsersPage() {
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ fontSize: "11px", fontWeight: 700, color: "#6EE7B7", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              MFA Enforcement Rate
+              MFA Marked on Roster
             </div>
             <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "#6EE7B7" }}>
               security
@@ -488,7 +509,7 @@ export default function UsersPage() {
             {mfaPercent}%
           </div>
           <div style={{ fontSize: "11px", color: "var(--nw-text-muted)" }}>
-            {mfaEnforcedCount} of {totalUsers} accounts with Hardware/TOTP
+            {mfaEnforcedCount} of {totalUsers} accounts marked; NetWatch does not enforce MFA
           </div>
         </div>
       </div>
@@ -836,7 +857,7 @@ export default function UsersPage() {
                                 <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
                                   shield
                                 </span>
-                                <span>Hardware/TOTP</span>
+                                <span>Marked</span>
                               </div>
                             ) : (
                               <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", color: "#F87171", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
@@ -909,9 +930,11 @@ export default function UsersPage() {
 
                               <button
                                 onClick={() => openEditModal(user)}
+                                disabled={!canManage}
+                                data-role-locked={!canManage}
                                 className="nw-btn-pill nw-btn-secondary"
                                 style={{ padding: "3px 6px" }}
-                                title="Edit role & status"
+                                title={manageReason ?? "Edit role & status"}
                               >
                                 <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>
                                   edit
@@ -920,9 +943,11 @@ export default function UsersPage() {
 
                               <button
                                 onClick={() => openRevokeModal(user)}
+                                disabled={!canManage}
+                                data-role-locked={!canManage}
                                 className="nw-btn-pill nw-btn-secondary"
                                 style={{ padding: "3px 6px", color: "#F87171" }}
-                                title="Revoke access"
+                                title={manageReason ?? "Revoke access"}
                               >
                                 <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>
                                   person_remove
@@ -951,7 +976,7 @@ export default function UsersPage() {
               }}
             >
               <span>Showing {filteredUsers.length} of {totalUsers} registered SecOps members</span>
-              <span style={{ fontFamily: "var(--font-mono)" }}>NetWatch RBAC v2.4 • Client Vault Active</span>
+              <span style={{ fontFamily: "var(--font-mono)" }}>Roles stored in this browser · not checked by the API</span>
             </div>
           </div>
         </div>
@@ -1850,7 +1875,7 @@ export default function UsersPage() {
                   style={{ width: "16px", height: "16px", accentColor: "#FFFFFF" }}
                 />
                 <span style={{ fontSize: "13px", color: "#E1E4EA" }}>
-                  Multi-Factor Authentication (MFA) Active
+                  MFA in use (recorded here, not enforced)
                 </span>
               </label>
 
