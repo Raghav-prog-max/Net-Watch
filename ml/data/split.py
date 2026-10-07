@@ -11,7 +11,6 @@ To prevent covariate shift where all morning background traffic ends up in train
 and evening traffic ends up in test, blocks are further stratified by day and 
 time-bin (morning, midday, afternoon, evening).
 """
-import numpy as np
 import pandas as pd
 
 
@@ -135,15 +134,15 @@ def make_splits(df, test_size=0.30, random_state=42):
                  for name in ("train", "val", "test"))
 
 
-def split_out_novel(train, val, test, trained_families):
+def split_out_novel(df, train, val, trained_families):
     """Returns (train, val, novel): train and val without the families the
-    classifier never trains on, and every flow of those families from all three
-    splits. They are test material only, so taking just the share that the
-    time-block split put in test threw most of them away. `test` is unchanged."""
+    classifier never trains on, and every flow of those families in `df`, the
+    data make_splits divided. They are test material only, so taking just the
+    share that the time-block split put in test threw most of them away, and
+    taking them from the splits lost the ones in purged blocks."""
     def known(d):
         return d["family"].isin(trained_families)
-    novel = pd.concat([d[~known(d)] for d in (train, val, test)], ignore_index=True)
-    return train[known(train)], val[known(val)], novel
+    return train[known(train)], val[known(val)], df[~known(df)].reset_index(drop=True)
 
 
 def lofo_split(train, val, family):

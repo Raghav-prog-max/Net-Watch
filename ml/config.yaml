@@ -31,6 +31,7 @@ kaggle:
 split:
   test_size:     0.30   # held out, then halved into validation and test (15% each)
   block_minutes: 5      # time-block size; no block appears in two splits
+  purge_minutes: 5      # no held-out attack flow this close to a trained one of its family (ml/data/split.py)
   random_state:  42     # the project's one seed (splits, models, NSL-KDD check)
 
 # ── Training (ml/train.py, ml/evaluate/lofo.py, ml/evaluate/naive.py) ─────────
