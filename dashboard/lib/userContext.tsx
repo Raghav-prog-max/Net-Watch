@@ -16,6 +16,10 @@ import {
   type FirebaseUser,
 } from "./firebase";
 
+// Local-only sign-in as a roster user, for running the dashboard without a
+// Firebase project. Never available in a production build.
+const sandboxLoginEnabled = !isFirebaseConfigured && process.env.NODE_ENV !== "production";
+
 export interface UserContextType {
   currentUser: User | null;
   users: User[];
@@ -23,10 +27,12 @@ export interface UserContextType {
   firebaseUser: FirebaseUser | null;
   isAuthenticated: boolean;
   isFirebaseConfigured: boolean;
+  sandboxLoginEnabled: boolean;
   authLoading: boolean;
   loginWithEmail: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   registerWithEmail: (name: string, email: string, pass: string, role?: UserRole) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  loginAsSandboxUser: (userId: string) => { success: boolean; error?: string };
   logout: () => Promise<void>;
   setCurrentUser: (user: User | null) => void;
   addUser: (data: {
@@ -44,6 +50,7 @@ export interface UserContextType {
 }
 
 const STORAGE_KEY_ACTIVE_USER = "netwatch_active_user_id_v2";
+const STORAGE_KEY_SANDBOX_USER = "netwatch_sandbox_user_id";
 const STORAGE_KEY_USERS = "netwatch_users_roster_v2";
 const STORAGE_KEY_AUDIT = "netwatch_audit_logs_v2";
 
@@ -83,6 +90,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Listen strictly to Firebase Auth state changes
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) {
+      if (sandboxLoginEnabled) {
+        // Restore the sandbox session; the updater sees the roster loaded above
+        setUsers((prevUsers) => {
+          try {
+            const activeId = localStorage.getItem(STORAGE_KEY_SANDBOX_USER);
+            const match = prevUsers.find((u) => u.id === activeId && u.status === "active");
+            if (match) setCurrentUserState(match);
+          } catch {}
+          return prevUsers;
+        });
+      }
       setAuthLoading(false);
       return;
     }
@@ -165,20 +183,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  // Firebase email login (Real credentials only if configured, fallback to mock auth otherwise)
+  // Firebase email login; without Firebase, a roster email in the local sandbox only
   const loginWithEmail = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedEmail = email.trim().toLowerCase();
 
-    // HACKATHON FALLBACK: If Firebase isn't configured, just mock authenticate using local users
     if (!isFirebaseConfigured || !auth) {
-      const match = users.find((u) => u.email.toLowerCase() === trimmedEmail);
-      if (match) {
-        setCurrentUser(match);
-        return { success: true };
+      // Without Firebase there is no password check, so a roster email alone signs
+      // in, and only in the local sandbox (never a production build): the same
+      // session as the sandbox picker on the login page.
+      if (sandboxLoginEnabled) {
+        const match = users.find((u) => u.email.toLowerCase() === trimmedEmail);
+        if (match) return loginAsSandboxUser(match.id);
+        return { success: false, error: "Not on the local roster. Pick an analyst under Local Sandbox." };
       }
       return {
         success: false,
-        error: "Firebase Authentication is not configured, and user was not found in the local roster.",
+        error: "Firebase Authentication is not configured. Please verify your credentials in .env.local.",
       };
     }
 
@@ -270,6 +290,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Local sandbox sign-in as an existing roster user (no Firebase)
+  const loginAsSandboxUser = (userId: string): { success: boolean; error?: string } => {
+    if (!sandboxLoginEnabled) {
+      return { success: false, error: "Sandbox sign-in is only available in local development without Firebase." };
+    }
+    const match = users.find((u) => u.id === userId && u.status === "active");
+    if (!match) {
+      return { success: false, error: "Select an active analyst to continue." };
+    }
+    setCurrentUser(match);
+    try {
+      localStorage.setItem(STORAGE_KEY_SANDBOX_USER, match.id);
+    } catch {}
+    return { success: true };
+  };
+
   // Logout from Firebase and active session
   const logout = async () => {
     if (auth && isFirebaseConfigured) {
@@ -281,6 +317,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setCurrentUserState(null);
     try {
       localStorage.removeItem(STORAGE_KEY_ACTIVE_USER);
+      localStorage.removeItem(STORAGE_KEY_SANDBOX_USER);
     } catch {}
   };
 
@@ -426,12 +463,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         users,
         auditLogs,
         firebaseUser,
-        isAuthenticated: isFirebaseConfigured ? Boolean(firebaseUser && currentUser) : Boolean(currentUser),
+        isAuthenticated: Boolean(currentUser && (firebaseUser || sandboxLoginEnabled)),
         isFirebaseConfigured,
+        sandboxLoginEnabled,
         authLoading,
         loginWithEmail,
         registerWithEmail,
         loginWithGoogle,
+        loginAsSandboxUser,
         logout,
         setCurrentUser,
         addUser,

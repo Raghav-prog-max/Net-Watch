@@ -56,7 +56,9 @@ export default function DriftMonitorPage() {
     };
   }, []);
 
-  const isDrift = drift?.status === "drift" || (drift?.top_features?.[0]?.psi ?? 0) >= 0.25;
+  // The API applies the handbook's rule (PSI > 0.25 on 3+ features, or alert rate > 2x);
+  // one feature past the band alone is not drift, so show the API's verdict as is.
+  const isDrift = drift?.status === "drift";
   const isWarn = drift?.status === "warning";
   const warnBand = drift?.bands?.warning ?? 0.1;
   const driftBand = drift?.bands?.drift ?? 0.25;
