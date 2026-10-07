@@ -428,6 +428,33 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     # --- artefacts --------------------------------------------------------
     out = Path(cfg["paths"]["model_dir"])
+    rep_dir = Path(cfg["paths"]["reports_dir"])
+    name = "metrics.json" if not holdout else f"metrics-without-{holdout.lower()}.json"
+
+    # Safegaurd: only overwrite v1 if it's better
+    if not holdout and out.name == "v1":
+        existing_report_path = rep_dir / name
+        if existing_report_path.exists():
+            try:
+                with open(existing_report_path) as f:
+                    old_report = json.load(f)
+                old_f1 = old_report["main"]["macro_f1"]
+                new_f1 = report["main"]["macro_f1"]
+                if new_f1 <= old_f1:
+                    print(f"New macro-F1 ({new_f1:.4f}) is not better than old ({old_f1:.4f}). Diverting save to v2...")
+                    out = out.parent / "v2"
+                    rep_dir = rep_dir / "v2"
+                    # Archive existing v2 if it exists
+                    if out.exists():
+                        x = 1
+                        while out.parent.joinpath(f"2.{x}").exists():
+                            x += 1
+                        out.rename(out.parent / f"2.{x}")
+                        if rep_dir.exists():
+                            rep_dir.rename(rep_dir.parent / f"2.{x}")
+            except Exception as e:
+                print(f"Could not compare with existing model: {e}")
+
     if holdout:
         out = out.with_name(out.name + f"-without-{holdout.lower()}")
     out.mkdir(parents=True, exist_ok=True)
@@ -454,8 +481,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
                "bins": reference_stats(all_train, features, cfg["drift"]["bins"])},
               open(out / "reference_stats.json", "w"))
 
-    rep_dir = Path(cfg["paths"]["reports_dir"]); rep_dir.mkdir(parents=True, exist_ok=True)
-    name = "metrics.json" if not holdout else f"metrics-without-{holdout.lower()}.json"
+    rep_dir.mkdir(parents=True, exist_ok=True)
     json.dump(report, open(rep_dir / name, "w"), indent=2)
 
     sysr = report["system"]
