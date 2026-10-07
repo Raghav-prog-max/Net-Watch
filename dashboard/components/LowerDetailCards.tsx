@@ -246,6 +246,11 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
               <span style={{ fontSize: "11px", color: "#8E909B" }}>Zero-Day Detection (Recall)</span>
               <span style={{ fontSize: "11px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF" }}>
                 {report ? `${((report.novel_families.shown_as_unknown ?? report.novel_families.caught_by_anomaly_detector) * 100).toFixed(1)}%` : "—"}
+                {report?.novel_families.shown_as_unknown_support && (
+                  <span style={{ fontWeight: 400, color: "#8E909B" }}>
+                    {` (${report.novel_families.shown_as_unknown_support.hits.toLocaleString()}/${report.novel_families.shown_as_unknown_support.of.toLocaleString()})`}
+                  </span>
+                )}
               </span>
             </div>
 

@@ -296,11 +296,20 @@ VERSION_HISTORY = [
 # Measured figures on the active release, read from the current report so they
 # follow retraining (e.g. on CICIDS2017) instead of staying at the numbers the
 # release commit recorded.
+# Each gives (rate, support): support is the flows the rate rests on
+# (ml/evaluate/metrics.py support), shown beside it as unseen-attack rates come
+# from few flows; None in reports written before it existed.
+def _lofo_row(r, family):
+    return next((x for x in r.get("lofo", []) if x.get("family") == family), {})
+
+
 _LIVE_HIGHLIGHTS = {
-    "Held-Out PortScan LOFO": lambda r: next(
-        (x["caught_by_full_system"] for x in r.get("lofo", []) if x.get("family") == "PortScan"), None),
-    "Unseen Attacks Alerted": lambda r: r.get("novel_families", {}).get("alerted"),
-    "Unseen Shown as Unknown": lambda r: r.get("novel_families", {}).get("shown_as_unknown"),
+    "Held-Out PortScan LOFO": lambda r: (_lofo_row(r, "PortScan").get("caught_by_full_system"),
+                                         _lofo_row(r, "PortScan").get("caught_by_full_system_support")),
+    "Unseen Attacks Alerted": lambda r: (r.get("novel_families", {}).get("alerted"),
+                                         r.get("novel_families", {}).get("alerted_support")),
+    "Unseen Shown as Unknown": lambda r: (r.get("novel_families", {}).get("shown_as_unknown"),
+                                          r.get("novel_families", {}).get("shown_as_unknown_support")),
 }
 
 VERSION_HISTORY_NOTE = (
@@ -317,9 +326,10 @@ def _version_history(report):
         if entry["status"] != "active" or not report:
             continue
         for h in entry["highlights"]:
-            value = _LIVE_HIGHLIGHTS.get(h["label"], lambda r: None)(report)
+            value, support = _LIVE_HIGHLIGHTS.get(h["label"], lambda r: (None, None))(report)
             if value is not None:
-                h["after"] = f"{100 * value:.1f}%"
+                h["after"] = f"{100 * value:.1f}%" + (
+                    f" ({support['hits']:,} of {support['of']:,} flows)" if support else "")
                 h["source"] = "reports/metrics.json"
     return history
 

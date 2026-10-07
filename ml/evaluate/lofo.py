@@ -9,7 +9,7 @@ from ml.features.select import matrix
 from ml.models import classifier as clf_mod
 from ml.models.anomaly import AnomalyDetector
 from ml.data.split import lofo_split, downsample_benign
-from ml.evaluate import system
+from ml.evaluate import metrics, system
 from ml.evaluate.thresholds import pick_threshold
 
 
@@ -65,6 +65,7 @@ def run_one(train, val, test, features, family, cfg, budget_splits=()):
         "caught_by_classifier_alone": round(float(h_clf.mean()), 4),
         "caught_by_anomaly_detector_alone": round(float(h_anom.mean()), 4),
         "caught_by_full_system": round(float((h_clf | h_anom).mean()), 4),
+        "caught_by_full_system_support": metrics.support((h_clf | h_anom).sum(), len(held)),
         "benign_fpr": round(float((b_clf | b_anom).mean()), 5),
         "budget_splits": at_splits,
     }

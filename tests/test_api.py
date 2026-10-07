@@ -428,6 +428,29 @@ def test_active_release_figures_follow_the_report(tmp_path, monkeypatch):
     assert "not separate models" in body["version_history_note"]
 
 
+def test_active_release_figures_carry_their_flow_counts(tmp_path, monkeypatch):
+    # an unseen-attack rate rests on few flows (CICIDS2017: 36 Infiltration, 11
+    # Heartbleed); the Models page shows how many beside it
+    report = {"classifier": "lightgbm",
+              "lofo": [{"family": "PortScan", "caught_by_full_system": 0.9802,
+                        "caught_by_full_system_support": {"hits": 989, "of": 1009,
+                                                          "interval_95": [0.97, 0.987]}}],
+              "novel_families": {"alerted": 1.0, "shown_as_unknown": 0.25,
+                                 "shown_as_unknown_support": {"hits": 12, "of": 47,
+                                                              "interval_95": [0.15, 0.39]}}}
+    path = tmp_path / "metrics.json"
+    path.write_text(json.dumps(report))
+    monkeypatch.setattr(metrics_route, "REPORT_PATH", path)
+    if not Path(metrics_route.MODEL_DIR, "thresholds.json").exists():
+        pytest.skip("needs `make train`")
+    body = client.get("/models").json()
+    active = next(v for v in body["version_history"] if v["status"] == "active")
+    got = {h["label"]: h["after"] for h in active["highlights"]}
+    assert got["Held-Out PortScan LOFO"] == "98.0% (989 of 1,009 flows)"
+    assert got["Unseen Shown as Unknown"] == "25.0% (12 of 47 flows)"
+    assert got["Unseen Attacks Alerted"] == "100.0%"
+
+
 # ── audit gaps 13-16: status values, SQL filters, WebSocket, one MITRE map ──────
 import asyncio
 from datetime import datetime, timedelta

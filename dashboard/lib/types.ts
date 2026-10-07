@@ -78,6 +78,14 @@ export interface SummaryMetrics {
 }
 
 // Mirrors reports/metrics.json as written by `make train` and served by GET /metrics/model.
+/** What a rate on unseen attacks rests on (ml/evaluate/metrics.py support):
+ *  `hits` of `of` flows, and the 95% Wilson interval of the rate. */
+export interface Support {
+  hits: number;
+  of: number;
+  interval_95: [number, number] | null;
+}
+
 export interface EvaluationReport {
   generated?: string;
   classifier: string;
@@ -128,15 +136,24 @@ export interface EvaluationReport {
     caught_by_classifier_alone: number;
     caught_by_anomaly_detector_alone?: number;
     caught_by_full_system: number;
+    caught_by_full_system_support?: Support;
     benign_fpr: number;
   }[];
   novel_families: {
     families: string[];
     flows: number;
     alerted?: number;
+    alerted_support?: Support;
     caught_by_anomaly_detector: number;
     label_rejected_as_out_of_family?: number;
     shown_as_unknown?: number;
+    shown_as_unknown_support?: Support;
+    per_family?: {
+      family: string;
+      flows: number;
+      alerted_support: Support;
+      shown_as_unknown_support: Support;
+    }[];
   };
   synthetic_data?: boolean;
   imbalance_study?: {

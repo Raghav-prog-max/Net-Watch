@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
 import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
+import { supportText } from "@/lib/support";
 import { SplineSceneBasic } from "@/components/ui/demo";
 
 
@@ -178,6 +179,8 @@ export default function LandingPage() {
             </div>
             <div style={{ fontSize: "13px", color: "var(--nw-text-muted)" }}>
               Families held out of training entirely, flagged instead of mislabelled as a known attack.
+              {supportText(report?.novel_families.shown_as_unknown_support) &&
+                ` (${supportText(report?.novel_families.shown_as_unknown_support)})`}
             </div>
           </div>
 
