@@ -3,7 +3,7 @@
 # NetWatch AI SOC — SSL Certificate Provisioning Script
 # ==============================================================================
 # Writes deployment/nginx/ssl/fullchain.pem and privkey.pem, which
-# docker-compose.prod.yml mounts into nginx at /etc/nginx/ssl. Then set
+# the root docker-compose.yml mounts into nginx at /etc/nginx/ssl. Then set
 # NGINX_SITE=https in .env.production and restart nginx.
 #
 # Usage: init-ssl.sh DOMAIN [selfsigned|letsencrypt] [EMAIL]

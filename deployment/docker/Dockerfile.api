@@ -45,7 +45,7 @@ COPY --chown=netwatch:netwatch scripts /app/scripts
 # GET /models serves the model card
 COPY --chown=netwatch:netwatch docs/model_card.md /app/docs/model_card.md
 
-# The alert store's volume (docker-compose.prod.yml). models/ and reports/ are
+# The alert store's volume (the root docker-compose.yml). models/ and reports/ are
 # mounted from the host over the copies above.
 RUN mkdir -p /data/db && \
     chown -R netwatch:netwatch /data /app

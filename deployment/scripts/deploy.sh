@@ -48,7 +48,7 @@ fi
 set -a; . "${ENV_FILE}"; set +a
 # what users open; the dashboard is built to call <PUBLIC_URL>/api
 PUBLIC_URL="${PUBLIC_URL:-http://localhost}"
-COMPOSE=(docker compose -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml" --env-file "${ENV_FILE}")
+COMPOSE=(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "${ENV_FILE}")
 
 # ── 2. Validate Models and Certificates ──────────────────────────────────────
 log_info "Checking trained model artifacts..."

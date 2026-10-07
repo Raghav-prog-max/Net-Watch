@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DEPLOY_DIR="${ROOT_DIR}/deployment"
 ENV_FILE="${DEPLOY_DIR}/.env.production"
-COMPOSE=(docker compose -f "${DEPLOY_DIR}/docker/docker-compose.prod.yml" --env-file "${ENV_FILE}")
+COMPOSE=(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "${ENV_FILE}")
 
 echo "=================================================="
 echo " [ROLLBACK] Initiating emergency rollback..."

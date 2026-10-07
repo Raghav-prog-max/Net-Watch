@@ -18,7 +18,6 @@ deployment/
 │   ├── Dockerfile.api                  # Multi-stage FastAPI backend (non-root, one worker, healthcheck)
 │   ├── Dockerfile.dashboard            # Multi-stage Next.js frontend (non-root, healthcheck)
 │   ├── Dockerfile.replayer             # Demo traffic replayer (one scenario per run)
-│   ├── docker-compose.prod.yml         # Production orchestration (nginx + API + dashboard + replayer)
 │   └── docker-compose.monitoring.yml   # Prometheus + Grafana, on the production network
 ├── nginx/                              # Reverse Proxy, TLS, & Rate Limiting
 │   ├── nginx.conf                      # Common settings, upstreams, rate-limit zones
@@ -93,7 +92,7 @@ This script will:
 
 ### 4. Optional: Replay Demo Traffic
 ```bash
-docker compose -f deployment/docker/docker-compose.prod.yml --env-file deployment/.env.production \
+docker compose -f docker-compose.yml --env-file deployment/.env.production \
   --profile demo run --rm -e REPLAY_SCENARIO=known replayer
 ```
 It reads `data/` from the repository (processed flows and the splits `make train` writes).
