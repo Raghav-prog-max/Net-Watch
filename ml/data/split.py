@@ -5,12 +5,9 @@ copies of the same burst in train and test, which inflates every metric. We grou
 flows into short time blocks and split whole blocks instead.
 
 Each attack family sits in a handful of blocks (CICIDS2017: DDoS 5 of 398,
-PortScan 12), so blocks are shuffled and divided within each family. 
-
-To prevent covariate shift where all morning background traffic ends up in train
-and evening traffic ends up in test, blocks are further stratified by day and 
-time-bin (morning, midday, afternoon, evening).
+PortScan 12), so blocks are divided within each family.
 """
+import numpy as np
 import pandas as pd
 
 
@@ -41,97 +38,88 @@ def block_strata(df: pd.DataFrame) -> pd.Series:
     return rarest.reindex(blocks).fillna("Benign")
 
 
-def _hour_bin(hour):
-    if hour < 10: return "morning"
-    if hour < 13: return "midday"
-    if hour < 17: return "afternoon"
-    return "evening"
+def _held_out(n_blocks, share):
+    """(val, test) block counts for a stratum of n_blocks: `share` each, but at
+    least one each while train keeps one. Two blocks: one trains, one tests."""
+    if n_blocks >= 3:
+        k = min(max(1, int(n_blocks * share + 0.5)), (n_blocks - 1) // 2)
+        return k, k
+    return (0, 1) if n_blocks == 2 else (0, 0)
 
 
-def _assign_time_bins(df: pd.DataFrame) -> pd.Series:
-    """Assigns morning/midday/afternoon/evening proxy bins.
-    Uses Timestamp if available, otherwise divides each day's rows into quartiles."""
-    has_ts = "Timestamp" in df.columns and df["Timestamp"].notna().any()
-    if has_ts:
-        return df["Timestamp"].dt.hour.apply(_hour_bin)
-    
-    # Fallback: sequential row quartiles per day
-    bins = []
-    if "day" in df.columns:
-        for day in df["day"].unique():
-            mask = df["day"] == day
-            n = mask.sum()
-            q = np.array(["morning"] * n)
-            q[n//4 : 2*n//4] = "midday"
-            q[2*n//4 : 3*n//4] = "afternoon"
-            q[3*n//4 :] = "evening"
-            bins.append(pd.Series(q, index=df.index[mask]))
-        return pd.concat(bins)
+def _allocate(n_blocks, share, purge):
+    """(train, val, test, purge) block counts for a stratum of n_blocks in time
+    order, laid out train | purge | val | purge | test. Too few blocks to purge
+    both boundaries: val goes first (5 blocks still fit 1+1+1+1+1); two blocks:
+    train and test touch, as there is nothing to drop."""
+    n_val, n_test = _held_out(n_blocks, share)
+
+    def n_train(v, t, p):
+        return n_blocks - v - t - (p if v else 0) - (p if t else 0)
+
+    if n_val and n_train(n_val, n_test, purge) < 1:
+        n_val = 0
+    if n_test and n_train(n_val, n_test, purge) < 1:
+        purge = 0
+    return n_train(n_val, n_test, purge), n_val, n_test, purge
+
+
+def _in_time_order(df, blocks):
+    """`blocks` sorted by their first flow (by row order without timestamps)."""
+    if "Timestamp" in df.columns and df["Timestamp"].notna().any():
+        first = df.groupby("block")["Timestamp"].min()
     else:
-        n = len(df)
-        q = np.array(["morning"] * n)
-        q[n//4 : 2*n//4] = "midday"
-        q[2*n//4 : 3*n//4] = "afternoon"
-        q[3*n//4 :] = "evening"
-        return pd.Series(q, index=df.index)
+        first = df.reset_index().groupby("block")["index"].min()
+    return sorted(blocks, key=lambda b: (first[b], b))
 
 
-def make_splits(df, test_size=0.30, random_state=42):
-    """Returns (train, val, test). No time block appears in more than one.
-    
-    Blocks are stratified by (family, day, time_bin) to ensure each family
-    is split, AND the background traffic's daily cycle is distributed evenly
-    across train, val, and test to prevent covariate shift."""
-    df = df.copy()
-    if "time_bin" not in df.columns:
-        df["time_bin"] = _assign_time_bins(df)
-        
-    block_info = df.groupby("block").agg(
-        day=("day", "first") if "day" in df.columns else ("block", lambda _: "all"),
-        time_bin=("time_bin", lambda x: x.mode()[0])
-    )
-    
-    block_info["family_stratum"] = block_strata(df)
-    block_info["split_key"] = (block_info["family_stratum"] + "|" +
-                               block_info["day"].astype(str) + "|" +
-                               block_info["time_bin"])
-    
-    rng = np.random.RandomState(random_state)
-    assignment = {}
-    
-    for key, group in block_info.groupby("split_key"):
-        blocks = sorted(group.index.tolist())
-        blocks = [blocks[i] for i in rng.permutation(len(blocks))]
-        n = len(blocks)
-        
-        if n >= 3:
-            n_held = min(max(1, int(n * test_size / 2 + 0.5)), (n - 1) // 2)
-            for i, b in enumerate(blocks):
-                if i < n_held: assignment[b] = "val"
-                elif i < 2 * n_held: assignment[b] = "test"
-                else: assignment[b] = "train"
-        elif n == 2:
-            assignment[blocks[0]] = "train"
-            assignment[blocks[1]] = "test"
-        else:
-            assignment[blocks[0]] = "train"
-            
-    # Rescue operation for highly clustered attacks: if an attack family has 
-    # blocks, but they all landed in train due to isolated time-bins, move 
-    # one to test so the model can be evaluated on it.
-    for fam in block_info["family_stratum"].unique():
-        if fam == "Benign" or fam == "all":
+def _drop_near(part, held_out, minutes):
+    """`part` without its attack flows that come within `minutes` of a held-out
+    flow of the same family. A block is split under its rarest family, so where
+    two attacks overlap, the other's flows follow that family's layout and can
+    sit next to their own held-out flows; this removes them."""
+    near = pd.Series(False, index=part.index)
+    window = pd.Timedelta(minutes=minutes)
+    for family in held_out["family"].unique():
+        if family == "Benign" or family == "all":
             continue
-        fam_blocks = block_info[block_info["family_stratum"] == fam].index
-        in_test = [b for b in fam_blocks if assignment.get(b) == "test"]
-        if not in_test:
-            in_train = [b for b in fam_blocks if assignment.get(b) == "train"]
-            if in_train:
-                assignment[in_train[-1]] = "test"
-                
-    where = df["block"].map(assignment).fillna("train")
-    return tuple(df[where == name].drop(columns=["time_bin"], errors="ignore").reset_index(drop=True) 
-                 for name in ("train", "val", "test"))
+        marks = held_out.loc[held_out["family"] == family, "Timestamp"].sort_values().to_numpy()
+        mine = part["family"] == family
+        stamps = part.loc[mine, "Timestamp"].to_numpy()
+        i = marks.searchsorted(stamps)
+        before = marks[(i - 1).clip(0, len(marks) - 1)]
+        after = marks[i.clip(0, len(marks) - 1)]
+        gap = pd.Series(stamps - before).abs().combine(pd.Series(after - stamps).abs(), min)
+        near[mine] = (gap < window).to_numpy()
+    return part[~near]
+
+
+def make_splits(df, test_size=0.30, purge_minutes=5):
+    """Returns (train, val, test). No time block appears in more than one, and
+    every family found in 3 or more blocks has blocks in train and test (5 or
+    more: val too). A 2-block family is tested on its later block and keeps in
+    train only the flows of the earlier one at least `purge_minutes` away.
+
+    Within each stratum (block_strata), blocks are put in time order and laid out
+    train | purge | val | purge | test, val and test test_size / 2 of them each;
+    the flows of purged blocks are in no split. Then no attack flow in train or
+    val is left within `purge_minutes` of a later split's flow of its family
+    (needs timestamps; 0 turns purging off)."""
+    strata = block_strata(df)
+    side = {}
+    gap_blocks = 1 if purge_minutes else 0
+    for family in sorted(strata.unique()):
+        blocks = _in_time_order(df, strata.index[strata == family])
+        n_train, n_val, n_test, purge = _allocate(len(blocks), test_size / 2, gap_blocks)
+        layout = (["train"] * n_train + ["purge"] * (purge if n_val else 0) + ["val"] * n_val
+                  + ["purge"] * (purge if n_test else 0) + ["test"] * n_test)
+        side.update(zip(blocks, layout))
+    where = df["block"].map(side)
+    train, val, test = (df[where == name] for name in ("train", "val", "test"))
+    if purge_minutes and "Timestamp" in df.columns and df["Timestamp"].notna().any():
+        val = _drop_near(val, test, purge_minutes)
+        train = _drop_near(train, pd.concat([val, test]), purge_minutes)
+    return tuple(d.reset_index(drop=True) for d in (train, val, test))
 
 
 def split_out_novel(df, train, val, trained_families):

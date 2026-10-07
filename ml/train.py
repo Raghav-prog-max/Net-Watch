@@ -133,7 +133,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     df = add_blocks(df, cfg["split"]["block_minutes"])
 
-    train, val, test = make_splits(df, cfg["split"]["test_size"], cfg["split"]["purge_minutes"])
+    train, val, test = make_splits(df, test_size=cfg["split"]["test_size"], purge_minutes=cfg["split"]["purge_minutes"])
     
     splits_dir = Path(cfg["paths"].get("splits", "data/splits"))
     splits_dir.mkdir(parents=True, exist_ok=True)
