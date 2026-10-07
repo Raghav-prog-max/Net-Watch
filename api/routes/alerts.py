@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from ..dependencies import verify_api_key
 from typing import Any, Dict, Optional
 try:
     from sqlalchemy.orm import Session
@@ -80,7 +81,7 @@ def get_alert(id: str, db: Session = Depends(get_db)):
     return alert_to_dict(alert)
 
 @router.patch("/alerts/{id}", response_model=Alert)
-def update_alert(id: str, feedback: Feedback, db: Session = Depends(get_db)):
+def update_alert(id: str, feedback: Feedback, db: Session = Depends(get_db), api_key: str = Security(verify_api_key)):
     alert = db.query(AlertModel).filter(AlertModel.id == id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")

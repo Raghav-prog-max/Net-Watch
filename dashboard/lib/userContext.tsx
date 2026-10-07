@@ -183,11 +183,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  // Firebase email login (Real credentials only)
+  // Firebase email login; without Firebase, a roster email in the local sandbox only
   const loginWithEmail = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!isFirebaseConfigured || !auth) {
+      // Without Firebase there is no password check, so a roster email alone signs
+      // in, and only in the local sandbox (never a production build): the same
+      // session as the sandbox picker on the login page.
+      if (sandboxLoginEnabled) {
+        const match = users.find((u) => u.email.toLowerCase() === trimmedEmail);
+        if (match) return loginAsSandboxUser(match.id);
+        return { success: false, error: "Not on the local roster. Pick an analyst under Local Sandbox." };
+      }
       return {
         success: false,
         error: "Firebase Authentication is not configured. Please verify your credentials in .env.local.",

@@ -45,7 +45,8 @@ export default function LoginPage() {
 
     try {
       if (mode === "login") {
-        if (!email.trim() || !password) {
+        // the local sandbox has no passwords (lib/userContext.tsx loginWithEmail)
+        if (!email.trim() || (!password && !sandboxLoginEnabled)) {
           setError("Please provide both email and password.");
           setLoading(false);
           return;
@@ -476,7 +477,7 @@ export default function LoginPage() {
               Enter Sandbox Session →
             </button>
             <p style={{ margin: 0, fontSize: "10px", color: "#8E909B", lineHeight: 1.5 }}>
-              Development only. Shown because Firebase is not configured; disabled in production builds.
+              Or type a roster email in the form above (no password). Development only: shown because Firebase is not configured, and disabled in production builds.
             </p>
           </div>
         )}

@@ -1,16 +1,139 @@
+# ==============================================================================
+# NetWatch AI SOC — Docker Compose Orchestration
+# ==============================================================================
+# One host: nginx in front, the FastAPI backend and the Next.js dashboard behind
+# it on a private network, the alert store on a named volume. Train first
+# (`make train`): the API mounts models/ and reports/ from the repository.
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose --profile demo run --rm replayer
+#
+# The dashboard reaches the API through nginx at http://localhost/api, so only nginx
+# publishes a port.
+# ==============================================================================
+
+name: netwatch
+
+networks:
+  netwatch-network:
+    name: netwatch-prod-network
+    driver: bridge
+
+volumes:
+  netwatch-db-data:
+    name: netwatch-db-data
+
 services:
+  # ── FASTAPI ML INFERENCE & SOC BACKEND ──────────────────────────────────────
   api:
-    build: .
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
-    volumes: [".:/app"]
-    ports: ["8000:8000"]
-  dashboard:
-    image: node:20-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
-    # node_modules and .next live in the container, so its Linux build does not
-    # overwrite (or reuse) the host's Windows/macOS copies
-    volumes: ["./dashboard:/app", "/app/node_modules", "/app/.next"]
-    ports: ["3000:3000"]
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.api
+    image: netwatch-api:production
+    container_name: netwatch-api
+    restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+      - NETWATCH_DB=/data/db/netwatch.db
+      # empty: any origin (behind nginx the dashboard is same-origin anyway)
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+    volumes:
+      - netwatch-db-data:/data/db
+      - ./models:/app/models:ro
+      - ./reports:/app/reports:ro
+      - ./docs/model_card.md:/app/docs/model_card.md:ro
+    networks:
+      - netwatch-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4096M
+        reservations:
+          cpus: '1.0'
+          memory: 1024M
+
+  # ── NEXT.JS DASHBOARD & LANDING PAGE ────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.dashboard
+      args:
+        - NEXT_PUBLIC_API_URL=${PUBLIC_URL:-http://localhost}/api
+    image: netwatch-dashboard:production
+    container_name: netwatch-dashboard
+    restart: unless-stopped
+    networks:
+      - netwatch-network
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ── NGINX REVERSE PROXY & OPTIONAL TLS ──────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: netwatch-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/security-headers.conf:/etc/nginx/security-headers.conf:ro
+      - ./deployment/nginx/netwatch-locations.conf:/etc/nginx/netwatch-locations.conf:ro
+      - ./deployment/nginx/site-${NGINX_SITE:-http}.conf:/etc/nginx/netwatch-site.conf:ro
+      - ./deployment/nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - netwatch-network
+    depends_on:
+      api:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── DEMO REPLAYER (OPTIONAL PROFILE) ───────────────────────────────────────
+  # One scenario per run, straight to the API on the private network:
+  #   ... --profile demo run --rm -e REPLAY_SCENARIO=known replayer
+  replayer:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.replayer
+    image: netwatch-replayer:latest
+    container_name: netwatch-replayer
+    profiles: ["demo"]
+    environment:
+      - REPLAY_SCENARIO=${REPLAY_SCENARIO:-mixed}
+      - REPLAY_RATE=${REPLAY_RATE:-40}
+      - REPLAY_LIMIT=${REPLAY_LIMIT:-5000}
+    volumes:
+      - ./data:/app/data:ro
+    networks:
+      - netwatch-network
+    depends_on:
+      api:
+        condition: service_healthy

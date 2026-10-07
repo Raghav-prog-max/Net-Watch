@@ -20,6 +20,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [authLoading, isAuthenticated, isPublicPage, router]);
 
+  // Close mobile drawer when route changes
+  useEffect(() => {
+    setMobileDrawerOpen(false);
+  }, [pathname]);
+
   if (isPublicPage) {
     return <div className="landing-root">{children}</div>;
   }

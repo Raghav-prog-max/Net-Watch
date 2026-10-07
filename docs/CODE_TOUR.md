@@ -20,10 +20,13 @@ to nothing.
 `add_blocks` stamps every flow with `day + 5-minute bucket`; `make_splits` divides
 whole blocks between train, validation and test. Flows inside one attack burst are
 near-duplicates, so a random split scatters copies across train and test. Each attack
-family fills only a few blocks (DDoS: 5), so blocks are shuffled and divided within
-each family (`block_strata`); shuffled all together, DDoS had none in test.
-`tests/test_split_leakage.py` fails the build if a block ends up in two splits or a
-family misses one. `downsample_benign` touches the training set only, never validation
+family fills only a few blocks (DDoS: 5), so blocks are divided within each family
+(`block_strata`); divided all together, DDoS had none in test. Within a family they go
+in time order, train | gap | val | gap | test, and `_drop_near` removes any trained or
+validation attack flow within `purge_minutes` of a later split's flow of its family, so
+one attack session never sits on both sides of a boundary.
+`tests/test_split_leakage.py` fails the build if a block ends up in two splits, a
+family misses test, or a held-out attack flow has a trained neighbour. `downsample_benign` touches the training set only, never validation
 or test.
 
 ## ml/models/classifier.py
