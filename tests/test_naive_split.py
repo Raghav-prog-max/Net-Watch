@@ -17,7 +17,7 @@ from ml.models import classifier as clf_mod
 
 FEATURES = [f"f{i}" for i in range(6)]
 CFG = {
-    "split": {"test_size": 0.30, "random_state": 42},
+    "split": {"test_size": 0.30, "random_state": 42, "purge_minutes": 5},
     "train": {"classifier": "rf", "benign_downsample": 1.0, "fpr_budget": 0.05},
 }
 
@@ -37,7 +37,7 @@ def bursty(n_blocks=60, per_block=40, seed=0):
 
 
 def honest_main(df):
-    train, _, test = make_splits(df, CFG["split"]["test_size"], CFG["split"]["random_state"])
+    train, _, test = make_splits(df, CFG["split"]["test_size"], CFG["split"]["purge_minutes"])
     _, model = clf_mod.build("rf", 42)
     model.fit(matrix(train, FEATURES), train["family"])
     pred = model.predict(matrix(test, FEATURES))
@@ -60,7 +60,7 @@ def test_random_split_shares_time_blocks_and_the_honest_split_does_not():
     df = bursty()
     train, _, test = naive.random_splits(df, 0.30, 42)
     assert naive.blocks_shared(train, test) > 0.9
-    h_train, _, h_test = make_splits(df, 0.30, 42)
+    h_train, _, h_test = make_splits(df, 0.30)
     assert naive.blocks_shared(h_train, h_test) == 0.0
 
 
