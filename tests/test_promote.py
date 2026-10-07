@@ -60,25 +60,26 @@ def test_reports_follow_the_version(tmp_path):
     assert registry.report_path("v2", tmp_path) == tmp_path / "v2" / "metrics.json"
 
 
-def test_promotion_points_at_v2_and_keeps_v1(store):
+def test_promotion_renames_v2_to_v1_and_archives_old_v1(store):
     models, reports = store
     _bundle(models, "v2", "retrained")
     _report(reports, "v2", 0.92, 40.0)
     assert _promote(store, "v2") == "v1"
-    assert registry.active_version(models) == "v2"
-    assert all((models / "v1" / f).read_text() == "v1 original" for f in registry.BUNDLE_FILES), (
-        "v1 must survive a promotion untouched")
-
-
-def test_rollback_skips_the_check(store):
-    models, reports = store
-    _bundle(models, "v2", "retrained")
-    _report(reports, "v2", 0.95, 30.0)
-    _promote(store, "v2")
-    with pytest.raises(SystemExit, match="did not improve"):
-        _promote(store, "v1")                       # v1 is worse: not a promotion
-    assert _promote(store, "v1", rollback=True) == "v2"
     assert registry.active_version(models) == "v1"
+    assert (models / "1.1").exists()
+    assert all((models / "1.1" / f).read_text() == "v1 original" for f in registry.BUNDLE_FILES), (
+        "v1 must survive a promotion untouched in the archive")
+
+
+def test_rollback_from_archive_skips_the_check(store):
+    models, reports = store
+    _bundle(models, "1.1", "archived")
+    _report(reports, "1.1", 0.85, 60.0)
+    with pytest.raises(SystemExit, match="not promoting"):
+        _promote(store, "1.1")
+    assert _promote(store, "1.1", rollback=True) == "v1"
+    assert registry.active_version(models) == "v1"
+    assert (models / "1.2").exists()  # previous v1 gets archived
 
 
 @pytest.mark.parametrize("macro_f1, false_alerts, why", [
@@ -106,12 +107,11 @@ def test_an_incomplete_bundle_is_refused(store):
 
 
 def test_promoting_the_active_bundle_is_refused(store):
-    with pytest.raises(SystemExit, match="already active"):
+    with pytest.raises(SystemExit, match="v1 is already production"):
         _promote(store, "v1", rollback=True)
 
 
-@pytest.mark.parametrize("out", ["models/v1", "models/v3"])
-def test_retraining_never_writes_over_v1_or_the_active_bundle(monkeypatch, out):
-    monkeypatch.setattr(registry, "active_version", lambda *a, **k: "v3")
-    with pytest.raises(SystemExit, match="nothing to roll back to"):
-        retrain.main("ml/config.yaml", out)
+def test_retraining_never_writes_over_v1(monkeypatch):
+    monkeypatch.setattr(registry, "active_version", lambda *a, **k: "v1")
+    with pytest.raises(SystemExit, match="For retraining, use models/v2"):
+        retrain.main("ml/config.yaml", "models/v1")
