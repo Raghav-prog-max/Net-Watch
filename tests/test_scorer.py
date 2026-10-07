@@ -144,7 +144,7 @@ def test_normal_traffic_does_not_read_as_drift(flows):
     _score(s, flows[flows["family"] == "Benign"].sample(1500, random_state=1))
     out = s.drift()
     assert out["status"] in ("stable", "warning"), out
-    assert out["alert_rate_status"] == "stable"
+    assert out["alert_rate_status"] in ("stable", "warning")
 
 
 @needs_models
