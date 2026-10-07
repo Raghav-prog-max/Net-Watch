@@ -20,7 +20,6 @@ export default function SocSidebar() {
     { href: "/evaluation", label: "Evaluation", icon: "fact_check" },
     { href: "/drift", label: "Drift", icon: "timeline" },
     { href: "/models", label: "Models", icon: "model_training" },
-    { href: "/users", label: "Users & RBAC", icon: "manage_accounts" },
   ];
 
   const bottomItems = [

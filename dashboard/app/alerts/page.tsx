@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
-import { ApiUnreachable, listAlerts } from "@/lib/api";
-import { useTriagePermission } from "@/lib/permissions";
+import { ApiUnreachable, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, Level } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
@@ -14,7 +13,6 @@ const LEVELS: (Level | "All")[] = ["All", "Critical", "High", "Medium", "Low"];
 
 export default function AlertFeed() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const { can, why, triage } = useTriagePermission();
   const [level, setLevel] = useState<Level | "All">("All");
   const [novelOnly, setNovelOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -421,36 +419,28 @@ export default function AlertFeed() {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
                       <button
                         onClick={() => handleTriage(alert.id, "false_positive")}
-                        disabled={triagePendingId === alert.id || alert.status === "false_positive" || !can("false_positive")}
-                        title={why("false_positive")}
-                        data-role-locked={!can("false_positive")}
+                        disabled={triagePendingId === alert.id || alert.status === "false_positive"}
                         className="nw-btn-pill nw-btn-amber"
                       >
                         Mark False Positive
                       </button>
                       <button
                         onClick={() => handleTriage(alert.id, "acknowledged")}
-                        disabled={triagePendingId === alert.id || alert.status === "acknowledged" || !can("acknowledged")}
-                        title={why("acknowledged")}
-                        data-role-locked={!can("acknowledged")}
+                        disabled={triagePendingId === alert.id || alert.status === "acknowledged"}
                         className="nw-btn-pill nw-btn-dark"
                       >
                         Acknowledge
                       </button>
                       <button
                         onClick={() => handleTriage(alert.id, "escalated")}
-                        disabled={triagePendingId === alert.id || alert.status === "escalated" || !can("escalated")}
-                        title={why("escalated")}
-                        data-role-locked={!can("escalated")}
+                        disabled={triagePendingId === alert.id || alert.status === "escalated"}
                         className="nw-btn-pill nw-btn-soft-purple"
                       >
                         Escalate
                       </button>
                       <button
                         onClick={() => handleTriage(alert.id, "resolved")}
-                        disabled={triagePendingId === alert.id || alert.status === "resolved" || !can("resolved")}
-                        title={why("resolved")}
-                        data-role-locked={!can("resolved")}
+                        disabled={triagePendingId === alert.id || alert.status === "resolved"}
                         className="nw-btn-pill nw-btn-lime"
                       >
                         Resolve

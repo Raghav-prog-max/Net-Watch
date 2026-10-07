@@ -2,7 +2,8 @@ data/raw/*
 data/processed/*
 data/splits/*
 data/alerts.db
-models/v*/
+# trained bundles are built by `make train`, never committed
+models/*
 # which bundle the API serves (scripts/promote.py): local state, like netwatch.db
 models/ACTIVE
 reports/*

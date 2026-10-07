@@ -29,7 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="landing-root">{children}</div>;
   }
 
-  // Protect internal SOC pages: show auth loader until Firebase resolves
+  // Protect internal SOC pages: show the loader until the saved analyst is restored
   if (authLoading) {
     return (
       <div
@@ -56,7 +56,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }}
         />
         <div style={{ fontSize: "11px", color: "#8E909B", letterSpacing: "0.08em" }}>
-          VERIFYING FIREBASE CREDENTIALS // NETWATCH SEC-OPS
+          RESTORING SESSION // NETWATCH SEC-OPS
         </div>
         <style jsx>{`
           @keyframes socSpin {

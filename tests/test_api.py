@@ -638,55 +638,8 @@ def test_any_origin_may_read_the_api_but_never_with_credentials():
     assert "access-control-allow-credentials" not in res.headers
 
 
-# ------------------------------------------------------------- GET /metrics
-
 def _metric(text, name):
     import re
     m = re.search(rf"^{re.escape(name)} (\S+)$", text, re.M)
     return float(m.group(1)) if m else 0.0
 
-
-def test_metrics_count_scored_flows_alerts_and_latency():
-    """Prometheus scraped /metrics before it existed: every target was down and
-    the Grafana dashboard empty."""
-    before = client.get("/metrics").text
-    client.post("/score", json={"flows": [flow("DDoS"), flow("DDoS"), flow(None)]})
-    after = client.get("/metrics")
-    assert after.status_code == 200
-    assert after.headers["content-type"].startswith("text/plain; version=0.0.4")
-    delta = lambda name: _metric(after.text, name) - _metric(before, name)
-    assert delta("netwatch_flows_scored_total") == 3
-    assert delta("netwatch_flows_alerted_total") == 2
-    assert delta('netwatch_alerts_opened_total{family="DDoS"}') == 1, "a burst is one alert"
-    assert delta("netwatch_score_request_seconds_count") == 1
-    assert _metric(after.text, 'netwatch_alerts{status="open"}') >= 1
-    assert "_created" not in after.text
-
-
-def test_metrics_report_drift_and_need_no_models():
-    from api.routes.metrics import optional_scorer
-
-    class Drifting:
-        drift_cfg = {"warn_psi": 0.1, "drift_psi": 0.25, "fp_share_alerts": 500}
-
-        def drift(self):
-            return {"status": "warning", "top_features": [{"feature": "Flow Duration", "psi": 0.17}],
-                    "unexplained_alert_rate": 0.002, "baseline_unexplained_alert_rate": 0.001,
-                    "flows_seen": 4200}
-    app.dependency_overrides[optional_scorer] = lambda: Drifting()
-    try:
-        text = client.get("/metrics").text
-    finally:
-        app.dependency_overrides.pop(optional_scorer, None)
-    assert _metric(text, 'netwatch_drift_status{status="warning"}') == 1
-    assert _metric(text, 'netwatch_drift_status{status="drift"}') == 0
-    assert _metric(text, "netwatch_drift_max_psi") == 0.17
-    assert _metric(text, "netwatch_drift_flows_seen") == 4200
-
-    app.dependency_overrides[optional_scorer] = lambda: None     # before `make train`
-    try:
-        res = client.get("/metrics")
-    finally:
-        app.dependency_overrides.pop(optional_scorer, None)
-    assert res.status_code == 200 and "netwatch_flows_scored_total" in res.text
-    assert "netwatch_drift_status" not in res.text

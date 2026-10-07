@@ -4,7 +4,7 @@
 # Builds multi-arch container images, runs security scans, and pushes to GHCR.
 # ==============================================================================
 
-name: Production Release & Deploy
+name: Production Release
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
           cd dashboard && npm ci
 
       - name: Run Backend Unit Tests
@@ -126,23 +126,3 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ── PRODUCTION DEPLOYMENT ROLLOUT ───────────────────────────────────────────
-  deploy:
-    name: Kubernetes Zero-Downtime Rollout
-    needs: [publish]
-    runs-on: ubuntu-latest
-    if: github.event.inputs.target_env == 'production' || startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure Kubectl Context
-        uses: azure/k8s-set-context@v4
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-
-      - name: Rollout New Images to Kubernetes
-        run: |
-          kubectl set image deployment/netwatch-api api=${{ env.API_IMAGE }}:${{ github.sha }} -n netwatch
-          kubectl set image deployment/netwatch-dashboard dashboard=${{ env.DASHBOARD_IMAGE }}:${{ github.sha }} -n netwatch
-          kubectl rollout status deployment/netwatch-api -n netwatch --timeout=120s
-          kubectl rollout status deployment/netwatch-dashboard -n netwatch --timeout=120s
