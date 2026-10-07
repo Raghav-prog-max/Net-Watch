@@ -5,18 +5,9 @@ copies of the same burst in train and test, which inflates every metric. We grou
 flows into short time blocks and split whole blocks instead.
 
 Each attack family sits in a handful of blocks (CICIDS2017: DDoS 5 of 398,
-PortScan 12), so blocks are divided within each family. Divided across all
-families at once, DDoS's 5 landed in train and val and none in test, where it
-then scored F1 = 0.
-
-Within a family the blocks go in time order: the earliest train, the next
-validate, the latest test, and one block is dropped at each boundary. An attack
-runs for 20-60 minutes, longer than a block, so blocks shuffled at random put
-neighbouring minutes of the same session in train and test; ordered and purged,
-the model is tested on a later stretch it has not seen, at least one block after
-anything it trained on. A family with several tools (DoS: Hulk, GoldenEye, ...)
-is tested on its later tools.
+PortScan 12), so blocks are divided within each family.
 """
+import numpy as np
 import pandas as pd
 
 
@@ -90,7 +81,7 @@ def _drop_near(part, held_out, minutes):
     near = pd.Series(False, index=part.index)
     window = pd.Timedelta(minutes=minutes)
     for family in held_out["family"].unique():
-        if family == "Benign":
+        if family == "Benign" or family == "all":
             continue
         marks = held_out.loc[held_out["family"] == family, "Timestamp"].sort_values().to_numpy()
         mine = part["family"] == family

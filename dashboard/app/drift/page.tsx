@@ -14,6 +14,8 @@ import {
 } from "recharts";
 import { getDrift } from "@/lib/api";
 import type { DriftStatus } from "@/lib/types";
+import { DriftTimeline } from "@/components/DriftTimeline";
+import { DriftFeaturesBar } from "@/components/DriftFeaturesBar";
 
 interface HistoryPoint {
   sample: string;       // x-axis label: flows scored when the snapshot was taken
@@ -213,114 +215,13 @@ export default function DriftMonitorPage() {
           </div>
         </div>
 
-        <div style={{ width: "100%", height: "210px", backgroundColor: "#111114", borderRadius: "16px", padding: "16px", position: "relative" }}>
-          {history.length === 0 ? (
-            <div
-              style={{
-                height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--nw-text-muted)",
-                fontFamily: "var(--font-mono)",
-                fontSize: "12px",
-                textAlign: "center",
-              }}
-            >
-              {!drift
-                ? "Backend API unreachable. Start `make api` to monitor live distribution PSI."
-                : drift.status === "warming_up"
-                ? `Warming up reference window (${drift.flows_seen} / 500 benign flows observed)...`
-                : "Waiting for the API's first drift snapshot..."}
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={history} margin={{ top: 10, right: 16, left: -12, bottom: 0 }}>
-                <CartesianGrid stroke="#26262C" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="sample"
-                  stroke="#8A8A93"
-                  tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                  axisLine={{ stroke: "#26262C" }}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={[0, (dataMax: number) => Math.max(Number((dataMax * 1.15).toFixed(2)), 0.35)]}
-                  stroke="#8A8A93"
-                  tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <ReferenceLine
-                  y={warnBand}
-                  stroke="#A78BFA"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: `WARN (${warnBand.toFixed(2)})`,
-                    position: "insideTopRight",
-                    fill: "#A78BFA",
-                    fontSize: 10,
-                  }}
-                />
-                <ReferenceLine
-                  y={driftBand}
-                  stroke="#FFFFFF"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: `DRIFT (${driftBand.toFixed(2)})`,
-                    position: "insideTopRight",
-                    fill: "#FFFFFF",
-                    fontSize: 10,
-                  }}
-                />
-                <Tooltip
-                  cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload || payload.length === 0) return null;
-                    const pt = payload[0].payload as HistoryPoint;
-                    return (
-                      <div
-                        style={{
-                          backgroundColor: "#17171B",
-                          border: "1px solid #2E2E38",
-                          borderRadius: "12px",
-                          padding: "8px 12px",
-                          fontSize: "11px",
-                        }}
-                      >
-                        <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)" }}>
-                          {pt.flows.toLocaleString()} flows scored · {pt.time}
-                        </div>
-                        <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#FFFFFF", marginTop: "2px" }}>
-                          Max PSI: {pt.psi.toFixed(4)}
-                        </div>
-                        {pt.feature && (
-                          <div style={{ fontFamily: "var(--font-mono)", color: "var(--nw-text-muted)", marginTop: "2px" }}>
-                            {pt.feature}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="psi" radius={[6, 6, 0, 0]} maxBarSize={28}>
-                  {history.map((entry, idx) => (
-                    <Cell
-                      key={idx}
-                      fill={
-                        entry.psi >= driftBand
-                          ? "#FFFFFF"
-                          : entry.psi >= warnBand
-                          ? "#A78BFA"
-                          : "#C7DB6E"
-                      }
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+        <DriftTimeline
+          history={history}
+          warnBand={warnBand}
+          driftBand={driftBand}
+          driftStatus={drift?.status}
+          driftFlowsSeen={drift?.flows_seen}
+        />
 
         {drift?.recommendation && (
           <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--nw-text-muted)" }}>
@@ -344,80 +245,7 @@ export default function DriftMonitorPage() {
           Comparing current 5,000-flow window against training reference quantile bins
         </div>
 
-        {topFeatures.length > 0 && (
-          <div
-            style={{
-              width: "100%",
-              height: `${Math.max(180, topFeatures.length * 42)}px`,
-              backgroundColor: "#111114",
-              borderRadius: "16px",
-              padding: "16px",
-              marginBottom: "20px",
-            }}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topFeatures} layout="vertical" margin={{ top: 6, right: 20, left: 10, bottom: 6 }}>
-                <CartesianGrid stroke="#26262C" strokeDasharray="3 3" horizontal={false} />
-                <XAxis
-                  type="number"
-                  domain={[0, (dataMax: number) => Math.max(Number((dataMax * 1.15).toFixed(2)), 0.35)]}
-                  stroke="#8A8A93"
-                  tick={{ fill: "#8A8A93", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                  axisLine={{ stroke: "#26262C" }}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="feature"
-                  width={155}
-                  stroke="#F5F5F7"
-                  tick={{ fill: "#F5F5F7", fontSize: 11, fontWeight: 600 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <ReferenceLine x={warnBand} stroke="#A78BFA" strokeDasharray="3 3" />
-                <ReferenceLine x={driftBand} stroke="#FFFFFF" strokeDasharray="4 4" />
-                <Tooltip
-                  cursor={{ fill: "rgba(255, 255, 255, 0.04)" }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload || payload.length === 0) return null;
-                    const row = payload[0].payload as { feature: string; psi: number };
-                    return (
-                      <div
-                        style={{
-                          backgroundColor: "#17171B",
-                          border: "1px solid #2E2E38",
-                          borderRadius: "12px",
-                          padding: "8px 12px",
-                          fontSize: "11px",
-                        }}
-                      >
-                        <div style={{ fontWeight: 700, color: "#FFFFFF" }}>{row.feature}</div>
-                        <div style={{ fontFamily: "var(--font-mono)", color: "#A78BFA", marginTop: "2px" }}>
-                          PSI: {row.psi.toFixed(4)}
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="psi" radius={[0, 6, 6, 0]} barSize={16}>
-                  {topFeatures.map((f) => (
-                    <Cell
-                      key={f.feature}
-                      fill={
-                        f.psi >= driftBand
-                          ? "#FFFFFF"
-                          : f.psi >= warnBand
-                          ? "#A78BFA"
-                          : "#C7DB6E"
-                      }
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+        <DriftFeaturesBar topFeatures={topFeatures} warnBand={warnBand} driftBand={driftBand} />
 
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>

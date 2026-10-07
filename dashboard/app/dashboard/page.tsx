@@ -82,7 +82,7 @@ export default function DashboardPage() {
     }
   }
 
-  const shown = (n: number | undefined) => (n === undefined ? "–" : n.toLocaleString());
+  const shown = (n: number | undefined | null) => (n == null ? "–" : n.toLocaleString());
 
   return (
     <div style={{
@@ -140,7 +140,7 @@ export default function DashboardPage() {
             bgColor="#0E0E12"
             badge={counts ? (counts.open > 0 ? "PENDING" : "NOMINAL") : undefined}
             trendIcon="task_alt"
-            trendText={counts ? `${(counts.total - counts.open).toLocaleString()} triaged` : undefined}
+            trendText={counts ? `${((counts.total ?? 0) - (counts.open ?? 0)).toLocaleString()} triaged` : undefined}
           />
 
           {/* Card 3: Unknown / Novel Hits */}
