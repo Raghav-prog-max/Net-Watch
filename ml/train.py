@@ -133,7 +133,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
 
     df = add_blocks(df, cfg["split"]["block_minutes"])
 
-    train, val, test = make_splits(df, cfg["split"]["test_size"], cfg["split"]["random_state"])
+    train, val, test = make_splits(df, cfg["split"]["test_size"], cfg["split"]["purge_minutes"])
     
     splits_dir = Path(cfg["paths"].get("splits", "data/splits"))
     splits_dir.mkdir(parents=True, exist_ok=True)
@@ -150,7 +150,7 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
     # in. Keeping only the share in test threw ~85% away: CICIDS2017 has 47 such
     # flows, and the model card scored 2. The splits are unchanged, so no other
     # figure moves.
-    train, val, novel = split_out_novel(train, val, test, TRAIN_FAMILIES)
+    train, val, novel = split_out_novel(df, train, val, TRAIN_FAMILIES)
     if holdout:
         # Demo model: this family is removed from training so the anomaly detector
         # has to catch it. This is what makes "Unknown / novel" appear on stage.
