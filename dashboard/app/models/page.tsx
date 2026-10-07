@@ -233,8 +233,8 @@ export default function ModelsPage() {
                 <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>SUPERSEDED</span></td>
                 <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Raw StandardScaler</td>
                 <td style={{ padding: "12px 14px" }}>Independent IQR z-score (keep 99%)</td>
-                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)" }}>0.0%</td>
-                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-2)", fontWeight: 700 }}>90.7%</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>report not kept</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>report not kept</td>
                 <td className="mono" style={{ padding: "12px 14px", textAlign: "right", color: "var(--nw-text-muted)" }}>Per-row TreeSHAP</td>
               </tr>
               <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
@@ -242,8 +242,8 @@ export default function ModelsPage() {
                 <td style={{ padding: "12px 14px" }}><span className="nw-pill nw-pill-purple" style={{ fontSize: "10px" }}>BASELINE</span></td>
                 <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Raw StandardScaler</td>
                 <td style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>Gated on detector corroboration</td>
-                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-card-1)" }}>0.0%</td>
-                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>0.0% (Heartbleed)</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>report not kept</td>
+                <td className="mono" style={{ padding: "12px 14px", color: "var(--nw-text-muted)" }}>report not kept</td>
                 <td className="mono" style={{ padding: "12px 14px", textAlign: "right", color: "var(--nw-text-muted)" }}>Z-score fallback</td>
               </tr>
               <tr>
