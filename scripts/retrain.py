@@ -86,10 +86,25 @@ def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
     # rolled back to
     current = registry.active_version()
     out_name = Path(out_dir).name
-    if out_name in ("v1", current):
-        raise SystemExit(f"{out_dir} is {'the bundle `make train` writes' if out_name == 'v1' else 'the active bundle'}: "
-                         "retraining into it would leave nothing to roll back to. Pass a new --out.")
+    if out_name == "v1":
+        raise SystemExit(f"{out_dir} is the production bundle (`make train` writes here, and promote moves here). For retraining, use models/v2.")
+    
     cfg = yaml.safe_load(open(ROOT / config_path))
+    
+    if out_name == "v2" and Path(out_dir).exists():
+        # Archive v2 to 2.x
+        import shutil
+        models_dir = Path(out_dir).parent
+        reports_dir = Path(cfg["paths"]["reports_dir"])
+        x = 1
+        while (models_dir / f"2.{x}").exists():
+            x += 1
+        (models_dir / "v2").rename(models_dir / f"2.{x}")
+        v2_report_dir = reports_dir / "v2"
+        if v2_report_dir.exists():
+            v2_report_dir.rename(reports_dir / f"2.{x}")
+        print(f"Archived existing v2 to 2.{x} (did not make it to production)")
+    
     processed = ROOT / cfg["paths"]["processed"]
     if not processed.exists():
         raise SystemExit("run `make data` first")
@@ -135,7 +150,7 @@ def main(config_path: str, out_dir: str, skip_lofo: bool = False) -> None:
         print("  DO NOT PROMOTE: " + "; ".join(problems))
     else:
         print(f"  RECOMMEND PROMOTE: review, then `python scripts/promote.py {out_name}`; "
-              f"{current} stays in models/{current} to roll back to")
+              f"v1 will automatically be archived to 1.x")
 
 
 if __name__ == "__main__":

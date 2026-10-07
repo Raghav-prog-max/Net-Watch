@@ -310,7 +310,22 @@ def main(config_path, skip_lofo=False, holdout=None, imbalance_study=True):
             "caught_by_anomaly_detector": round(float(flagged.mean()), 4),
             "label_rejected_as_out_of_family": round(float(ood.mean()), 4),
             "shown_as_unknown": round(float(unknown.mean()), 4),
+            "breakdown": []
         }
+        for fam in sorted(novel["family"].unique()):
+            mask = (novel["family"] == fam).to_numpy()
+            n_fam_flows = int(mask.sum())
+            if n_fam_flows == 0: continue
+            alerted_prop = float((n_known[mask] | flagged[mask]).mean())
+            import math
+            ci = 1.96 * math.sqrt((alerted_prop * (1 - alerted_prop)) / n_fam_flows) if n_fam_flows > 0 else 0
+            
+            report["novel_families"]["breakdown"].append({
+                "family": fam,
+                "flows": n_fam_flows,
+                "alerted": round(alerted_prop, 4),
+                "alerted_ci_95": round(ci, 4)
+            })
 
     if not holdout:
         # Same model, same settings, random rows instead of time blocks: the gap is

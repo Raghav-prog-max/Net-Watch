@@ -168,8 +168,10 @@ def pick(df, scenario, limit=None):
 
 
 def post(url, batch):
+    import os
+    api_key = os.environ.get("NETWATCH_API_KEY", "netwatch-demo-key")
     req = urllib.request.Request(url, data=json.dumps({"flows": batch}).encode(),
-                                 headers={"Content-Type": "application/json"})
+                                 headers={"Content-Type": "application/json", "X-API-Key": api_key})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
 

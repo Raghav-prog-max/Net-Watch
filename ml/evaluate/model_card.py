@@ -138,7 +138,7 @@ def render():
     w("")
     w("Surfacing suspicious traffic to a SOC analyst, who decides what happens next. Each "
       "alert carries a severity, the features that drove it and a MITRE ATT&CK technique; "
-      "the analyst's decision is stored as a label for the next model version.")
+      "the analyst's decision is stored as a label for the next model version. Analyst labels are treated as trusted input during retraining.")
     w("")
     w("**Not for:** automated blocking or rate limiting; any network the model was not "
       "retrained on; forensic attribution of an attack to a person.")
