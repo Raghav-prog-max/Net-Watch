@@ -13,16 +13,21 @@ export default function LoginPage() {
     loginWithEmail,
     registerWithEmail,
     loginWithGoogle,
+    loginAsSandboxUser,
     isAuthenticated,
     authLoading,
     isFirebaseConfigured,
+    sandboxLoginEnabled,
+    users,
   } = useUser();
+  const sandboxUsers = users.filter((u) => u.status === "active");
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<UserRole>("tier_2");
+  const [sandboxUserId, setSandboxUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,6 +90,16 @@ export default function LoginPage() {
       setError(err?.message || "An unexpected error occurred.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSandboxLogin = () => {
+    setError(null);
+    const res = loginAsSandboxUser(sandboxUserId || sandboxUsers[0]?.id || "");
+    if (res.success) {
+      router.push("/dashboard");
+    } else {
+      setError(res.error || "Sandbox sign-in failed.");
     }
   };
 
@@ -154,7 +169,11 @@ export default function LoginPage() {
             }}
           />
           <span style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
-            {isFirebaseConfigured ? "FIREBASE AUTH ONLINE" : "SANDBOX DEMO MODE (.env.local ready)"}
+            {isFirebaseConfigured
+              ? "FIREBASE AUTH ONLINE"
+              : sandboxLoginEnabled
+              ? "LOCAL SANDBOX MODE (Firebase not configured)"
+              : "FIREBASE NOT CONFIGURED (.env.local)"}
           </span>
         </div>
       </div>
@@ -401,6 +420,66 @@ export default function LoginPage() {
           </svg>
           <span>Sign in with Google Enterprise</span>
         </button>
+
+        {/* Local Sandbox Sign-In (dev only, no Firebase) */}
+        {sandboxLoginEnabled && (
+          <div
+            style={{
+              marginTop: "20px",
+              padding: "16px",
+              borderRadius: "12px",
+              backgroundColor: "rgba(245, 158, 11, 0.06)",
+              border: "1px dashed rgba(245, 158, 11, 0.35)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "var(--font-mono)" }}>
+              Local Sandbox // Enter As Analyst
+            </label>
+            <select
+              value={sandboxUserId || sandboxUsers[0]?.id || ""}
+              onChange={(e) => setSandboxUserId(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                backgroundColor: "#141418",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                color: "#FFFFFF",
+                fontSize: "13px",
+                outline: "none",
+              }}
+            >
+              {sandboxUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} — {ROLE_DEFINITIONS[u.role]?.title ?? u.role}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleSandboxLogin}
+              disabled={sandboxUsers.length === 0}
+              style={{
+                padding: "10px",
+                borderRadius: "10px",
+                backgroundColor: "#F59E0B",
+                color: "#000000",
+                fontWeight: 700,
+                fontSize: "12px",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              Enter Sandbox Session →
+            </button>
+            <p style={{ margin: 0, fontSize: "10px", color: "#8E909B", lineHeight: 1.5 }}>
+              Development only. Shown because Firebase is not configured; disabled in production builds.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Security Footer Notice */}
