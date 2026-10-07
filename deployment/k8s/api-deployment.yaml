@@ -52,7 +52,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: netwatch-config
-            # nothing in the API reads these yet (secrets.template.yaml)
+            # NETWATCH_API_KEY guards the write endpoints (secrets.template.yaml)
             - secretRef:
                 name: netwatch-secrets
                 optional: true

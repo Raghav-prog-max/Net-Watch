@@ -11,6 +11,7 @@ from ..schemas import ScoreRequest, ScoreResponse
 from ..db.session import get_db
 from ..db.models import AlertModel
 from ..services import telemetry
+from ..services.auth import require_api_key
 from ..services.scorer import ModelsNotFound, get_scorer
 from .alerts import alert_to_dict
 from .ws import manager
@@ -70,7 +71,7 @@ def _join(row, alert_data, feats):
     return escalated
 
 
-@router.post("/score", response_model=ScoreResponse)
+@router.post("/score", response_model=ScoreResponse, dependencies=[Depends(require_api_key)])
 async def score_flows(req: ScoreRequest, db: Session = Depends(get_db),
                       scorer=Depends(scorer_dependency)):
     started = time.perf_counter()

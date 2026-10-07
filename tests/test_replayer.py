@@ -82,3 +82,35 @@ def test_without_a_test_split_it_says_so_and_replays_everything(capsys):
             replayer.TEST_SPLIT = saved
     assert len(pool) == len(df)
     assert "training ones included" in capsys.readouterr().out
+
+
+class _Response:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return b'{"alerts": []}'
+
+
+def _capture_post(monkeypatch, api_key):
+    sent = {}
+
+    def urlopen(req, timeout):
+        sent.update({k.lower(): v for k, v in req.header_items()})
+        return _Response()
+
+    monkeypatch.setattr(replayer.urllib.request, "urlopen", urlopen)
+    replayer.post("http://127.0.0.1:8000/score", [], api_key)
+    return sent
+
+
+def test_post_sends_the_api_key(monkeypatch):
+    # header_items() capitalises names: X-API-Key arrives as X-api-key
+    assert _capture_post(monkeypatch, "k1")["x-api-key"] == "k1"
+
+
+def test_post_sends_no_key_header_without_one(monkeypatch):
+    assert "x-api-key" not in _capture_post(monkeypatch, None)

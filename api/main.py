@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db.session import engine, Base, ensure_schema
 from .routes import score, alerts, metrics, ws
+from .services.auth import API_KEY_ENV, configured_key
 from .services.scorer import ModelsNotFound, get_scorer
 
 # Create database tables
@@ -26,6 +27,8 @@ async def lifespan(app: FastAPI):
         log.info("models loaded from %s", scorer.version)
     except ModelsNotFound as e:
         log.warning("%s; /score, /metrics/drift and /models return 503 until then", e)
+    if configured_key() is None:
+        log.warning("%s is not set: POST /score and PATCH /alerts accept any caller", API_KEY_ENV)
     yield
 
 

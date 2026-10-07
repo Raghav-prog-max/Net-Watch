@@ -17,6 +17,7 @@ plus all flows of the families the classifier never trains on (replay_pool).
 """
 import argparse
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -167,9 +168,12 @@ def pick(df, scenario, limit=None):
     return df.sort_values("Timestamp", kind="stable") if "Timestamp" in df.columns else df
 
 
-def post(url, batch):
+def post(url, batch, api_key=None):
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-API-Key"] = api_key  # api/services/auth.py
     req = urllib.request.Request(url, data=json.dumps({"flows": batch}).encode(),
-                                 headers={"Content-Type": "application/json"})
+                                 headers=headers)
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
 
@@ -193,7 +197,7 @@ def main(a):
         chunk = rows.iloc[start:start + a.batch]
         batch = build_batch(chunk, features)
         try:
-            res = post(a.url, batch)
+            res = post(a.url, batch, a.api_key)
         except urllib.error.HTTPError as e:
             # say why, instead of a bare "HTTP Error 422" traceback
             raise SystemExit(f"{a.url} returned {e.code}: {e.read().decode(errors='replace')[:500]}")
@@ -215,6 +219,9 @@ if __name__ == "__main__":
     # request waited ~2 s for the fallback, a tenth of the replay rate
     ap.add_argument("--url", default="http://127.0.0.1:8000/score")
     ap.add_argument("--config", default="ml/config.yaml")
+    # the API's NETWATCH_API_KEY, when it sets one; read from the environment so
+    # the key stays out of shell history
+    ap.add_argument("--api-key", default=os.environ.get("NETWATCH_API_KEY"))
     ap.add_argument("--rate", type=int, default=40)
     ap.add_argument("--batch", type=int, default=20)
     ap.add_argument("--limit", type=int, default=5000)

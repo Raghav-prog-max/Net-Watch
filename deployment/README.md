@@ -126,18 +126,23 @@ The manifests follow the Compose deployment. `tests/test_k8s_manifests.py` check
 **Needs:** an ingress-nginx controller (ingress class `nginx`), and cert-manager with a `letsencrypt-prod` ClusterIssuer (or create the `netwatch-tls-cert` secret yourself).
 
 ```bash
-# 1. Images. The dashboard's API address is fixed at build time.
+# 1. Images. The dashboard's API address and API key are fixed at build time.
+export NETWATCH_API_KEY=$(openssl rand -hex 32)
 docker build -f deployment/docker/Dockerfile.api -t <registry>/netwatch-api:<tag> .
 docker build -f deployment/docker/Dockerfile.dashboard \
   --build-arg NEXT_PUBLIC_API_URL=https://netwatch.yourdomain.com/api \
+  --build-arg NEXT_PUBLIC_NETWATCH_API_KEY="$NETWATCH_API_KEY" \
   -t <registry>/netwatch-dashboard:<tag> .
 docker push <registry>/netwatch-api:<tag>
 docker push <registry>/netwatch-dashboard:<tag>
 
 # 2. Replace netwatch.yourdomain.com in configmap.yaml and ingress.yaml, and the
-#    image names in the two deployments, then apply (not secrets.template.yaml:
-#    nothing reads it yet, and its values are placeholders):
+#    image names in the two deployments, then apply. The Secret is created from
+#    the key above rather than from secrets.template.yaml, whose values are
+#    placeholders; without it POST /score and PATCH /alerts accept any caller.
 kubectl apply -f deployment/k8s/namespace.yaml
+kubectl -n netwatch create secret generic netwatch-secrets \
+  --from-literal=NETWATCH_API_KEY="$NETWATCH_API_KEY"
 for f in configmap pvc api-deployment dashboard-deployment services ingress hpa security-headers; do
   kubectl apply -f deployment/k8s/$f.yaml
 done

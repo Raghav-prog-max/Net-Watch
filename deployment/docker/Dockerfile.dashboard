@@ -30,6 +30,9 @@ ENV NODE_ENV=production
 # dashboard derives the WebSocket address from it (ws://<host>/api/ws/alerts).
 ARG NEXT_PUBLIC_API_URL=http://localhost/api
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# The API's NETWATCH_API_KEY for triage writes, baked in the same way (empty: none)
+ARG NEXT_PUBLIC_NETWATCH_API_KEY=
+ENV NEXT_PUBLIC_NETWATCH_API_KEY=${NEXT_PUBLIC_NETWATCH_API_KEY}
 
 # Build Next.js application
 RUN npm run build

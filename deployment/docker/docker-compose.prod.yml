@@ -38,6 +38,8 @@ services:
       - NETWATCH_DB=/data/db/netwatch.db
       # empty: any origin (behind nginx the dashboard is same-origin anyway)
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      # empty: POST /score and PATCH /alerts accept any caller (api/services/auth.py)
+      - NETWATCH_API_KEY=${NETWATCH_API_KEY:-}
     volumes:
       - netwatch-db-data:/data/db
       # trained outside the container; models/ACTIVE picks the version served
@@ -71,6 +73,8 @@ services:
         # baked into the bundle at build time (Dockerfile.dashboard): rebuild
         # after changing PUBLIC_URL
         - NEXT_PUBLIC_API_URL=${PUBLIC_URL:-http://localhost}/api
+        # sent on triage; readable by anyone who loads the dashboard
+        - NEXT_PUBLIC_NETWATCH_API_KEY=${NETWATCH_API_KEY:-}
     image: netwatch-dashboard:production
     container_name: netwatch-dashboard
     restart: unless-stopped
@@ -137,6 +141,7 @@ services:
       - REPLAY_SCENARIO=${REPLAY_SCENARIO:-mixed}
       - REPLAY_RATE=${REPLAY_RATE:-40}
       - REPLAY_LIMIT=${REPLAY_LIMIT:-5000}
+      - NETWATCH_API_KEY=${NETWATCH_API_KEY:-}
     volumes:
       # processed flows and the splits `make train` writes
       - ../../data:/app/data:ro

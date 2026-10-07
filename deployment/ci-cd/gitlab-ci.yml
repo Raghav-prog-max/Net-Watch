@@ -40,9 +40,10 @@ build:docker:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - docker build -f deployment/docker/Dockerfile.api -t "$API_IMAGE" -t "$CI_REGISTRY_IMAGE/api:latest" .
-    # Next.js fixes the API address at build time; PUBLIC_URL is a CI/CD
-    # variable, e.g. https://netwatch.yourdomain.com
-    - docker build -f deployment/docker/Dockerfile.dashboard --build-arg NEXT_PUBLIC_API_URL="$PUBLIC_URL/api" -t "$DASHBOARD_IMAGE" -t "$CI_REGISTRY_IMAGE/dashboard:latest" .
+    # Next.js fixes the API address and key at build time; PUBLIC_URL and
+    # NETWATCH_API_KEY are CI/CD variables (the key masked), e.g.
+    # https://netwatch.yourdomain.com and the API's key
+    - docker build -f deployment/docker/Dockerfile.dashboard --build-arg NEXT_PUBLIC_API_URL="$PUBLIC_URL/api" --build-arg NEXT_PUBLIC_NETWATCH_API_KEY="$NETWATCH_API_KEY" -t "$DASHBOARD_IMAGE" -t "$CI_REGISTRY_IMAGE/dashboard:latest" .
     - docker push "$API_IMAGE"
     - docker push "$CI_REGISTRY_IMAGE/api:latest"
     - docker push "$DASHBOARD_IMAGE"
