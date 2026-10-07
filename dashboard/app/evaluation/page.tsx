@@ -16,6 +16,8 @@ import {
 import { getModelMetrics } from "@/lib/api";
 import type { EvaluationReport } from "@/lib/types";
 import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
+import { ConfusionMatrix } from "@/components/ConfusionMatrix";
+import { PRROCCurves } from "@/components/PRROCCurves";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -24,7 +26,6 @@ export default function EvaluationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [curveFamily, setCurveFamily] = useState<string | null>(null);
-  const [cmCounts, setCmCounts] = useState(false);
 
   useEffect(() => {
     getModelMetrics()
@@ -498,50 +499,14 @@ export default function EvaluationPage() {
       )}
 
       {/* ── PR AND ROC CURVES ─────────────────────────────────── */}
-      {m.curves && Object.keys(m.curves).length > 0 && (() => {
-        const fams = Object.keys(m.curves!);
-        const fam = curveFamily && fams.includes(curveFamily) ? curveFamily : fams.find((f) => f !== "Benign") ?? fams[0];
-        const c = m.curves![fam];
-        const pr = c.pr.map(([x, y]) => ({ x, y }));
-        const roc = c.roc.map(([x, y]) => ({ x, y }));
-        const chart = (data: { x: number; y: number }[], xl: string, yl: string, color: string) => (
-          <div style={{ flex: "1 1 360px", height: "260px", backgroundColor: "#111114", borderRadius: "16px", padding: "12px 12px 4px 0" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
-                <CartesianGrid stroke="#26262C" strokeDasharray="3 3" />
-                <XAxis dataKey="x" type="number" domain={[0, 1]} stroke="#8A8A93" tick={{ fontSize: 10 }}
-                  label={{ value: xl, position: "insideBottom", offset: -8, fill: "#8A8A93", fontSize: 11 }} />
-                <YAxis type="number" domain={[0, 1]} stroke="#8A8A93" tick={{ fontSize: 10 }}
-                  label={{ value: yl, angle: -90, position: "insideLeft", fill: "#8A8A93", fontSize: 11 }} />
-                <Tooltip contentStyle={{ backgroundColor: "#17171B", border: "1px solid #2E2E38", borderRadius: "12px", fontSize: "12px" }} />
-                <Line type="stepAfter" dataKey="y" stroke={color} dot={false} strokeWidth={2} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        );
-        return (
-          <div style={{ backgroundColor: "var(--nw-bg-panel)", borderRadius: "24px", padding: "24px", marginBottom: "26px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "14px" }}>
-              <div>
-                <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)" }}>PR and ROC Curves // {fam}</div>
-                <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-                  One-vs-rest on the held-out test set. Read PR first: ROC flatters imbalanced data.
-                  PR-AUC {m.auc[fam]?.pr_auc?.toFixed(3) ?? "—"} · ROC-AUC {m.auc[fam]?.roc_auc?.toFixed(3) ?? "—"}
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {fams.map((f) => (
-                  <button key={f} onClick={() => setCurveFamily(f)} className={`nw-btn-pill ${f === fam ? "nw-btn-purple" : "nw-btn-dark"}`}>{f}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-              {chart(pr, "Recall", "Precision", "#FFFFFF")}
-              {chart(roc, "False positive rate", "True positive rate", "#A78BFA")}
-            </div>
-          </div>
-        );
-      })()}
+      {m.curves && Object.keys(m.curves).length > 0 && (
+        <PRROCCurves
+          curves={m.curves as Record<string, any>}
+          aucInfo={m.auc as Record<string, any>}
+          curveFamily={curveFamily}
+          setCurveFamily={setCurveFamily}
+        />
+      )}
 
       {/* ── MODEL COMPARISON ──────────────────────────────────── */}
       {(report.random_forest_baseline || report.imbalance_study) && (
@@ -614,72 +579,11 @@ export default function EvaluationPage() {
       )}
 
       {/* ── CONFUSION MATRIX ──────────────────────────────────── */}
-      <div
-        style={{
-          backgroundColor: "var(--nw-bg-panel)",
-          borderRadius: "24px",
-          padding: "24px",
-        }}
-      >
-        <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--nw-text-primary)", marginBottom: "4px" }}>
-          Confusion Matrix Heatmap
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "18px" }}>
-          <div style={{ fontSize: "12px", color: "var(--nw-text-muted)" }}>
-            {cmCounts ? "Flow counts" : "Row-normalised: share of each actual class"} across held-out evaluation flows
-          </div>
-          <button onClick={() => setCmCounts(!cmCounts)} className="nw-btn-pill nw-btn-dark">
-            {cmCounts ? "Show row %" : "Show counts"}
-          </button>
-        </div>
-
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", textAlign: "center" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #26262C" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--nw-text-muted)" }}>Actual \ Pred</th>
-                {m.confusion_matrix.labels.map((l) => (
-                  <th key={l} style={{ padding: "10px 14px", color: "var(--nw-text-muted)" }}>{l}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {m.confusion_matrix.rows.map((row, i) => {
-                const total = row.reduce((a, b) => a + b, 0) || 1;
-                return (
-                  <tr key={m.confusion_matrix.labels[i]} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.04)" }}>
-                    <td style={{ padding: "12px 14px", textAlign: "left", fontWeight: 600 }}>
-                      {m.confusion_matrix.labels[i]}
-                    </td>
-                    {row.map((val, j) => {
-                      const frac = val / total;
-                      const isDiag = i === j;
-                      return (
-                        <td
-                          key={j}
-                          className="mono"
-                          style={{
-                            padding: "12px 14px",
-                            backgroundColor: isDiag ? `rgba(167, 139, 250, ${0.12 + frac * 0.35})` : "transparent",
-                            color: isDiag ? "#FFFFFF" : "var(--nw-text-muted)",
-                            fontWeight: isDiag ? 700 : 400,
-                          }}
-                        >
-                          {cmCounts ? val.toLocaleString() : `${(frac * 100).toFixed(1)}%`}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ marginTop: "16px", fontSize: "12px", color: "var(--nw-text-muted)", borderTop: "1px solid #26262C", paddingTop: "12px" }}>
-          Note: Accuracy is {m.accuracy_for_reference_only} and is intentionally listed last for reference only: because most network flows are benign, a useless model that never fired would still score a high accuracy.
-        </div>
-      </div>
+      <ConfusionMatrix
+        labels={m.confusion_matrix.labels}
+        rows={m.confusion_matrix.rows}
+        accuracyForReferenceOnly={m.accuracy_for_reference_only}
+      />
     </div>
   );
 }
