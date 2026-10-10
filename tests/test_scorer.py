@@ -223,3 +223,16 @@ def test_meta_overrides_the_features():
     from api.services.scorer import flow_facts
     out = flow_facts({"Destination Port": 80.0}, {"dst_port": "8080", "protocol": "TCP"})
     assert out["dst_port"] == 8080 and out["protocol"] == "TCP"
+
+
+@needs_models
+def test_warming_up_says_how_many_flows_it_needs(flows):
+    # attack-only replays never fill the window; the dashboard shows "N of 500"
+    # and which traffic fills it, so it needs the target as well as the count
+    from api.services.scorer import WARMUP_FLOWS
+    s = Scorer()
+    _score(s, flows[flows["family"] == "Benign"].sample(120, random_state=4))
+    out = s.drift()
+    assert out["status"] == "warming_up"
+    assert out["warmup_flows"] == WARMUP_FLOWS == 500
+    assert 0 < out["flows_seen"] < WARMUP_FLOWS

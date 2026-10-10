@@ -1,6 +1,6 @@
 # Runs on every pull request and on main. It rebuilds everything from a clean
 # checkout, the way the handbook's Definition of Done asks: the ML pipeline end
-# to end on synthetic data, the full test suite, the dashboard build, and the
+# to end on synthetic data, the full test suite, the dashboard lint and build, and the
 # API's Docker image.
 name: CI
 
@@ -71,7 +71,7 @@ jobs:
         run: make test
 
   dashboard:
-    name: Dashboard typecheck + build
+    name: Dashboard lint + typecheck + build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -87,6 +87,7 @@ jobs:
           cache-dependency-path: dashboard/package-lock.json
 
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
 

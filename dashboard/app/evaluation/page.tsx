@@ -1,18 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { getModelMetrics } from "@/lib/api";
 import { isLofoResult, type EvaluationReport } from "@/lib/types";
 import { falseAlerts, falseAlertsBreakdown } from "@/lib/falseAlerts";
@@ -447,8 +435,8 @@ export default function EvaluationPage() {
       {/* ── PR AND ROC CURVES ─────────────────────────────────── */}
       {m.curves && Object.keys(m.curves).length > 0 && (
         <PRROCCurves
-          curves={m.curves as Record<string, any>}
-          aucInfo={m.auc as Record<string, any>}
+          curves={m.curves}
+          aucInfo={m.auc}
           curveFamily={curveFamily}
           setCurveFamily={setCurveFamily}
         />

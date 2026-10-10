@@ -275,3 +275,11 @@ html.lenis body {
   transition-duration: 1ms;
   transition-behavior: allow-discrete;
 }
+
+/* Keyboard focus. Many controls set outline: none inline, which hid where the
+   focus was; !important beats the inline style, and :focus-visible keeps mouse
+   clicks free of the ring. */
+:focus-visible {
+  outline: 2px solid var(--nw-card-1) !important;
+  outline-offset: 2px;
+}

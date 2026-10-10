@@ -90,7 +90,7 @@ export interface SummaryMetrics {
   confusion_matrix: { labels: string[]; rows: number[][] };
   accuracy_for_reference_only: number;
   // one-vs-rest, thinned: pr = [recall, precision], roc = [fpr, tpr]
-  curves?: Record<string, { pr: number[][]; roc: number[][] }>;
+  curves?: Record<string, { pr: [number, number][]; roc: [number, number][] }>;
 }
 
 // Mirrors reports/metrics.json as written by `make train` and served by GET /metrics/model.

@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { Alert } from "./types";
 import { API_BASE, normalizeAlert } from "./api";
 
 type AlertListener = (alert: Alert) => void;
 export type FeedStatus = "connecting" | "live" | "reconnecting";
-type StatusListener = (status: FeedStatus) => void;
+type StatusListener = () => void;
 
 // One WebSocket per tab, shared by every subscriber: the top bar and the page
 // each opened their own, so every alert arrived twice over the network.
@@ -17,7 +17,7 @@ let status: FeedStatus = "connecting";
 
 function setStatus(next: FeedStatus) {
   status = next;
-  statusListeners.forEach((l) => l(next));
+  statusListeners.forEach((l) => l());
 }
 
 function connect() {
@@ -82,13 +82,12 @@ export function subscribeToAlerts(onAlert: AlertListener): () => void {
 
 /** Whether the live feed is connected, for a "live" / "reconnecting" indicator. */
 export function useFeedStatus(): FeedStatus {
-  const [current, setCurrent] = useState<FeedStatus>(status);
-  useEffect(() => {
-    statusListeners.add(setCurrent);
-    setCurrent(status);
-    return () => {
-      statusListeners.delete(setCurrent);
-    };
-  }, []);
-  return current;
+  return useSyncExternalStore(subscribeToStatus, () => status, () => "connecting");
+}
+
+function subscribeToStatus(onChange: () => void): () => void {
+  statusListeners.add(onChange);
+  return () => {
+    statusListeners.delete(onChange);
+  };
 }

@@ -1,17 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { getDrift } from "@/lib/api";
 import type { DriftStatus } from "@/lib/types";
 import { DriftTimeline } from "@/components/DriftTimeline";

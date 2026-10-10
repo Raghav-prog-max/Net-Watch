@@ -1,22 +1,18 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import SocSidebar from "./SocSidebar";
 import SocTopBar from "./SocTopBar";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [drawerOpenOn, setDrawerOpenOn] = useState<string | null>(null);
+  const mobileDrawerOpen = drawerOpenOn === pathname;
+  const setMobileDrawerOpen = (open: boolean) => setDrawerOpenOn(open ? pathname : null);
 
   // the landing page has no app chrome; there is no sign-in page
   const isPublicPage = pathname === "/";
-
-
-  // Close mobile drawer when route changes
-  useEffect(() => {
-    setMobileDrawerOpen(false);
-  }, [pathname]);
 
   if (isPublicPage) {
     return <div className="landing-root">{children}</div>;
@@ -55,6 +51,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="soc-mobile-header" style={{ display: "none" }}>
           <button
             onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
+            aria-label={mobileDrawerOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={mobileDrawerOpen}
             style={{
               background: "transparent",
               border: "none",

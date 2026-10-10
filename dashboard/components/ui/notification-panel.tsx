@@ -229,6 +229,8 @@ function Avatar({ item }: { item: NotificationItem }) {
   return (
     <span className="relative block h-8 w-8 shrink-0">
       {item.actor.avatar ? (
+        // an avatar URL from any host, 32px: next/image would need each host allow-listed
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={item.actor.avatar}
           alt=""
@@ -666,7 +668,11 @@ export const NotificationPanel = React.forwardRef<HTMLDivElement, NotificationPa
     const [state, setState] = React.useState(items);
     const [resolved, setResolved] = React.useState<Record<string, string>>({});
 
-    React.useEffect(() => setState(items), [items]);
+    const [prevItems, setPrevItems] = React.useState(items);
+    if (items !== prevItems) {
+      setPrevItems(items);
+      setState(items);
+    }
 
     const patch = (id: string, next: Partial<NotificationItem>) =>
       setState((list) => list.map((n) => (n.id === id ? { ...n, ...next } : n)));

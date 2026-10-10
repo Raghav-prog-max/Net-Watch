@@ -11,12 +11,21 @@ import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
 const LEVELS: (Level | "All")[] = ["All", "Critical", "High", "Medium", "Low"];
 
+const STATUSES: [Alert["status"] | "All", string][] = [
+  ["All", "Any status"],
+  ["open", "Open"],
+  ["acknowledged", "Acknowledged"],
+  ["escalated", "Escalated"],
+  ["false_positive", "False positive"],
+  ["resolved", "Resolved"],
+];
+
 export default function AlertFeed() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [level, setLevel] = useState<Level | "All">("All");
   const [novelOnly, setNovelOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<Alert["status"] | "All">("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [triagePendingId, setTriagePendingId] = useState<string | null>(null);
@@ -220,6 +229,7 @@ export default function AlertFeed() {
           {LEVELS.map((lvl) => (
             <button
               key={lvl}
+              aria-pressed={level === lvl}
               onClick={() => setLevel(lvl)}
               style={{
                 border: "none",
@@ -238,6 +248,7 @@ export default function AlertFeed() {
             </button>
           ))}
           <button
+            aria-pressed={novelOnly}
             onClick={() => setNovelOnly(!novelOnly)}
             style={{
               border: "none",
@@ -256,8 +267,28 @@ export default function AlertFeed() {
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", flex: "1 1 280px", maxWidth: "420px" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flex: "1 1 280px", maxWidth: "560px" }}>
+          <select
+            aria-label="Filter by triage status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as Alert["status"] | "All")}
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "rgba(0, 0, 0, 0.3)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              borderRadius: "9999px",
+              color: "#FFFFFF",
+              fontSize: "12px",
+            }}
+          >
+            {STATUSES.map(([value, label]) => (
+              <option key={value} value={value} style={{ color: "#000" }}>
+                {label}
+              </option>
+            ))}
+          </select>
           <input
+            aria-label="Search alerts"
             type="text"
             placeholder="Search IP, family, technique..."
             value={searchQuery}

@@ -6,9 +6,9 @@ import MainThreatChart from "@/components/MainThreatChart";
 import LowerDetailCards from "@/components/LowerDetailCards";
 import AlertRail from "@/components/AlertRail";
 import AlertModal from "@/components/AlertModal";
-import { ApiUnreachable, apiDownMessage, countAlerts, getDrift, getModelMetrics, listAlerts, triage } from "@/lib/api";
+import { ApiUnreachable, apiDownMessage, countAlerts, getModelMetrics, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
-import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
+import type { Alert, EvaluationReport } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
 interface AlertCounts {
@@ -26,7 +26,6 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [report, setReport] = useState<EvaluationReport | null>(null);
-  const [drift, setDrift] = useState<DriftStatus | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
   const [apiDown, setApiDown] = useState(false);
   const apiDownRef = useRef(false);
@@ -81,12 +80,11 @@ export default function DashboardPage() {
   useEffect(() => {
     loadAlerts();
     getModelMetrics().then(setReport).catch(() => setReport(null));
-    getDrift().then(setDrift).catch(() => setDrift(null));
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
       setAlerts((prev) => [incomingAlert, ...prev.filter((a) => a.id !== incomingAlert.id)].slice(0, 100));
     });
     return () => unsubscribe();
-  }, []);
+  }, [loadAlerts]);
 
   async function handleTriage(id: string, status: Alert["status"]) {
     setTriageError(null);
@@ -182,7 +180,7 @@ export default function DashboardPage() {
         <MainThreatChart alerts={alerts} />
 
         {/* Lower Detail Cards */}
-        <LowerDetailCards alerts={alerts} report={report} drift={drift} falsePositivesTotal={fpTotal} />
+        <LowerDetailCards alerts={alerts} report={report} falsePositivesTotal={fpTotal} />
       </div>
 
       {/* ── RIGHT RAIL (Alert Feed) ────────────────────────────── */}

@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useState, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/userContext";
 import { listAlerts, triage } from "@/lib/api";
@@ -14,6 +13,15 @@ const NAV_ITEMS = [
   { label: "Feature Drift Monitor", href: "/drift", icon: "monitoring", desc: "PSI & KS-test tracking" },
   { label: "Model Evaluation", href: "/evaluation", icon: "analytics", desc: "PR/ROC-AUC & LOFO tests" },
 ];
+
+// The platform never changes while the page is open: nothing to subscribe to.
+const noSubscription = () => () => {};
+
+// ⌘K on macOS and iOS, Ctrl+K elsewhere
+function platformShortcut(): string {
+  const ua = (navigator.userAgent || navigator.platform || "").toLowerCase();
+  return /macintosh|mac os x|iphone|ipad|ipod/.test(ua) ? "⌘K" : "Ctrl+K";
+}
 
 function formatAlertTime(isoStr: string): string {
   if (!isoStr) return "";
@@ -47,18 +55,9 @@ export default function SocTopBar() {
   // Search input & command palette state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
-  const [shortcutLabel, setShortcutLabel] = useState("⌘K");
+  const shortcutLabel = useSyncExternalStore(noSubscription, platformShortcut, () => "⌘K");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
-
-  // Detect OS for shortcut display (Ctrl+K on Windows/Linux, ⌘K on macOS)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const ua = (navigator.userAgent || navigator.platform || "").toLowerCase();
-      const isMac = /macintosh|mac os x|iphone|ipad|ipod/.test(ua);
-      setShortcutLabel(isMac ? "⌘K" : "Ctrl+K");
-    }
-  }, []);
 
   // Global Cmd+K / Ctrl+K keyboard shortcut listener
   useEffect(() => {

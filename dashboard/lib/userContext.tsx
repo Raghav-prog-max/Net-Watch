@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useSyncExternalStore } from "react";
 import type { User } from "./types";
 import { ROSTER } from "./users";
 
@@ -10,6 +10,26 @@ import { ROSTER } from "./users";
 // API's writes have their own key).
 const STORAGE_KEY = "netwatch_analyst_id";
 
+// this tab's choice, which still holds when storage is unavailable (private window)
+let chosenId: string | null = null;
+const listeners = new Set<() => void>();
+
+function subscribe(onChange: () => void): () => void {
+  listeners.add(onChange);
+  return () => {
+    listeners.delete(onChange);
+  };
+}
+
+function savedId(): string | null {
+  if (chosenId) return chosenId;
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export interface UserContextType {
   currentUser: User;
   roster: User[];
@@ -18,27 +38,19 @@ export interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+function switchAnalyst(userId: string) {
+  if (!ROSTER.some((u) => u.id === userId)) return;
+  chosenId = userId;
+  try {
+    localStorage.setItem(STORAGE_KEY, userId);
+  } catch {}
+  listeners.forEach((l) => l());
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(ROSTER[0]);
-
-  // the analyst chosen before the reload
-  useEffect(() => {
-    try {
-      const saved = ROSTER.find((u) => u.id === localStorage.getItem(STORAGE_KEY));
-      if (saved) setCurrentUser(saved);
-    } catch {
-      // storage unavailable (private window): stay on the first analyst
-    }
-  }, []);
-
-  const switchAnalyst = (userId: string) => {
-    const user = ROSTER.find((u) => u.id === userId);
-    if (!user) return;
-    setCurrentUser(user);
-    try {
-      localStorage.setItem(STORAGE_KEY, user.id);
-    } catch {}
-  };
+  // the server render has no storage: it shows the first analyst
+  const id = useSyncExternalStore(subscribe, savedId, () => null);
+  const currentUser = ROSTER.find((u) => u.id === id) ?? ROSTER[0];
 
   return (
     <UserContext.Provider value={{ currentUser, roster: ROSTER, switchAnalyst }}>

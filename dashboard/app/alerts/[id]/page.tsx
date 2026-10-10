@@ -29,9 +29,9 @@ export default function AlertDetailPage() {
   const [falsePositives, refreshFalsePositives] = useFalsePositiveCount();
 
   const load = useCallback(() => {
-    setError(null);
     getAlert(id)
       .then((a) => {
+        setError(null);
         setAlert(a);
         if (a.analyst_note) setAnalystNote(a.analyst_note);
       })
@@ -43,6 +43,11 @@ export default function AlertDetailPage() {
   }, [id]);
 
   useEffect(load, [load]);
+
+  const retry = () => {
+    setError(null);
+    load();
+  };
 
   async function handleApplyTriage(status: Alert["status"]) {
     setSaving(true);
@@ -78,7 +83,7 @@ export default function AlertDetailPage() {
           {error}
         </div>
         {!error.startsWith("There is no alert") && (
-          <button type="button" onClick={load} className="nw-btn-pill nw-btn-dark" style={{ marginTop: "14px" }}>
+          <button type="button" onClick={retry} className="nw-btn-pill nw-btn-dark" style={{ marginTop: "14px" }}>
             Retry
           </button>
         )}

@@ -13,10 +13,6 @@ export default function SocSidebar() {
     { href: "/models", label: "Models", icon: "model_training" },
   ];
 
-  const bottomItems = [
-    { href: "/", label: "Landing Page", icon: "public" },
-  ];
-
   return (
     <aside
       data-lenis-prevent

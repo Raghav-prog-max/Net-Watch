@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Alert } from "@/lib/types";
 
 interface AlertModalProps {
@@ -14,7 +14,9 @@ export default function AlertModal({ alert, onClose, onTriage }: AlertModalProps
   // the caller passes a new onClose every render; keyed on it, the effect below
   // re-ran on every live alert and pulled focus back to the close button
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
   const openId = alert?.id;
 
   // a dialog: Escape closes it, and focus moves into it when it opens
