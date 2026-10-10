@@ -1,24 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
-import { ApiUnreachable, listAlerts } from "@/lib/api";
-import { useTriagePermission } from "@/lib/permissions";
+import { ApiUnreachable, MAX_PAGE_SIZE, apiDownMessage, listAlerts, triage } from "@/lib/api";
 import { subscribeToAlerts } from "@/lib/socket";
 import type { Alert, Level } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
 const LEVELS: (Level | "All")[] = ["All", "Critical", "High", "Medium", "Low"];
 
+const STATUSES: [Alert["status"] | "All", string][] = [
+  ["All", "Any status"],
+  ["open", "Open"],
+  ["acknowledged", "Acknowledged"],
+  ["escalated", "Escalated"],
+  ["false_positive", "False positive"],
+  ["resolved", "Resolved"],
+];
+
 export default function AlertFeed() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const { can, why, triage } = useTriagePermission();
   const [level, setLevel] = useState<Level | "All">("All");
   const [novelOnly, setNovelOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<Alert["status"] | "All">("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [triagePendingId, setTriagePendingId] = useState<string | null>(null);
@@ -27,33 +34,53 @@ export default function AlertFeed() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [falsePositives, refreshFalsePositives] = useFalsePositiveCount();
 
-  // Initial load & real-time WebSocket subscription
-  useEffect(() => {
-    listAlerts({ limit: "250" }).then((loadedAlerts) => {
+  const [familyFilter, setFamilyFilter] = useState<string | null>(null);
+  // alerts that arrived while the stream was paused, added on Resume
+  const [queued, setQueued] = useState<Alert[]>([]);
+  const pausedRef = useRef(false);
+
+  const load = useCallback(() => {
+    listAlerts({ limit: String(MAX_PAGE_SIZE) }).then((loadedAlerts) => {
       setLoadError(null);
       setAlerts(loadedAlerts);
-      if (loadedAlerts.length > 0 && !expandedId) {
-        setExpandedId(loadedAlerts[0].id);
-      }
+      // open the newest alert the first time, never close the one the analyst chose
+      setExpandedId((current) => current ?? loadedAlerts[0]?.id ?? null);
     }).catch((e) => {
       setAlerts([]);
       setLoadError(
         e instanceof ApiUnreachable
-          ? "The API is not reachable on :8000. Start it with `make api`."
+          ? apiDownMessage()
           : `Could not load alerts: ${e instanceof Error ? e.message : "unknown error"}`
       );
     });
+  }, []);
 
+  // Load once and subscribe once. Both used to depend on the open alert and the
+  // pause state: every click on an alert re-downloaded the list and reopened the
+  // WebSocket, and pausing dropped whatever arrived meanwhile.
+  useEffect(() => {
+    load();
+    const merge = (list: Alert[], incoming: Alert) =>
+      [incoming, ...list.filter((a) => a.id !== incoming.id)].slice(0, 300);
     const unsubscribe = subscribeToAlerts((incomingAlert) => {
-      setAlerts((prev) => {
-        if (isPaused) return prev;
-        const filtered = prev.filter((a) => a.id !== incomingAlert.id);
-        return [incomingAlert, ...filtered].slice(0, 300);
-      });
+      if (pausedRef.current) setQueued((q) => merge(q, incomingAlert));
+      else setAlerts((prev) => merge(prev, incomingAlert));
     });
-
     return () => unsubscribe();
-  }, [isPaused, expandedId]);
+  }, [load]);
+
+  function togglePause() {
+    if (pausedRef.current) {
+      // resume: the queued alerts join the list, newest first
+      setAlerts((prev) => {
+        const ids = new Set(queued.map((a) => a.id));
+        return [...queued, ...prev.filter((a) => !ids.has(a.id))].slice(0, 300);
+      });
+      setQueued([]);
+    }
+    pausedRef.current = !pausedRef.current;
+    setIsPaused(pausedRef.current);
+  }
 
   // One-click triage handler
   async function handleTriage(
@@ -90,6 +117,7 @@ export default function AlertFeed() {
     return alerts.filter((a) => {
       if (level !== "All" && a.severity.level !== level) return false;
       if (novelOnly && !a.is_novel) return false;
+      if (familyFilter && a.prediction.family !== familyFilter) return false;
       if (statusFilter !== "All" && a.status !== statusFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -105,7 +133,7 @@ export default function AlertFeed() {
       return true;
     }).sort((x, y) =>
       y.severity.score - x.severity.score || y.timestamp.localeCompare(x.timestamp));
-  }, [alerts, level, novelOnly, statusFilter, searchQuery]);
+  }, [alerts, level, novelOnly, familyFilter, statusFilter, searchQuery]);
 
   // counts by family across everything loaded, largest first
   const familyCounts = useMemo(() => {
@@ -138,10 +166,12 @@ export default function AlertFeed() {
             {falsePositives === 1 ? " positive" : " positives"}
           </Link>
           <button
-            onClick={() => setIsPaused(!isPaused)}
+            onClick={togglePause}
             className={`nw-btn-pill ${isPaused ? "nw-btn-amber" : "nw-btn-dark"}`}
           >
-            {isPaused ? "▶ Resume Stream" : "⏸ Pause Stream"}
+            {isPaused
+              ? `▶ Resume Stream${queued.length ? ` (${queued.length} new)` : ""}`
+              : "⏸ Pause Stream"}
           </button>
         </div>
       </div>
@@ -199,6 +229,7 @@ export default function AlertFeed() {
           {LEVELS.map((lvl) => (
             <button
               key={lvl}
+              aria-pressed={level === lvl}
               onClick={() => setLevel(lvl)}
               style={{
                 border: "none",
@@ -217,6 +248,7 @@ export default function AlertFeed() {
             </button>
           ))}
           <button
+            aria-pressed={novelOnly}
             onClick={() => setNovelOnly(!novelOnly)}
             style={{
               border: "none",
@@ -235,8 +267,28 @@ export default function AlertFeed() {
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", flex: "1 1 280px", maxWidth: "420px" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flex: "1 1 280px", maxWidth: "560px" }}>
+          <select
+            aria-label="Filter by triage status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as Alert["status"] | "All")}
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "rgba(0, 0, 0, 0.3)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              borderRadius: "9999px",
+              color: "#FFFFFF",
+              fontSize: "12px",
+            }}
+          >
+            {STATUSES.map(([value, label]) => (
+              <option key={value} value={value} style={{ color: "#000" }}>
+                {label}
+              </option>
+            ))}
+          </select>
           <input
+            aria-label="Search alerts"
             type="text"
             placeholder="Search IP, family, technique..."
             value={searchQuery}
@@ -257,11 +309,21 @@ export default function AlertFeed() {
 
       {familyCounts.length > 0 && (
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px", fontSize: "12px" }}>
-          <span style={{ color: "var(--nw-text-muted)", alignSelf: "center" }}>By family:</span>
+          <span style={{ color: "var(--nw-text-muted)", alignSelf: "center" }}>
+            By family (latest {alerts.length.toLocaleString()}):
+          </span>
           {familyCounts.map(([fam, n]) => (
-            <span key={fam} className={`nw-pill ${fam === "Unknown" ? "nw-pill-amber" : "nw-pill-purple"}`}>
+            // they looked like filters and did nothing: now they filter, click again to clear
+            <button
+              key={fam}
+              type="button"
+              aria-pressed={familyFilter === fam}
+              onClick={() => setFamilyFilter((f) => (f === fam ? null : fam))}
+              className={`nw-pill ${fam === "Unknown" ? "nw-pill-amber" : "nw-pill-purple"}`}
+              style={{ cursor: "pointer", border: familyFilter === fam ? "1px solid #FFFFFF" : undefined, opacity: familyFilter && familyFilter !== fam ? 0.5 : 1 }}
+            >
               {fam} {n}
-            </span>
+            </button>
           ))}
         </div>
       )}
@@ -285,6 +347,11 @@ export default function AlertFeed() {
               : alerts.length === 0
               ? "No alerts recorded yet. Start the backend API (`make api`) and stream traffic (`make demo`) to receive live alerts."
               : "No alerts match the active filters."}
+            {loadError && (
+              <div style={{ marginTop: "14px" }}>
+                <button type="button" onClick={load} className="nw-btn-pill nw-btn-dark">Retry</button>
+              </div>
+            )}
           </div>
         )}
         {filteredAlerts.map((alert) => {
@@ -312,9 +379,19 @@ export default function AlertFeed() {
                 transition: "background-color 0.15s ease",
               }}
             >
-              {/* Row Bar */}
+              {/* Row Bar: a button to keyboards and screen readers too, so an alert
+                  can be opened and triaged without a mouse */}
               <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
                 onClick={() => setExpandedId(isExpanded ? null : alert.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setExpandedId(isExpanded ? null : alert.id);
+                  }
+                }}
                 style={{
                   padding: "18px 24px",
                   display: "grid",
@@ -421,36 +498,28 @@ export default function AlertFeed() {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
                       <button
                         onClick={() => handleTriage(alert.id, "false_positive")}
-                        disabled={triagePendingId === alert.id || alert.status === "false_positive" || !can("false_positive")}
-                        title={why("false_positive")}
-                        data-role-locked={!can("false_positive")}
+                        disabled={triagePendingId === alert.id || alert.status === "false_positive"}
                         className="nw-btn-pill nw-btn-amber"
                       >
                         Mark False Positive
                       </button>
                       <button
                         onClick={() => handleTriage(alert.id, "acknowledged")}
-                        disabled={triagePendingId === alert.id || alert.status === "acknowledged" || !can("acknowledged")}
-                        title={why("acknowledged")}
-                        data-role-locked={!can("acknowledged")}
+                        disabled={triagePendingId === alert.id || alert.status === "acknowledged"}
                         className="nw-btn-pill nw-btn-dark"
                       >
                         Acknowledge
                       </button>
                       <button
                         onClick={() => handleTriage(alert.id, "escalated")}
-                        disabled={triagePendingId === alert.id || alert.status === "escalated" || !can("escalated")}
-                        title={why("escalated")}
-                        data-role-locked={!can("escalated")}
+                        disabled={triagePendingId === alert.id || alert.status === "escalated"}
                         className="nw-btn-pill nw-btn-soft-purple"
                       >
                         Escalate
                       </button>
                       <button
                         onClick={() => handleTriage(alert.id, "resolved")}
-                        disabled={triagePendingId === alert.id || alert.status === "resolved" || !can("resolved")}
-                        title={why("resolved")}
-                        data-role-locked={!can("resolved")}
+                        disabled={triagePendingId === alert.id || alert.status === "resolved"}
                         className="nw-btn-pill nw-btn-lime"
                       >
                         Resolve

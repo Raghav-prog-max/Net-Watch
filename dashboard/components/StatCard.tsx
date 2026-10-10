@@ -28,6 +28,16 @@ export default function StatCard({
   return (
     <div
       onClick={onClick}
+      {...(onClick ? {
+        role: "button",
+        tabIndex: 0,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        },
+      } : {})}
       style={{
         padding: "18px 20px",
         borderRadius: "16px",

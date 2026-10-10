@@ -1,76 +1,23 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import SocSidebar from "./SocSidebar";
 import SocTopBar from "./SocTopBar";
-import { useUser } from "@/lib/userContext";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const { isAuthenticated, authLoading } = useUser();
+  const [drawerOpenOn, setDrawerOpenOn] = useState<string | null>(null);
+  const mobileDrawerOpen = drawerOpenOn === pathname;
+  const setMobileDrawerOpen = (open: boolean) => setDrawerOpenOn(open ? pathname : null);
 
-  const isPublicPage = pathname === "/" || pathname === "/login";
-
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated && !isPublicPage) {
-      router.replace("/login");
-    }
-  }, [authLoading, isAuthenticated, isPublicPage, router]);
-
-  // Close mobile drawer when route changes
-  useEffect(() => {
-    setMobileDrawerOpen(false);
-  }, [pathname]);
+  // the landing page has no app chrome; there is no sign-in page
+  const isPublicPage = pathname === "/";
 
   if (isPublicPage) {
     return <div className="landing-root">{children}</div>;
   }
 
-  // Protect internal SOC pages: show auth loader until Firebase resolves
-  if (authLoading) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          width: "100%",
-          backgroundColor: "#050508",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "12px",
-          fontFamily: "var(--font-mono)",
-        }}
-      >
-        <div
-          style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "50%",
-            border: "2px solid rgba(255, 255, 255, 0.1)",
-            borderTopColor: "#FFFFFF",
-            animation: "socSpin 0.7s linear infinite",
-          }}
-        />
-        <div style={{ fontSize: "11px", color: "#8E909B", letterSpacing: "0.08em" }}>
-          VERIFYING FIREBASE CREDENTIALS // NETWATCH SEC-OPS
-        </div>
-        <style jsx>{`
-          @keyframes socSpin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  // If not authenticated and waiting for redirect, do not render protected dashboard
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "var(--nw-bg-page)" }}>
@@ -104,6 +51,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="soc-mobile-header" style={{ display: "none" }}>
           <button
             onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
+            aria-label={mobileDrawerOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={mobileDrawerOpen}
             style={{
               background: "transparent",
               border: "none",

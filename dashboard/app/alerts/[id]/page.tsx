@@ -1,11 +1,10 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import SeverityBadge from "@/components/SeverityBadge";
 import ShapBar from "@/components/ShapBar";
-import { getAlert } from "@/lib/api";
-import { useTriagePermission } from "@/lib/permissions";
+import { AlertNotFound, ApiUnreachable, apiDownMessage, getAlert, triage } from "@/lib/api";
 import type { Alert } from "@/lib/types";
 import { useFalsePositiveCount } from "@/lib/useFalsePositiveCount";
 
@@ -20,24 +19,39 @@ export default function AlertDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [alert, setAlert] = useState<Alert | null>(null);
+  // loading failed: the page has nothing to show
   const [error, setError] = useState<string | null>(null);
+  // a triage failed: shown beside the buttons, the page and the typed note stay
+  const [triageError, setTriageError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [analystNote, setAnalystNote] = useState("");
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [falsePositives, refreshFalsePositives] = useFalsePositiveCount();
-  const { can, why, triage } = useTriagePermission();
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getAlert(id)
       .then((a) => {
+        setError(null);
         setAlert(a);
         if (a.analyst_note) setAnalystNote(a.analyst_note);
       })
-      .catch(() => setError("Alert not found."));
+      // every failure read "Alert not found", an API that was down included
+      .catch((e) => setError(
+        e instanceof AlertNotFound ? `There is no alert ${id}.`
+          : e instanceof ApiUnreachable ? apiDownMessage()
+          : `Could not load the alert: ${e instanceof Error ? e.message : "unknown error"}`));
   }, [id]);
+
+  useEffect(load, [load]);
+
+  const retry = () => {
+    setError(null);
+    load();
+  };
 
   async function handleApplyTriage(status: Alert["status"]) {
     setSaving(true);
+    setTriageError(null);
     try {
       const updated = await triage(
         id,
@@ -49,8 +63,11 @@ export default function AlertDetailPage() {
       refreshFalsePositives();
       setSuccessToast(`Disposition updated to ${status.replace("_", " ")}`);
       setTimeout(() => setSuccessToast(null), 3000);
-    } catch {
-      setError("Could not update triage state.");
+    } catch (e) {
+      // this replaced the whole page with an error and threw away the typed note
+      setTriageError(
+        `Not saved: ${e instanceof ApiUnreachable ? apiDownMessage() : e instanceof Error ? e.message : "unknown error"}. Your note is kept; try again.`
+      );
     } finally {
       setSaving(false);
     }
@@ -65,6 +82,11 @@ export default function AlertDetailPage() {
         <div style={{ padding: "20px", backgroundColor: "rgba(244, 169, 62, 0.15)", borderRadius: "18px", color: "var(--nw-card-1)" }}>
           {error}
         </div>
+        {!error.startsWith("There is no alert") && (
+          <button type="button" onClick={retry} className="nw-btn-pill nw-btn-dark" style={{ marginTop: "14px" }}>
+            Retry
+          </button>
+        )}
       </div>
     );
   }
@@ -259,7 +281,7 @@ export default function AlertDetailPage() {
             <textarea
               value={analystNote}
               onChange={(e) => setAnalystNote(e.target.value)}
-              placeholder="Document investigation context or root cause for the retraining audit log..."
+              placeholder="Document investigation context or root cause; it is stored with the alert..."
               rows={3}
               style={{
                 width: "100%",
@@ -275,14 +297,18 @@ export default function AlertDetailPage() {
             />
           </div>
 
+          {triageError && (
+            <div role="alert" style={{ marginBottom: "12px", padding: "10px 14px", borderRadius: "12px", backgroundColor: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.25)", color: "#FCA5A5", fontSize: "12px" }}>
+              {triageError}
+            </div>
+          )}
+
           {/* Actions */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
             {ACTIONS.map((a) => (
               <button
                 key={a.status}
-                disabled={saving || alert.status === a.status || !can(a.status)}
-                title={why(a.status)}
-                data-role-locked={!can(a.status)}
+                disabled={saving || alert.status === a.status}
                 onClick={() => handleApplyTriage(a.status)}
                 className={`nw-btn-pill ${a.btnClass}`}
               >

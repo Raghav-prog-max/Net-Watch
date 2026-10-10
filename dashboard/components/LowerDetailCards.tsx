@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Alert, DriftStatus, EvaluationReport } from "@/lib/types";
+import type { Alert, EvaluationReport } from "@/lib/types";
 import { falseAlerts } from "@/lib/falseAlerts";
 import { getModelRegistryInfo } from "@/lib/api";
 
@@ -21,13 +21,12 @@ const CLASSIFIER_NAME: Record<string, string> = { lightgbm: "LightGBM", rf: "Ran
 interface Props {
   alerts: Alert[];
   report: EvaluationReport | null;
-  drift: DriftStatus | null;
   falsePositivesTotal?: number | null;
 }
 
 const MONO_COLORS = ["#FFFFFF", "#C4C6CB", "#8E909B", "#656773", "#35353F"];
 
-export default function LowerDetailCards({ alerts, report, drift, falsePositivesTotal }: Props) {
+export default function LowerDetailCards({ alerts, report, falsePositivesTotal }: Props) {
   // the bundle models/ACTIVE serves (GET /models), not a version typed into the page
   const [activeModel, setActiveModel] = useState<string | null>(null);
   useEffect(() => {
@@ -48,13 +47,6 @@ export default function LowerDetailCards({ alerts, report, drift, falsePositives
     }));
 
   const falsePositives = falsePositivesTotal ?? alerts.filter((a) => a.status === "false_positive").length;
-  const topPsi = drift?.top_features?.[0]?.psi;
-  
-  const driftLabel = !drift
-    ? "DRIFT: —"
-    : drift.status === "warming_up"
-    ? "WARMING UP"
-    : `${drift.status.toUpperCase()}${topPsi !== undefined ? ` (PSI ${topPsi.toFixed(3)})` : ""}`;
 
   return (
     <div

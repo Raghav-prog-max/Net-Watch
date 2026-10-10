@@ -39,7 +39,7 @@ def allowed_origins(value):
     """ALLOWED_ORIGINS: the comma-separated origins a dashboard on another origin
     is served from. Unset means any origin, which the local demo needs (dashboard
     on :3000, API on :8000); behind nginx both share one origin and CORS is not
-    involved. deployment/env.production.example set it, but nothing read it."""
+    involved. deployment/.env.production.example set it, but nothing read it."""
     return [o.strip() for o in (value or "*").split(",") if o.strip()] or ["*"]
 
 

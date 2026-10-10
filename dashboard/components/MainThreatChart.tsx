@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Area,
@@ -35,6 +35,11 @@ interface BucketData {
 
 export default function MainThreatChart({ alerts }: MainThreatChartProps) {
   const [selectedRange, setSelectedRange] = useState<TimeRange>("24H");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const filteredAlerts = useMemo(() => {
     if (alerts.length === 0) return [];
@@ -47,7 +52,6 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
     if (timestamps.length === 0) return alerts;
 
     const maxTime = Math.max(...timestamps);
-    const now = Date.now();
     // Anchor to now if recent/live, or anchor to newest alert for offline/seeded demos
     const anchor = Math.abs(now - maxTime) < 24 * 60 * 60 * 1000 && now >= maxTime ? now : maxTime;
     const cutoff = anchor - duration;
@@ -56,7 +60,7 @@ export default function MainThreatChart({ alerts }: MainThreatChartProps) {
       const t = new Date(a.timestamp).getTime();
       return !isNaN(t) && t >= cutoff;
     });
-  }, [alerts, selectedRange]);
+  }, [alerts, selectedRange, now]);
 
   const buckets = useMemo<BucketData[]>(() => {
     if (filteredAlerts.length === 0) return [];

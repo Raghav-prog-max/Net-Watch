@@ -66,7 +66,7 @@ Boot up the frontend UI to watch the alerts roll in.
 ```bash
 make dashboard
 ```
-*(Available at `http://localhost:3000`)*
+*(Available at `http://localhost:3000`. There is no sign-in: it opens as the first analyst on the seeded roster in `dashboard/lib/users.ts`, and the profile menu switches analyst. This names who triages; it does not secure the console.)*
 
 For the 3-minute pitch demo, follow [`docs/demo_script.md`](docs/demo_script.md): six replayer runs, with
 what to show at each.
@@ -111,14 +111,6 @@ The result goes to
 `reports/nslkdd_check.json`. The tests already run the same check on a small
 fixture, so CI covers the code without the dataset.
 
-### Exploratory analysis notebook (optional)
-
-```bash
-pip install -r requirements-dev.txt
-make eda
-```
-Re-runs `ml/notebooks/eda.ipynb` on whatever is in `data/processed/`.
-
 ---
 
 ## 6. Without `make` (plain Windows)
@@ -142,7 +134,6 @@ repository root with the virtual environment's Python:
 | `make rollback` | `.venv\Scripts\python scripts/promote.py v1 --rollback` |
 | `make test` | `.venv\Scripts\python -m pytest -q` |
 | `make nslkdd` | `.venv\Scripts\python scripts/nslkdd_check.py` |
-| `make eda` | `.venv\Scripts\python -m nbconvert --to notebook --execute --inplace ml/notebooks/eda.ipynb` |
 
 Use `http://127.0.0.1:8000`, not `localhost`, if you point anything at the API
 by hand: on Windows `localhost` tries IPv6 first and each request waits ~2 s.

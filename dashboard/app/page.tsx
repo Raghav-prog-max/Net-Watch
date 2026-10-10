@@ -338,7 +338,7 @@ export default function LandingPage() {
               </h3>
               <p style={{ fontSize: "13px", color: "var(--nw-text-muted)", lineHeight: 1.6, margin: 0 }}>
                 LightGBM classifies known families (DoS, DDoS, PortScan, BruteForce, WebAttack, Bot).
-                Simultaneously, an Isolation Forest trained only on benign traffic catches unseen zero-days.
+                Alongside it, an Isolation Forest trained only on benign traffic flags flows unlike anything normal, which catches many attacks never trained on, though not all: the Evaluation page shows how many, family by family.
               </p>
             </div>
             <div style={{ marginTop: "24px", fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--nw-card-2)" }}>

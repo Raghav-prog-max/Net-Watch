@@ -149,13 +149,6 @@ a {
   transform: translateY(-1px);
 }
 
-/* a triage action the signed-in role may not take (lib/permissions.ts); the
-   reason is in the button's title */
-button[data-role-locked="true"] {
-  opacity: 0.35;
-  cursor: not-allowed !important;
-  transform: none !important;
-}
 
 .nw-btn-primary {
   background-color: #FFFFFF;
@@ -281,4 +274,12 @@ html.lenis body {
   transition-property: overflow;
   transition-duration: 1ms;
   transition-behavior: allow-discrete;
+}
+
+/* Keyboard focus. Many controls set outline: none inline, which hid where the
+   focus was; !important beats the inline style, and :focus-visible keeps mouse
+   clicks free of the ring. */
+:focus-visible {
+  outline: 2px solid var(--nw-card-1) !important;
+  outline-offset: 2px;
 }

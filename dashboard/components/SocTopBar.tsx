@@ -1,11 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useState, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/userContext";
-import { ROLE_DEFINITIONS } from "@/lib/users";
-import { listAlerts } from "@/lib/api";
-import { useTriagePermission } from "@/lib/permissions";
-import { subscribeToAlerts } from "@/lib/socket";
+import { listAlerts, triage } from "@/lib/api";
+import { subscribeToAlerts, useFeedStatus } from "@/lib/socket";
 import type { Alert } from "@/lib/types";
 import { NotificationPanel, type NotificationItem } from "@/components/ui/notification-panel";
 
@@ -15,8 +12,16 @@ const NAV_ITEMS = [
   { label: "ML Models & Registry", href: "/models", icon: "neurology", desc: "LightGBM & Isolation Forest v1" },
   { label: "Feature Drift Monitor", href: "/drift", icon: "monitoring", desc: "PSI & KS-test tracking" },
   { label: "Model Evaluation", href: "/evaluation", icon: "analytics", desc: "PR/ROC-AUC & LOFO tests" },
-  { label: "SOC Team Roles", href: "/users", icon: "badge", desc: "Switch analysts & permissions" },
 ];
+
+// The platform never changes while the page is open: nothing to subscribe to.
+const noSubscription = () => () => {};
+
+// ⌘K on macOS and iOS, Ctrl+K elsewhere
+function platformShortcut(): string {
+  const ua = (navigator.userAgent || navigator.platform || "").toLowerCase();
+  return /macintosh|mac os x|iphone|ipad|ipod/.test(ua) ? "⌘K" : "Ctrl+K";
+}
 
 function formatAlertTime(isoStr: string): string {
   if (!isoStr) return "";
@@ -37,30 +42,22 @@ function formatAlertTime(isoStr: string): string {
 export default function SocTopBar() {
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const { can, triage } = useTriagePermission();
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
   const notifRef = useRef<HTMLDivElement>(null);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { currentUser, logout } = useUser();
+  const { currentUser, roster, switchAnalyst } = useUser();
+  // the live feed's real state; this read NODE-ONLINE whatever happened
+  const feedStatus = useFeedStatus();
 
   // Search input & command palette state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
-  const [shortcutLabel, setShortcutLabel] = useState("⌘K");
+  const shortcutLabel = useSyncExternalStore(noSubscription, platformShortcut, () => "⌘K");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
-
-  // Detect OS for shortcut display (Ctrl+K on Windows/Linux, ⌘K on macOS)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const ua = (navigator.userAgent || navigator.platform || "").toLowerCase();
-      const isMac = /macintosh|mac os x|iphone|ipad|ipod/.test(ua);
-      setShortcutLabel(isMac ? "⌘K" : "Ctrl+K");
-    }
-  }, []);
 
   // Global Cmd+K / Ctrl+K keyboard shortcut listener
   useEffect(() => {
@@ -127,9 +124,11 @@ export default function SocTopBar() {
       else if (isNovel) kind = "created";
       else if (isHigh) kind = "edit";
 
-      const src = alert.flow?.src_ip ?? "192.168.1.x";
-      const dstPort = alert.flow?.dst_port ?? "443";
-      const protocol = alert.flow?.protocol ?? "TCP";
+      // only what the alert carries: CICIDS2017 has IPs and protocol, the
+      // synthetic data has neither, so a missing fact reads "—", never a guess
+      const src = alert.flow?.src_ip ?? "—";
+      const dstPort = alert.flow?.dst_port ?? "—";
+      const protocol = alert.flow?.protocol;
 
       return {
         id: alert.id,
@@ -144,8 +143,8 @@ export default function SocTopBar() {
         ],
         time: formatAlertTime(alert.timestamp),
         context: [
-          `${src} → :${dstPort} (${protocol})`,
-          isNovel ? "Novel Vector" : alert.mitre?.tactic ?? "Edge Gateway",
+          `${src} → :${dstPort}${protocol ? ` (${protocol})` : ""}`,
+          isNovel ? "Novel Vector" : alert.mitre?.tactic ?? "—",
         ],
         unread: !readIds.has(alert.id),
         archived: archivedIds.has(alert.id),
@@ -153,14 +152,11 @@ export default function SocTopBar() {
         count: alert.flow_count > 1 ? alert.flow_count : undefined,
         actions: [
           { id: "inspect", label: "Inspect", tone: "primary", resolved: "Inspecting threat" },
-          // offered only to roles that may acknowledge (lib/permissions.ts)
-          ...(can("acknowledged")
-            ? [{ id: "ack", label: "Acknowledge", tone: "quiet" as const, resolved: "Acknowledged alert" }]
-            : []),
+          { id: "ack", label: "Acknowledge", tone: "quiet", resolved: "Acknowledged alert" },
         ],
       };
     });
-  }, [recentAlerts, readIds, archivedIds, can]);
+  }, [recentAlerts, readIds, archivedIds]);
 
   const hasUnread = notificationItems.some((n) => n.unread && !n.archived);
 
@@ -175,16 +171,14 @@ export default function SocTopBar() {
   const filteredThreats = useMemo(() => {
     if (!searchQuery.trim()) return recentAlerts.slice(0, 4);
     const q = searchQuery.toLowerCase();
+    // every field as text: the port is a number, and .includes() on it crashed the page
+    const fields = (a: Alert) => [a.prediction.family, a.flow?.src_ip, a.flow?.dst_ip,
+      a.flow?.dst_port, a.flow?.protocol, a.severity.level, a.mitre?.tactic];
     return recentAlerts.filter((a) =>
-      a.prediction.family.toLowerCase().includes(q) ||
-      (a.flow?.src_ip && a.flow.src_ip.includes(q)) ||
-      (a.flow?.dst_port && a.flow.dst_port.includes(q)) ||
-      a.severity.level.toLowerCase().includes(q) ||
-      (a.mitre?.tactic && a.mitre.tactic.toLowerCase().includes(q))
+      fields(a).some((f) => f != null && String(f).toLowerCase().includes(q))
     ).slice(0, 5);
   }, [searchQuery, recentAlerts]);
 
-  const roleDef = (currentUser?.role && ROLE_DEFINITIONS[currentUser.role as keyof typeof ROLE_DEFINITIONS]) || ROLE_DEFINITIONS.tier_2;
 
   return (
     <header
@@ -209,7 +203,7 @@ export default function SocTopBar() {
             Hello, {currentUser?.name || "Analyst"}
           </h1>
           <span style={{ fontSize: "12px", color: "#8E909B" }}>•</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#8E909B" }}>NODE-ONLINE</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#8E909B" }}>{feedStatus === "live" ? "FEED LIVE" : feedStatus === "reconnecting" ? "FEED RECONNECTING" : "FEED CONNECTING"}</span>
         </div>
         <p style={{ margin: 0, fontSize: "11px", color: "#8E909B" }}>
           Real-time network intrusion monitoring &amp; automated triage
@@ -340,7 +334,7 @@ export default function SocTopBar() {
                           <span style={{ fontSize: "9px", padding: "1px 4px", borderRadius: "3px", backgroundColor: "#FFFFFF", color: "#000000", fontWeight: 700 }}>ZERO-DAY</span>
                         )}
                         <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
-                          {alert.flow?.src_ip ?? "192.168.1.x"}
+                          {alert.flow?.src_ip ?? "—"}
                         </span>
                       </div>
                       <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
@@ -564,7 +558,7 @@ export default function SocTopBar() {
                 {currentUser?.name || "Analyst"}
               </div>
               <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "#8E909B" }}>
-                {roleDef.title}
+                {currentUser?.department || "SecOps Team"}
               </div>
             </div>
             <span
@@ -600,95 +594,58 @@ export default function SocTopBar() {
               <div style={{ paddingBottom: "12px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", marginBottom: "12px" }}>
                 <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>{currentUser?.name || "Analyst"}</div>
                 <div style={{ fontSize: "11px", color: "#8E909B", marginBottom: "6px" }}>{currentUser?.email || "No session"}</div>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      fontSize: "10px",
-                      fontWeight: 700,
-                      fontFamily: "var(--font-mono)",
-                      letterSpacing: "0.04em",
-                      backgroundColor: roleDef.badgeBg,
-                      color: roleDef.badgeText,
-                      border: `1px solid ${roleDef.badgeBorder}`,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {roleDef.shortLabel}
-                  </span>
-                  <span style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
-                    {roleDef.title}
-                  </span>
-                  <span style={{ fontSize: "10px", color: "#8E909B", fontFamily: "var(--font-mono)" }}>
-                    {currentUser?.department || "SecOps Team"}
-                  </span>
+                <div style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
+                  {currentUser?.department || "SecOps Team"}
+                  {currentUser?.shift ? ` · ${currentUser.shift}` : ""}
                 </div>
               </div>
 
               {/* Verified Session Info */}
               <div style={{ marginBottom: "12px", padding: "8px 10px", borderRadius: "8px", backgroundColor: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
                 <div style={{ fontSize: "9px", color: "#8E909B", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>
-                  Active Authentication Realm
+                  Session
                 </div>
-                <div style={{ fontSize: "11px", color: "#10B981", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10B981" }} />
-                  Firebase Cloud Identity
+                <div style={{ fontSize: "11px", color: "#E1E4EA", fontWeight: 600 }}>
+                  Seeded roster, no sign-in
                 </div>
               </div>
 
-              {/* Portal & Sign Out Links */}
-              <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "6px" }}>
-                <Link
-                  href="/users"
-                  onClick={() => setUserDropdownOpen(false)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "#FFFFFF",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>admin_panel_settings</span>
-                  <span>Manage Users &amp; RBAC Portal →</span>
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setUserDropdownOpen(false);
-                    await logout();
-                    router.push("/login");
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    backgroundColor: "transparent",
-                    color: "#FCA5A5",
-                    border: "1px solid rgba(239, 68, 68, 0.2)",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "all 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>logout</span>
-                  <span>Sign Out of Session</span>
-                </button>
+              {/* Switch analyst: there is no sign-in page, the console opens as the last analyst chosen */}
+              <div style={{ paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ fontSize: "9px", color: "#8E909B", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 2px 2px" }}>
+                  Switch analyst
+                </div>
+                {roster.filter((u) => u.id !== currentUser.id).map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      switchAnalyst(u.id);
+                      setUserDropdownOpen(false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "6px 8px",
+                      borderRadius: "8px",
+                      backgroundColor: "transparent",
+                      color: "#E1E4EA",
+                      border: "none",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <span style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: u.avatarColor, color: "#FFFFFF", fontSize: "9px", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {u.initials}
+                    </span>
+                    <span>{u.name}</span>
+                    <span style={{ marginLeft: "auto", color: "#8E909B", fontSize: "10px" }}>{u.department}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
