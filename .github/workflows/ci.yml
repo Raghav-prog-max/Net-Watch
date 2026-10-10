@@ -71,7 +71,8 @@ jobs:
         run: make test
 
   dashboard:
-    name: Dashboard lint + typecheck + build
+    # the name is a required status check on main: renaming it blocks every merge
+    name: Dashboard typecheck + build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
