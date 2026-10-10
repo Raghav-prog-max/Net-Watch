@@ -13,7 +13,7 @@ This directory contains the container specifications, reverse proxy rules, a rel
 ```text
 deployment/
 ├── README.md                           # Master Production & Deployment Guide (this file)
-├── env.production.example              # Every variable the stack reads, documented
+├── .env.production.example             # Every variable the stack reads, documented
 ├── docker/                             # Hardened Production Container Configurations
 │   ├── Dockerfile.api                  # Multi-stage FastAPI backend (non-root, one worker, healthcheck)
 │   ├── Dockerfile.dashboard            # Multi-stage Next.js frontend (non-root, healthcheck)
@@ -46,7 +46,7 @@ deployment/
 
 ### 2. Configure Environment
 ```bash
-cp deployment/env.production.example deployment/.env.production
+cp deployment/.env.production.example deployment/.env.production
 # Edit deployment/.env.production: PUBLIC_URL, NGINX_SITE, ports
 ```
 `PUBLIC_URL` is the address users open. The dashboard is served there and reaches the API at `<PUBLIC_URL>/api` (WebSocket: `<PUBLIC_URL>/api/ws/alerts`); it is baked into the dashboard at build time, so rebuild after changing it.

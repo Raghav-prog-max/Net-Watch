@@ -41,8 +41,8 @@ fi
 
 if [ ! -f "${ENV_FILE}" ]; then
     log_warn "No .env.production file found at ${ENV_FILE}"
-    log_info "Creating .env.production from ${DEPLOY_DIR}/env.production.example..."
-    cp "${DEPLOY_DIR}/env.production.example" "${ENV_FILE}"
+    log_info "Creating .env.production from ${DEPLOY_DIR}/.env.production.example..."
+    cp "${DEPLOY_DIR}/.env.production.example" "${ENV_FILE}"
     log_warn "Please review and edit ${ENV_FILE} before running in actual production!"
 fi
 set -a; . "${ENV_FILE}"; set +a
